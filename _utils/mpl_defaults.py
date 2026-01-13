@@ -26,7 +26,9 @@ _new_rc = {
             'legend.frameon': False,
             'legend.handletextpad': 0.3,
             'legend.fontsize': 12,
-            'figure.dpi': 300
+            'figure.dpi': 300,
+            'legend.borderpad': 0,
+            'legend.columnspacing': 1,
             }
 
 mpl.rcParams.update(_new_rc)
