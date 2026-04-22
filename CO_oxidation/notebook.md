@@ -89,7 +89,7 @@
         OH ads rate is never really limiing (3-10 times faster)
         OH order is not good 
     
-    4. Full 
+    4. Full (ER LH 1 2 3 4)
         Priors from ER LH 2 3 4 fail
         Priors need to be from ER 1 2 3
         Converged
@@ -97,3 +97,37 @@
         COOH can have high coverage at low potentials
         Great OH order
 
+# 4. Lateral interaction models 
+
+    1. ER LH 2 Lateral
+        Converged + negligible convergence errors
+        Perfect ELPD 
+        Comparable G_act
+        CO and OH lateral interactions 
+        CO coverage linearly decreases
+        OH coverage linearly increases
+        No COOH 
+        KO fitting is not that great
+
+    2. ER 2 3 Lateral 
+        2 rhats at 1.01
+        Good ELPD 
+        CO and OH lateral interactions
+        Low COOH coverage 
+        G_act ER > G_act 3
+        OH order is not good 
+        CO coverage linearly decreases
+        OH coverage linearly increases
+
+    3. Full Lateral (ER LH 2 3 Lateral)
+        6 rhats at 1.01
+        Excellent ELPD
+        Only OH lateral interactions
+        Comparable G_act 
+        High COOH coverage at low potentials
+        OH coverage linearly increases
+        KO fitting does not look that great 
+
+GM Notes: 
+1. What about this 
+2. 
