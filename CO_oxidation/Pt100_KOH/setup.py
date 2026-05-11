@@ -27,6 +27,8 @@ with open('import_Pt100_KOH_replicates.pkl', 'rb') as f:
 E_in = np.concatenate([experiments_interp[(C, P)]['E'] for C in C_KOH_list for P in P_CO_list])
 C_KOH_in = np.concatenate([np.full_like(experiments_interp[(C, P)]['E'], C) for C in C_KOH_list for P in P_CO_list])
 P_CO_in = np.concatenate([np.full_like(experiments_interp[(C, P)]['E'], P) for C in C_KOH_list for P in P_CO_list])
+rate_obs = np.concatenate([experiments_interp[(C, P)]['rate'] for C in C_KOH_list for P in P_CO_list])
+rate_obs_SD = np.concatenate([experiments_interp[(C, P)]['rate_SD'] for C in C_KOH_list for P in P_CO_list])
 log_rate_obs = np.concatenate([experiments_interp[(C, P)]['log_rate'] for C in C_KOH_list for P in P_CO_list])
 log_rate_obs_SD = np.concatenate([experiments_interp[(C, P)]['log_rate_SD'] for C in C_KOH_list for P in P_CO_list])
 
@@ -123,7 +125,8 @@ def plot_posteriors(trace, model, target='word'):
                     ax.title.set_fontweight('bold')     
             plt.subplots_adjust(hspace=0.5, wspace=0.3, top=0.88); plt.show()
         if len(kinetic_vars) > 1:
-            az.plot_pair(trace, var_names=kinetic_vars, kind='kde', divergences=True, figsize=(8,8), textsize=10); plt.show()
+            plot_pair_vars = [v for v in kinetic_vars if v not in ['CO_converge_error', 'OH_converge_error']]
+            az.plot_pair(trace, var_names=plot_pair_vars, kind='kde', divergences=True, figsize=(8,8), textsize=10); plt.show()
 
     with model: ppc = pm.sample_posterior_predictive(trace, progressbar=False)
     for var_name in ppc.observed_data.data_vars:
@@ -180,7 +183,7 @@ def plot_model_fits(trace, ppc, target='word'):
 
     def plot_grid(var_fit, var_track, nrows, ncols, figsize, ylabel, title_text, is_3x4=False, is_1x4=False):
         is_ppc = (var_fit in ppc.posterior_predictive.data_vars)
-        share_y = False if var_fit == 'rate_linear' else True
+        share_y = False if var_fit == 'rate' else True
         fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize, sharex='col', sharey=share_y)
         fig.suptitle(title_text, fontsize=title_size, fontweight='bold', y=0.96) # Adjusted y down slightly
         fig.supxlabel(r"E (V$_{\mathbf{SHE}}$)", fontweight='bold', fontsize=label_size + 2)
@@ -212,9 +215,9 @@ def plot_model_fits(trace, ppc, target='word'):
                         exp_mean = experiments_interp[cond_key]['untruncated_alpha']
                         exp_sd = experiments_interp[cond_key]['untruncated_alpha_SD']
                         E_exp = experiments_interp[cond_key]['untruncated_E']
-                    elif var_fit == 'rate': # The actual fitted log_rate (TRUNCATED)
-                        exp_mean = experiments_interp[cond_key]['log_rate']
-                        exp_sd = experiments_interp[cond_key]['log_rate_SD']
+                    elif var_fit == 'rate': # The fitted linear rate (TRUNCATED)
+                        exp_mean = experiments_interp[cond_key]['rate']
+                        exp_sd = experiments_interp[cond_key]['rate_SD']
                         E_exp = experiments_interp[cond_key]['E']
                     elif var_fit == 'rate_linear': # UNTRUNCATED
                         exp_mean = experiments_interp[cond_key]['untruncated_rate']
@@ -250,8 +253,9 @@ def plot_model_fits(trace, ppc, target='word'):
         else: top_adj = 0.90
         plt.tight_layout(); plt.subplots_adjust(right=0.92, top=top_adj, left=0.10, bottom=bottom_adj); plt.show()
 
-    plot_grid('rate', 'log_rate_model', 4, 4, figsize_4x4, "log Rate", "Log Rate")
-    plot_grid('rate_linear', 'rate_linear', 4, 4, figsize_4x4, "Rate", "Rate")
+    # plot_grid('rate', 'log_rate_model', 4, 4, figsize_4x4, "log Rate", "Log Rate")
+    plot_grid('rate', 'rate_linear', 4, 4, figsize_4x4, "Rate", "Rate")
+    # plot_grid('rate_linear', 'rate_linear', 4, 4, figsize_4x4, "Rate", "Rate")
     plot_grid('alpha', 'alpha', 4, 4, figsize_4x4, "alpha", "Transfer Coefficients")
     plot_grid('delta_OH', 'delta_OH_model', 1, 4, figsize_1x4, "Order (OH)", "OH Reaction Order", is_1x4=True)
     plot_grid('delta_CO', 'delta_CO_model', 3, 4, figsize_3x4, "Order (CO)", "CO Reaction Order", is_3x4=True)
@@ -316,5 +320,7 @@ def fit_and_evaluate(model, draws=1000, tune=2000, chains=4, cores=4, init_mean=
 
 def observables(log_rate_model):
     pm.Deterministic('log_rate_model', log_rate_model)
-    log_rate = pm.Normal('rate', mu=log_rate_model, sigma=log_rate_obs_SD, observed=log_rate_obs)
-    return log_rate
+    rate_model = pt.exp(log_rate_model)
+    rate = pm.Normal('rate', mu=rate_model, sigma=rate_obs_SD, observed=rate_obs)
+    # rate = pm.StudentT('rate', nu=10, mu=rate_model, sigma=rate_obs_SD, observed=rate_obs)
+    return rate
