@@ -1,0 +1,7 @@
+Differences between this and raw: 
+
+This is fitting averages of rates, raw is fitting raw rates directly. 
+Rates does not consider SEM for SD - this is considering SEM (remove the divide in the SD formulations, 3 places)
+Raw has a complex error model. 
+
+Post model plotting is always 95% CI of mean for experimental data. 
