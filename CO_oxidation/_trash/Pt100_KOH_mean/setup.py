@@ -12,6 +12,8 @@ import xarray as xr
 pd.set_option('display.max_columns', None); pd.set_option('display.width', 1000); pd.set_option('display.max_colwidth', None)
 pd.options.mode.string_storage = "python"; pd.options.future.infer_string = False
 
+plot_target = 'word'
+
 # Experimental conditions and constants 
 C_KOH_list = np.array([0.1, 0.25, 0.5, 1]) # in M 
 P_CO_list = 0.01*np.array([0.1, 1, 10, 100]) # in atm
@@ -90,7 +92,7 @@ def add_post_sampling_observables(trace):
         for P in P_CO_list:
             E_arr = truncated_E_exp[(C, P)]
             end = start + len(E_arr)
-            alpha_samples[:, :, start:end] = (R * T / F) * np.gradient(log_rate_samples[:, :, start:end], E_arr, axis=2)
+            alpha_samples[:, :, start:end] = (R * T / F) * np.gradient(log_rate_samples[:, :, start:end], E_arr[1] - E_arr[0], axis=2)
             model_log_rates[(C, P)] = log_rate_samples[:, :, start:end]
             start = end
     trace.posterior['alpha'] = (trace.posterior['log_rate'].dims, alpha_samples)
@@ -138,20 +140,7 @@ def calculate_flattened_r2(ppc, var_name):
     y_true_flat = y_true.flatten()
     return az.r2_score(y_true_flat, y_pred_flat)['r2']
 
-def _hdi_from_vals(vals_2d, prob=0.95):
-    try:
-        da = xr.DataArray(vals_2d, dims=("draw", "point"))
-        hdi = np.asarray(az.hdi(da, hdi_prob=prob))
-        if hdi.ndim == 2 and hdi.shape[1] == 2:
-            return hdi[:, 0], hdi[:, 1]
-        if hdi.ndim == 1 and hdi.shape[0] == 2:
-            return hdi[0], hdi[1]
-    except Exception:
-        pass
-    pct = np.percentile(vals_2d, [100 * (1 - prob) / 2, 100 * (1 + prob) / 2], axis=0)
-    return pct[0], pct[1]
-
-def plot_posteriors(trace, model): 
+def plot_posteriors(trace, model, target='word'): 
 
     all_vars = list(trace.posterior.data_vars)
     excluded_vars = ['alpha', 'delta_OH', 'delta_CO', 'rate', 'log_rate']
@@ -163,9 +152,14 @@ def plot_posteriors(trace, model):
     num_vars = len(kinetic_vars)
     cols = min(4, max(1, num_vars)) 
     rows = int(np.ceil(num_vars / cols)) 
-    rc_update = {'font.size': 10, 'axes.linewidth': 1, 'lines.linewidth': 1.5}
-    figsize_post = (2.5 * cols, 3.0 * rows) 
-    title_size = 14; text_size_adj = 10
+    if target == 'ppt':
+        rc_update = {'font.size': 14, 'axes.linewidth': 1.5, 'lines.linewidth': 2}
+        figsize_post = (3.0 * cols, 3.5 * rows) 
+        title_size = 20; text_size_adj = 12 
+    else:
+        rc_update = {'font.size': 10, 'axes.linewidth': 1, 'lines.linewidth': 1.5}
+        figsize_post = (2.5 * cols, 3.0 * rows) 
+        title_size = 14; text_size_adj = 10
 
     # Use a context manager so we don't permanently alter or break notebook plotting behavior
     with plt.rc_context(rc_update):
@@ -189,14 +183,16 @@ def plot_posteriors(trace, model):
       
     return ppc
 
-def plot_model_fits(trace, ppc, consolidated=False):
+def plot_model_fits(trace, ppc, target='word', consolidated=False):
 
-    plt.rcParams.update({'font.size': 10, 'axes.linewidth': 1, 'lines.linewidth': 2})
-    figsize_4x4 = (7.5, 7); figsize_3x4 = (7.5, 5.5); 
-    figsize_1x4 = (7.5, 2.5); figsize_2x2 = (7.5/1.3, 7/1.3); 
-    figsize_1x1 = (4, 3.6)  
-    title_size, label_size = 12, 10
-
+    if target == 'ppt':
+        plt.rcParams.update({'font.size': 14, 'axes.linewidth': 1.5, 'lines.linewidth': 2.5})
+        figsize_4x4 = (12, 11); figsize_3x4 = (12, 8.5); figsize_1x4 = (12, 4)   
+        title_size, label_size = 18, 14
+    else:
+        plt.rcParams.update({'font.size': 10, 'axes.linewidth': 1, 'lines.linewidth': 2})
+        figsize_4x4 = (7.5, 7); figsize_3x4 = (7.5, 5.5); figsize_1x4 = (7.5, 2.5)
+        title_size, label_size = 12, 10
     colors = plt.cm.tab10.colors[:len(P_CO_list)]
     ci_multiplier = 3.182 / np.sqrt(4)
     ppc_vars = [v for v in ppc.observed_data.data_vars if not v.endswith("__")]
@@ -247,109 +243,27 @@ def plot_model_fits(trace, ppc, consolidated=False):
     def plot_grid(var_fit, nrows, ncols, figsize, ylabel, title_text, is_3x4=False, is_1x4=False, consolidated=False):
         is_ppc = (var_fit == ppc_var)
         share_y = False if is_ppc else True
+        linestyles = ['-', '--', ':']  # For consolidated delta_CO: solid, dashed, dotted (or dots)
         fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize, sharex='col', sharey=share_y)
-        fig.suptitle(title_text, fontsize=title_size, fontweight='bold', y=0.96)
+        fig.suptitle(title_text, fontsize=title_size, fontweight='bold', y=0.96) # Adjusted y down slightly
         fig.supxlabel(r"Potential (V$_{\mathbf{SHE}}$)", fontweight='bold', fontsize=label_size + 2)
         fig.supylabel(ylabel, fontweight='bold', fontsize=label_size + 2)
 
-        if consolidated and var_fit == 'alpha':
-            legend_handles = []
-            linestyles = [':', (0, (1, 0.5)), '--', '-']
-            for i, C_KOH in enumerate(C_KOH_list):
-                row, col = i // 2, i % 2
-                ax = axes[row, col]
-
-                for pressure_idx in range(len(P_CO_list)):
-                    P_val = P_CO_list[pressure_idx]
-                    cond_key = (C_KOH, P_val)
-                    exp_mean = alpha_exp[cond_key]
-                    E_exp = E_exp_map[cond_key]
-                    model_slice, E_model = get_model_slice(var_fit, C_KOH, P_val, is_ppc=is_ppc)
-                    model_mean = model_slice.mean(dim=("chain", "draw"))
-                    hdi_95 = az.hdi(model_slice, hdi_prob=0.95)[model_slice.name]
-
-                    line, = ax.plot(E_model, model_mean, color=colors[pressure_idx], lw=3.2, ls=linestyles[pressure_idx], zorder=5, label=f'{P_val} atm')
-                    ax.fill_between(E_model, hdi_95[:, 0].values, hdi_95[:, 1].values, color=colors[pressure_idx], alpha=0.15, linewidth=0, zorder=3)
-                    ax.plot(E_exp, exp_mean, color='black', lw=2.5, ls=linestyles[pressure_idx], alpha=0.20, zorder=2)
-                    if i == 0: legend_handles.append(line)
-
-                ax.text(0.95, 0.95, f'{C_KOH} M KOH', transform=ax.transAxes, fontsize=label_size, fontweight='bold', va='top', ha='right')
-                
-                ax.set_yticks([-0.5, 0, 0.5])
-                for label in ax.get_yticklabels(): label.set_fontweight('bold')
-                for label in ax.get_xticklabels(): label.set_fontweight('bold')
-                if i == 3: ax.legend(handles=legend_handles, loc='lower left', frameon=False, prop={'size': label_size, 'weight': 'bold'})
-
-            plt.tight_layout()
-            plt.subplots_adjust(right=0.92, top=0.91, left=0.12, bottom=0.1)
-            plt.show()
-            return
-
         if consolidated and var_fit == 'delta_CO':
-            legend_handles = []
-            linestyles = [':', '--', '-']
             for i, C_KOH in enumerate(C_KOH_list):
-                row, col = i // 2, i % 2
-                ax = axes[row, col]
-
+                ax = axes[i] if nrows == 1 else axes[0, i]
                 for pressure_idx in range(len(P_CO_list) - 1):
                     P1, P2 = P_CO_list[pressure_idx], P_CO_list[pressure_idx + 1]
                     cond_key = (C_KOH, P1)
                     exp_mean = delta_CO_exp[cond_key]
-                    E_exp = E_CO_exp[cond_key]
                     model_slice, E_model = get_model_slice(var_fit, C_KOH, P1, is_ppc=is_ppc)
                     model_mean = model_slice.mean(dim=("chain", "draw"))
                     hdi_95 = az.hdi(model_slice, hdi_prob=0.95)[model_slice.name]
-
-                    line, = ax.plot(E_model, model_mean, color=colors[pressure_idx], lw=3.2, ls=linestyles[pressure_idx], zorder=5, label=f'{P1} - {P2} atm')
+                    ax.plot(E_model, model_mean, color=colors[pressure_idx], lw=3.2, ls=linestyles[pressure_idx], zorder=5)
                     ax.fill_between(E_model, hdi_95[:, 0].values, hdi_95[:, 1].values, color=colors[pressure_idx], alpha=0.15, linewidth=0, zorder=3)
-                    ax.plot(E_exp, exp_mean, color='black', lw=2.5, ls=linestyles[pressure_idx], alpha=0.20, zorder=2)
-                    if i == 0: legend_handles.append(line)
-
-                ax.text(0.05, 0.95, f'{C_KOH} M KOH', transform=ax.transAxes, fontsize=label_size, fontweight='bold', va='top', ha='left')
-                ticks = [0.0, 0.5, 1.0]
-                ax.set_yticks(ticks)
-                ax.set_yticklabels(ticks, fontweight='bold')
-                for label in ax.get_xticklabels(): label.set_fontweight('bold')
-
-            plt.tight_layout()
-            plt.subplots_adjust(right=0.92, top=0.91, left=0.12, bottom=0.14)
-            fig.legend(handles=legend_handles, loc='lower center', bbox_to_anchor=(0.5, 0.03), ncol=len(legend_handles), frameon=False, prop={'size': label_size, 'weight': 'bold'})
-            plt.show()
-            return
-        
-        if consolidated and var_fit == 'delta_OH':
-            legend_handles = []
-            linestyles = [':', (0, (1, 0.5)), '--', '-']
-
-            C_KOH = C_KOH_list[0] # Any random C_KOH
-            row, col = 1, 1
-            ax = axes
-            for pressure_idx in range(len(P_CO_list)):
-                P_val = P_CO_list[pressure_idx]
-                cond_key = (C_KOH, P_val)
-                exp_mean = delta_OH_exp[cond_key]
-                E_exp = E_OH_exp[cond_key]
-                model_slice, E_model = get_model_slice(var_fit, C_KOH, P_val, is_ppc=is_ppc)
-                model_mean = model_slice.mean(dim=("chain", "draw"))
-                hdi_95 = az.hdi(model_slice, hdi_prob=0.95)[model_slice.name]
-
-                line, = ax.plot(E_model, model_mean, color=colors[pressure_idx], lw=3.2, ls=linestyles[pressure_idx], zorder=5, label=f'{P_val} atm')
-                ax.fill_between(E_model, hdi_95[:, 0].values, hdi_95[:, 1].values, color=colors[pressure_idx], alpha=0.15, linewidth=0, zorder=3)
-                ax.plot(E_exp, exp_mean, color='black', lw=2.5, ls=linestyles[pressure_idx], alpha=0.20, zorder=2)
-                legend_handles.append(line)
-                
-            ticks = [-1.0, -0.5, 0.0, 0.5, 1.0]
-            ax.set_yticks(ticks)
-            ax.set_yticklabels(ticks, fontweight='bold')
-            ticks = [-0.2, -0.1, 0.0, 0.1]
-            ax.set_xticks(ticks)
-            ax.set_xticklabels(ticks, fontweight='bold')
-            
-            plt.tight_layout()
-            plt.subplots_adjust(right=0.92, top=0.9, left=0.15, bottom=0.14)
-            fig.legend(handles=legend_handles, loc='lower center', bbox_to_anchor=(0.5, 0.12), ncol=2, frameon=False, prop={'size': label_size, 'weight': 'bold'})
-            plt.show()
+                    ax.plot(E_model, exp_mean, color='black', lw=2.5, ls=linestyles[pressure_idx], alpha=0.6, zorder=2)
+                if i == 0: ax.set_title(f'{C_KOH} M KOH', fontsize=label_size, fontweight='bold')
+            plt.tight_layout(); plt.subplots_adjust(right=0.92, top=0.90, left=0.10, bottom=0.08); plt.show()
             return
 
         for i, C_KOH in enumerate(C_KOH_list):
@@ -425,21 +339,24 @@ def plot_model_fits(trace, ppc, consolidated=False):
 
     plot_grid(ppc_var, 4, 4, figsize_4x4, "TOF (1/s)" if ppc_var == 'rate' else "log Rate", "Rate" if ppc_var == 'rate' else "Log Rate")
     plot_grid(non_ppc_var, 4, 4, figsize_4x4, "log Rate" if non_ppc_var == 'log_rate' else "TOF (1/s)", "Log Rate" if non_ppc_var == 'log_rate' else "Rate")
+    plot_grid('alpha', 4, 4, figsize_4x4, "alpha", "Transfer Coefficients")
+    plot_grid('delta_OH', 1, 4, figsize_1x4, "Order (OH)", "OH Reaction Order", is_1x4=True)
     if consolidated:
-        plot_grid('alpha', 2, 2, figsize_2x2, "alpha", "Transfer Coefficients", consolidated=True)
-        plot_grid('delta_OH', 1, 1, figsize_1x1, "Order (OH)", "OH Reaction Order", consolidated=True)
-        plot_grid('delta_CO', 2, 2, figsize_2x2, "Order (CO)", "CO Reaction Order", consolidated=True)
+        plot_grid('delta_CO', 1, 4, figsize_3x4, "Order (CO)", "CO Reaction Order", consolidated=True)
     else:
-        plot_grid('alpha', 4, 4, figsize_4x4, "alpha", "Transfer Coefficients")
-        plot_grid('delta_OH', 1, 4, figsize_1x4, "Order (OH)", "OH Reaction Order", is_1x4=True)
         plot_grid('delta_CO', 3, 4, figsize_3x4, "Order (CO)", "CO Reaction Order", is_3x4=True)
     plt.rcParams.update(plt.rcParamsDefault)
 
-def plot_coverages(trace):
+def plot_coverages(trace, target='word'):
     
-    plt.rcParams.update({'font.size': 10, 'axes.linewidth': 1, 'lines.linewidth': 2})
-    figsize = (7.5, 6.5)
-    title_size, label_size = 12, 10
+    if target == 'ppt':
+        plt.rcParams.update({'font.size': 14, 'axes.linewidth': 1.5, 'lines.linewidth': 2.5})
+        figsize = (12, 11)
+        title_size, label_size = 20, 16
+    else:
+        plt.rcParams.update({'font.size': 10, 'axes.linewidth': 1, 'lines.linewidth': 2})
+        figsize = (7.5, 6.5)
+        title_size, label_size = 12, 10
 
     fig, axes = plt.subplots(nrows=4, ncols=4, figsize=figsize, sharex='col', sharey=True)
     fig.suptitle('Modeled Surface Coverages', fontsize=title_size, fontweight='bold', y=0.97)
@@ -458,6 +375,21 @@ def plot_coverages(trace):
     cov_vars = ['theta_CO', 'theta_OH', 'theta_COOH', 'theta_empty']
     cov_colors = ['tab:red', 'tab:blue', 'tab:green', 'tab:gray']
     cov_labels = [r'$\theta_{CO}$', r'$\theta_{OH}$', r'$\theta_{COOH}$', r'$\theta_{*}$']
+
+    def _hdi_from_vals(vals_2d, prob=0.95):
+        # vals_2d: (samples, points)
+        try:
+            da = xr.DataArray(vals_2d, dims=("draw", "point"))
+            hdi = az.hdi(da, hdi_prob=prob)
+            hdi = np.asarray(hdi)
+            if hdi.ndim == 2 and hdi.shape[1] == 2:
+                return hdi[:, 0], hdi[:, 1]
+            if hdi.ndim == 1 and hdi.shape[0] == 2:
+                return hdi[0], hdi[1]
+        except Exception:
+            pass
+        pct = np.percentile(vals_2d, [100 * (1 - prob) / 2, 100 * (1 + prob) / 2], axis=0)
+        return pct[0], pct[1]
 
     for i, C_KOH in enumerate(C_KOH_list):
         for j, P_CO in enumerate(P_CO_list):
@@ -498,129 +430,6 @@ def plot_coverages(trace):
     plt.show()
     plt.rcParams.update(plt.rcParamsDefault)
 
-def plot_drc(model, trace, perturb_vars, perturb_labels=None, var_types=None):
-    """
-    Parameters:
-    - var_types: dict mapping variable names to mathematical relationships. 
-                 'Gact' applies -kb*T * d_ln_r/d_Gact.
-                 'resistance' applies -theta * d_ln_r/d_theta (e.g., boundary layer).
-                 'promoter' applies theta * d_ln_r/d_theta (e.g., pre-exponential).
-                 Defaults to 'Gact' for all perturb_vars.
-                 Example: var_types={'Gact2_LH_0': 'Gact', 'delta_BL_0': 'resistance'}
-    """
-    plt.rcParams.update({'font.size': 10, 'axes.linewidth': 1, 'lines.linewidth': 2})
-    figsize = (7.5, 6.5)
-    title_size, label_size = 12, 10
-
-    if var_types is None:
-        var_types = {v: 'Gact' for v in perturb_vars}
-    if perturb_labels is None:
-        perturb_labels = [v.replace('_0', '') for v in perturb_vars]
-
-    delta = 1e-4
-    target_node = model['log_rate']
-    replacements = {}
-    sym_inputs = []
-    input_names = []
-
-    for rv in model.free_RVs:
-        if rv.name in trace.posterior:
-            sym_var = rv.type() 
-            sym_inputs.append(sym_var)
-            replacements[rv] = sym_var
-            input_names.append(rv.name)
-            
-            if rv.name in model.named_vars:
-                replacements[model[rv.name]] = sym_var
-
-    for var_name in perturb_vars:
-        if var_name in input_names:
-            idx = input_names.index(var_name)
-            replacements[model[var_name]] = sym_inputs[idx]
-
-    cloned_node = pytensor.clone_replace(target_node, replace=replacements)
-    calc_fn = pytensor.function(sym_inputs, cloned_node, on_unused_input='ignore')
-
-    post = trace.posterior
-    n_chains, n_draws = post.sizes["chain"], post.sizes["draw"]
-    total_samples = n_chains * n_draws
-
-    trace_data = {name: post[name].values.reshape(total_samples, *post[name].shape[2:]) for name in input_names}
-    X_dict = {v: [] for v in perturb_vars}
-
-    for idx in range(total_samples):
-        base_vals = [trace_data[name][idx] for name in input_names]
-        
-        for i, var_name in enumerate(perturb_vars):
-            var_idx = input_names.index(var_name)
-            base_val = base_vals[var_idx]
-            
-            vals_plus = list(base_vals)
-            vals_plus[var_idx] += delta
-            rate_plus = calc_fn(*vals_plus)
-            
-            vals_minus = list(base_vals)
-            vals_minus[var_idx] -= delta
-            rate_minus = calc_fn(*vals_minus)
-            
-            d_log_rate = (rate_plus - rate_minus) / (2 * delta)
-            v_type = var_types.get(var_name, 'Gact')
-            
-            if v_type == 'Gact':
-                X_val = - (kb_eV * T) * d_log_rate
-            elif v_type == 'resistance': 
-                X_val = - base_val * d_log_rate
-            elif v_type == 'promoter':
-                X_val = base_val * d_log_rate
-                
-            X_dict[var_name].append(X_val)
-
-    for v in perturb_vars:
-        X_dict[v] = np.array(X_dict[v])
-
-    fig, axes = plt.subplots(nrows=len(P_CO_list), ncols=len(C_KOH_list), figsize=figsize, sharex='col', sharey=True)
-    fig.suptitle('Degree of Rate Control', fontsize=title_size, fontweight='bold', y=0.97)
-    fig.supxlabel(r"Potential (V$_{\mathbf{SHE}}$)", fontweight='bold', fontsize=label_size+2)
-    fig.supylabel(r"X$_{RC}$", fontweight='bold', fontsize=label_size+2)
-
-    colors = ['tab:red', 'tab:blue', 'tab:green', 'tab:purple', 'tab:orange']
-    index_map = {}
-    _idx = 0
-    
-    for C in C_KOH_list:
-        for P in P_CO_list:
-            L = len(truncated_E_exp[(C, P)])
-            index_map[(C, P)] = (_idx, _idx + L)
-            _idx += L
-
-    for i, C_KOH in enumerate(C_KOH_list):
-        for j, P_CO in enumerate(P_CO_list):
-            ax = axes[j, i]
-            start, end = index_map[(C_KOH, P_CO)]
-            E_slice = truncated_E_exp[(C_KOH, P_CO)]
-
-            sum_mu = np.sum([X_dict[var][:, start:end].mean(axis=0) for var in perturb_vars], axis=0)
-            ax.plot(E_slice, sum_mu, color='gray', linestyle=':', lw=2, alpha=0.8)
-            ax.set_ylim(-0.1, 1.1)
-
-            for k, var in enumerate(perturb_vars):
-                col = colors[k % len(colors)]
-                data_slice = X_dict[var][:, start:end]
-                mu = data_slice.mean(axis=0)
-
-                lower, upper = _hdi_from_vals(data_slice, prob=0.95)
-                ax.fill_between(E_slice, lower, upper, color=col, alpha=0.15, linewidth=0)
-                ax.plot(E_slice, mu, color=col, lw=2.5, label=perturb_labels[k])
-            
-            if j == 0: ax.set_title(f'{C_KOH} M KOH', fontsize=label_size, fontweight='bold')
-            if i == 3: ax.text(1.05, 0.5, f'{P_CO} atm', transform=ax.transAxes, rotation=-90, va='center', fontsize=label_size, fontweight='bold')
-            if i == 0 and j == 0: ax.legend(loc='best', frameon=False, fontsize=10)
-
-    plt.tight_layout()
-    plt.subplots_adjust(right=0.92, top=0.90, bottom=0.08, left=0.10)
-    plt.show()
-    plt.rcParams.update(plt.rcParamsDefault)
-
 def fit_and_evaluate(model, draws=1000, tune=2000, chains=4, cores=4, init_mean=None, target_accept=0.9):
     compiled_model = nutpie.compile_pymc_model(model)
     trace = nutpie.sample(compiled_model, draws=draws, tune=tune, chains=chains, cores=cores, init_mean=init_mean, target_accept=target_accept)
@@ -634,13 +443,8 @@ def fit_and_evaluate(model, draws=1000, tune=2000, chains=4, cores=4, init_mean=
 # All models are comparable as long as this function remains the same
 def observables(log_rate):
     pm.Deterministic('log_rate', log_rate)
-    rate_model = pt.exp(log_rate)
-
-    sigma_rel = pm.Gamma('sigma_rel', alpha=2, beta=20)
-    sigma_base = 0 # pm.HalfNormal('sigma_base', sigma=1e-4)
-    exponent =  pm.HalfNormal('exponent', sigma=0.5)
-    sigma_model = sigma_base + sigma_rel * rate_model ** exponent
-    sigma_total = pt.sqrt(rate_SD_obs**2 + sigma_model**2)
-    
-    rate = pm.StudentT('rate', nu=4, mu=rate_model, sigma=sigma_model, observed=rate_obs_matrix)
+    rate = pt.exp(log_rate)
+    sigma = pm.Gamma('sigma', alpha=2, beta=20)
+    # sigma_total = pt.sqrt(rate_SD_obs**2 + (rate*sigma)**2)
+    rate = pm.StudentT('rate', nu=4, mu=rate, sigma=sigma*rate, observed=rate_obs)
     return rate
