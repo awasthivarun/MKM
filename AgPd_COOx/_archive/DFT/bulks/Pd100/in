@@ -1,0 +1,43 @@
+lattice \
+7.356625  0.000000  0.000000  \
+0.000000  7.356625  0.000000  \
+0.000000  0.000000  7.356625  
+
+dump-name $VAR
+initial-state $VAR
+elec-ex-corr gga
+van-der-waals D3
+elec-cutoff 20 100
+elec-n-bands 42
+kpoint-folding 6 6 6
+electronic-minimize nIterations 100 energyDiffThreshold 1e-07
+elec-smearing Gauss 0.003675
+spintype no-spin
+core-overlap-check none
+converge-empty-states yes
+symmetries automatic
+dump End Dtot BoundCharge
+dump End Forces
+dump End Ecomponents
+dump End VfluidTot
+dump End ElecDensity
+dump End KEdensity
+dump End EigStats
+dump End BandEigs
+dump End DOS
+dump End BandProjections
+dump End Kpoints
+band-projection-params yes no
+density-of-states 
+
+coords-type cartesian
+ion Pd -0.000001 -0.000001 -0.000001 	 1
+ion Pd -0.000001 3.678310 3.678310 	 1
+ion Pd 3.678310 -0.000001 3.678310 	 1
+ion Pd 3.678310 3.678310 -0.000001 	 1
+
+ion-species GBRV_v1.5/$ID_pbe_v1.uspp
+
+coulomb-interaction periodic
+dump End Forces
+dump End Ecomponents

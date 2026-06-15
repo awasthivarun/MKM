@@ -1,0 +1,83 @@
+lattice \
+15.750559  7.875280  0.000000  \
+0.000000  13.640384  0.000000  \
+0.000000  0.000000  90.021944  
+
+dump-name $VAR
+initial-state $VAR
+elec-ex-corr gga
+van-der-waals D3
+elec-cutoff 20 100
+elec-n-bands 367
+kpoint-folding 4 4 1
+electronic-minimize nIterations 100 energyDiffThreshold 1e-07
+elec-smearing Gauss 0.003675
+spintype no-spin
+core-overlap-check none
+converge-empty-states yes
+latt-move-scale 0 0 0
+lattice-minimize nIterations 00
+symmetries none
+fluid LinearPCM
+pcm-variant CANDLE
+fluid-solvent H2O
+fluid-cation Na+ 0.5
+fluid-anion F- 0.5
+target-mu -0.179814
+dump End Dtot BoundCharge
+dump End State
+dump End Forces
+dump End Ecomponents
+dump End VfluidTot
+dump End ElecDensity
+dump End KEdensity
+dump End EigStats
+dump End BandEigs
+dump End DOS
+
+coords-type cartesian
+ion Ag 15.750559 9.093590 42.867591 	 0
+ion Ag 10.500373 6.062393 47.154350 	 0
+ion Ag 15.750559 15.155983 47.154350 	 0
+ion Ag 20.972887 9.096457 56.011526 	 1
+ion Ag 10.525456 9.063647 56.045165 	 1
+ion Ag 5.261640 3.034674 51.466846 	 1
+ion Ag 10.517725 12.084096 51.536333 	 1
+ion Ag 15.755189 3.033909 51.462606 	 1
+ion Ag 21.007243 12.103921 51.521198 	 1
+ion Pd 7.875281 4.546796 42.867593 	 0
+ion Pd 13.125467 13.640385 42.867593 	 0
+ion Pd 18.375654 4.546796 42.867593 	 0
+ion Pd 23.625840 13.640385 42.867593 	 0
+ion Pd 13.125465 4.546796 42.867593 	 0
+ion Pd 18.375651 13.640385 42.867593 	 0
+ion Pd 10.500373 9.093588 42.867593 	 0
+ion Pd 21.000746 9.093588 42.867593 	 0
+ion Pd 13.121960 7.575043 51.469365 	 1
+ion Pd 2.625095 1.515599 47.154352 	 0
+ion Pd 7.875281 10.609189 47.154352 	 0
+ion Pd 13.125467 1.515599 47.154352 	 0
+ion Pd 18.375654 10.609189 47.154352 	 0
+ion Pd 7.901647 4.490625 55.749084 	 1
+ion Pd 13.192071 13.688319 55.817080 	 1
+ion Pd 18.377251 4.550255 55.800837 	 1
+ion Pd 23.640176 13.740305 55.879473 	 1
+ion Pd 7.890651 7.568232 51.504488 	 1
+ion Pd 18.382897 7.577697 51.413930 	 1
+ion Pd 13.125465 10.609189 47.154352 	 0
+ion Pd 13.158122 4.527754 55.762680 	 1
+ion Pd 18.353770 13.674344 55.789350 	 1
+ion Pd 10.519436 3.033808 51.481505 	 1
+ion Pd 15.770336 12.102166 51.464157 	 1
+ion Pd 5.250186 6.062391 47.154352 	 0
+ion Pd 15.750559 6.062391 47.154352 	 0
+ion Pd 15.802830 9.094346 55.709109 	 1
+ion C 10.555343 9.348060 60.029050 	 1
+ion O 10.529675 9.029631 62.166481 	 1
+
+ion-species GBRV_v1.5/$ID_pbe_v1.uspp
+
+coulomb-interaction slab 001
+coulomb-truncation-embed 13.8255 8.38057 49.9547
+dump End Forces
+dump End Ecomponents

@@ -1,0 +1,1236 @@
+
+*************** JDFTx 1.7.0 (git hash e155c65d) ***************
+
+Start date and time: Tue Jun 11 00:53:44 2024
+Executable /global/cfs/cdirs/m4025/Software/Perlmutter/JDFTx/build-gpu/jdftx_gpu with command-line: -i in -o out
+Running on hosts (process indices):  nid008425 (0)
+Divided in process groups (process indices):  0 (0)
+gpuInit: Found compatible cuda device 0 'NVIDIA A100-SXM4-80GB'
+gpuInit: Selected device 0
+Resource initialization completed at t[s]:      0.50
+Run totals: 1 processes, 16 threads, 1 GPUs
+Memory pool size: 36000 MB (per process)
+
+
+Input parsed successfully to the following command list (including defaults):
+
+band-projection-params yes no
+basis kpoint-dependent
+converge-empty-states yes
+coords-type Cartesian
+core-overlap-check none
+coulomb-interaction Slab 001
+coulomb-truncation-embed 3.2512 5.63125 38.2282
+davidson-band-ratio 1.1
+density-of-states Etol 1.000000e-06 Esigma 0.000000e+00
+dump End State Forces ElecDensity KEdensity Dtot VfluidTot BandEigs BandProjections EigStats Ecomponents BoundCharge DOS Kpoints
+dump 
+dump 
+dump 
+dump 
+dump 
+dump 
+dump 
+dump 
+dump 
+dump 
+dump 
+dump 
+dump 
+dump-name $VAR
+elec-cutoff 20 100
+elec-eigen-algo Davidson
+elec-ex-corr gga-PBE
+elec-n-bands 345
+elec-smearing Gauss 0.003675
+electronic-minimize  \
+	dirUpdateScheme      FletcherReeves \
+	linminMethod         DirUpdateRecommended \
+	nIterations          100 \
+	history              15 \
+	knormThreshold       0 \
+	maxThreshold         no \
+	energyDiffThreshold  1e-07 \
+	nEnergyDiff          2 \
+	alphaTstart          1 \
+	alphaTmin            1e-10 \
+	updateTestStepSize   yes \
+	alphaTreduceFactor   0.1 \
+	alphaTincreaseFactor 3 \
+	nAlphaAdjustMax      3 \
+	wolfeEnergy          0.0001 \
+	wolfeGradient        0.9 \
+	fdTest               no
+exchange-regularization WignerSeitzTruncated
+fluid LinearPCM 298.000000 1.013250
+fluid-anion F- 0.5 MeanFieldLJ \
+	epsBulk 1 \
+	pMol 0 \
+	epsInf 1 \
+	Pvap 0 \
+	sigmaBulk 0 \
+	Rvdw 2.24877 \
+	Res 0 \
+	tauNuc 343133
+fluid-cation Na+ 0.5 MeanFieldLJ \
+	epsBulk 1 \
+	pMol 0 \
+	epsInf 1 \
+	Pvap 0 \
+	sigmaBulk 0 \
+	Rvdw 2.19208 \
+	Res 0 \
+	tauNuc 343133
+fluid-ex-corr PÂ»ü“ lda-PZ
+fluid-gummel-loop 10 1.000000e-05
+fluid-minimize  \
+	dirUpdateScheme      PolakRibiere \
+	linminMethod         DirUpdateRecommended \
+	nIterations          400 \
+	history              15 \
+	knormThreshold       1e-11 \
+	maxThreshold         no \
+	energyDiffThreshold  0 \
+	nEnergyDiff          2 \
+	alphaTstart          1 \
+	alphaTmin            1e-10 \
+	updateTestStepSize   yes \
+	alphaTreduceFactor   0.1 \
+	alphaTincreaseFactor 3 \
+	nAlphaAdjustMax      6 \
+	wolfeEnergy          0.0001 \
+	wolfeGradient        0.9 \
+	fdTest               no
+fluid-solvent H2O 55.338 ScalarEOS \
+	epsBulk 78.4 \
+	pMol 0.92466 \
+	epsInf 1.77 \
+	Pvap 1.06736e-10 \
+	sigmaBulk 4.62e-05 \
+	Rvdw 2.61727 \
+	Res 1.42 \
+	tauNuc 343133 \
+	poleEl 15 7 1
+forces-output-coords Positions
+initial-state $VAR
+ion Pd   0.000004000000000   0.000002000000000  31.855119999999992 0
+ion Pd  -2.600956000000000   4.504996999999999  31.855119999999992 0
+ion Pd  -5.201915999999999   9.009990999999998  31.855119999999992 0
+ion Pd   5.201922999999999   0.000002000000000  31.855119999999992 0
+ion Pd   2.600963000000000   4.504996999999999  31.855119999999992 0
+ion Pd   0.000004000000001   9.009990999999998  31.855119999999992 0
+ion Pd  10.403842999999998   0.000002000000000  31.855119999999992 0
+ion Pd   7.802882999999998   4.504996999999999  31.855119999999992 0
+ion Pd   5.201922999999998   9.009990999999998  31.855119999999992 0
+ion Pd   0.000004000000000   3.003331999999999  36.102469999999990 0
+ion Pd  -2.600955999999999   7.508325999999999  36.102469999999990 0
+ion Pd  -5.201915999999999  12.013319999999998  36.102469999999990 0
+ion Pd   5.201922999999999   3.003331999999999  36.102469999999990 0
+ion Pd   2.600963000000000   7.508325999999999  36.102469999999990 0
+ion Pd   0.000004000000000  12.013319999999998  36.102469999999990 0
+ion Pd  10.403842999999998   3.003331999999999  36.102469999999990 0
+ion Pd   7.802882999999996   7.508325999999999  36.102469999999990 0
+ion Pd   5.201922999999999  12.013319999999998  36.102469999999990 0
+ion Pd   2.600947000000000   1.501651000000000  40.329916999999995 1
+ion Pd  -0.000016000000000   6.006643999999998  40.329911999999993 1
+ion Pd  -2.600971999999999  10.511641999999998  40.329913999999995 1
+ion Pd   7.802870999999999   1.501654000000000  40.329916999999995 1
+ion Pd   5.201911999999998   6.006643999999998  40.329909999999991 1
+ion Pd   2.600948000000000  10.511646999999998  40.329911999999993 1
+ion Pd  13.004788999999999   1.501657000000000  40.329918999999990 1
+ion Pd  10.403831999999998   6.006644999999999  40.329915999999990 1
+ion Pd   7.802871999999996  10.511645999999997  40.329914999999993 1
+ion Pd   0.000007000000000   0.000026000000000  44.625495999999984 1
+ion Pd  -2.600959000000000   4.505000999999999  44.625489999999992 1
+ion Pd  -5.201905999999999   9.010002999999998  44.625477999999994 1
+ion Pd   5.201924000000000   0.000017000000000  44.625484999999991 1
+ion Pd   2.600957000000000   4.504991999999999  44.625467999999991 1
+ion Pd  -0.000008999999999   9.010004999999998  44.625461999999992 1
+ion Pd  10.403848999999997   0.000036000000000  44.625478999999991 1
+ion Pd   7.802902999999999   4.504998999999999  44.625476999999982 1
+ion Pd   5.201936999999998   9.010011999999998  44.625451999999996 1
+ion-species GBRV_v1.5/$ID_pbe_v1.uspp
+ion-width Ecut
+ionic-minimize  \
+	dirUpdateScheme      L-BFGS \
+	linminMethod         DirUpdateRecommended \
+	nIterations          0 \
+	history              15 \
+	knormThreshold       0.0001 \
+	maxThreshold         no \
+	energyDiffThreshold  1e-06 \
+	nEnergyDiff          2 \
+	alphaTstart          1 \
+	alphaTmin            1e-10 \
+	updateTestStepSize   yes \
+	alphaTreduceFactor   0.1 \
+	alphaTincreaseFactor 3 \
+	nAlphaAdjustMax      3 \
+	wolfeEnergy          0.0001 \
+	wolfeGradient        0.9 \
+	fdTest               no
+kpoint   0.000000000000   0.000000000000   0.000000000000  1.00000000000000
+kpoint-folding 4 4 1 
+latt-move-scale 0 0 0
+latt-scale 1 1 1 
+lattice  \
+	  15.605758000000000   -7.802879000000000    0.000000000000000  \
+	   0.000000000000000   13.514983000000001    0.000000000000000  \
+	   0.000000000000000    0.000000000000000   76.452288999999993 
+lattice-minimize  \
+	dirUpdateScheme      L-BFGS \
+	linminMethod         DirUpdateRecommended \
+	nIterations          0 \
+	history              15 \
+	knormThreshold       0 \
+	maxThreshold         no \
+	energyDiffThreshold  1e-06 \
+	nEnergyDiff          2 \
+	alphaTstart          1 \
+	alphaTmin            1e-10 \
+	updateTestStepSize   yes \
+	alphaTreduceFactor   0.1 \
+	alphaTincreaseFactor 3 \
+	nAlphaAdjustMax      3 \
+	wolfeEnergy          0.0001 \
+	wolfeGradient        0.9 \
+	fdTest               no
+lcao-params -1 1e-06 0.003675
+pcm-variant CANDLE
+perturb-minimize  \
+	nIterations            0 \
+	algorithm              MINRES \
+	residualTol            0.0001 \
+	residualDiffThreshold  0.0001 \
+	CGBypass               no \
+	recomputeResidual      no
+spintype no-spin
+subspace-rotation-factor 1 yes
+symmetries none
+symmetry-threshold 0.0001
+target-mu -0.165115 no
+
+van-der-waals D3
+
+
+Applied RMS atom displacement 0 bohrs to make symmetries exact.
+
+---------- Initializing the Grid ----------
+R = 
+[      15.6058     -7.80288            0  ]
+[            0       13.515            0  ]
+[            0            0      76.4523  ]
+unit cell volume = 16124.7
+G =
+[    0.40262   0.232453         -0  ]
+[          0   0.464905          0  ]
+[          0         -0  0.0821844  ]
+Minimum fftbox size, Smin = [  72  72  348  ]
+Chosen fftbox size, S = [  72  72  350  ]
+
+---------- Initializing tighter grid for wavefunction operations ----------
+R = 
+[      15.6058     -7.80288            0  ]
+[            0       13.515            0  ]
+[            0            0      76.4523  ]
+unit cell volume = 16124.7
+G =
+[    0.40262   0.232453         -0  ]
+[          0   0.464905          0  ]
+[          0         -0  0.0821844  ]
+Minimum fftbox size, Smin = [  64  64  308  ]
+Chosen fftbox size, S = [  64  64  320  ]
+
+---------- Exchange Correlation functional ----------
+Initalized PBE GGA exchange.
+Initalized PBE GGA correlation.
+
+---------- Setting up pseudopotentials ----------
+Width of ionic core gaussian charges (only for fluid interactions / plotting) set to 0.397384
+
+Reading pseudopotential file '/global/u2/r/ravish/Project-BEAST/Software/Perlmutter/JDFTx/build-gpu/pseudopotentials/GBRV_v1.5/pd_pbe_v1.uspp':
+  Title: Pd.  Created by USPP 7.3.6 on 31-3-15
+  Reference state energy: -99.095797.  16 valence electrons in orbitals:
+    |410>  occupation: 6  eigenvalue: -2.075344
+    |420>  occupation: 9.5  eigenvalue: -0.331049
+    |500>  occupation: 0  eigenvalue: -0.255738
+    |510>  occupation: 0  eigenvalue: -0.109005
+  lMax: 2  lLocal: 3  QijEcut: 6
+  6 projectors sampled on a log grid with 717 points:
+    l: 0  eig: -0.255738  rCut: 2.5
+    l: 0  eig: 1.000000  rCut: 2.5
+    l: 1  eig: -2.075343  rCut: 1.53
+    l: 1  eig: -0.109006  rCut: 1.53
+    l: 2  eig: -0.331048  rCut: 1.63
+    l: 2  eig: 1.500000  rCut: 1.63
+  Partial core density with radius 1
+  Transforming core density to a uniform radial grid of dG=0.02 with 1624 points.
+  Transforming local potential to a uniform radial grid of dG=0.02 with 1624 points.
+  Transforming nonlocal projectors to a uniform radial grid of dG=0.02 with 432 points.
+  Transforming density augmentations to a uniform radial grid of dG=0.02 with 1624 points.
+  Transforming atomic orbitals to a uniform radial grid of dG=0.02 with 432 points.
+  Core radius for overlap checks: 2.50 bohrs.
+
+Initialized 1 species with 36 total atoms.
+
+Folded 1 k-points by 4x4x1 to 16 k-points.
+
+---------- Setting up k-points, bands, fillings ----------
+No reducable k-points. 
+Computing the number of bands and number of electrons
+Calculating initial fillings.
+nElectrons: 576.000000   nBands: 345   nStates: 16
+
+----- Setting up reduced wavefunction bases (one per k-point) -----
+average nbasis = 68913.938 , ideal nbasis = 68885.824
+
+----- Initializing Supercell corresponding to k-point mesh -----
+Lattice vector linear combinations in supercell:
+[   4   0   0  ]
+[   0   4   0  ]
+[   0   0   1  ]
+Supercell lattice vectors:
+[  62.423  -31.2115  0  ]
+[  0  54.0599  0  ]
+[  0  0  76.4523  ]
+
+---------- Setting up coulomb interaction ----------
+Fluid mode embedding: using embedded box, but periodic Coulomb kernel.
+(Fluid response is responsible for (approximate) separation between periodic images.)
+Setting up double-sized grid for truncated Coulomb potentials:
+R = 
+[      15.6058     -7.80288            0  ]
+[            0       13.515            0  ]
+[            0            0      152.905  ]
+unit cell volume = 32249.3
+G =
+[    0.40262   0.232453         -0  ]
+[          0   0.464905          0  ]
+[          0         -0  0.0410922  ]
+Chosen fftbox size, S = [  72  72  700  ]
+Integer grid location selected as the embedding center:
+   Grid: [  30  30  175  ]
+   Lattice: [  0.416667  0.416667  0.500027  ]
+   Cartesian: [  3.2512  5.63125  38.2282  ]
+Constructing Wigner-Seitz cell: 8 faces (6 quadrilaterals, 2 hexagons)
+Range-separation parameter for embedded mesh potentials due to point charges: 0.589619 bohrs.
+
+Initializing DFT-D3 calculator:
+	Parameters set for gga-PBE functional
+	s6:  1.000  s_r6:  1.217
+	s8:  0.722  s_r8:  1.000
+	Per-atom parameters loaded for:
+	Pd:  sqrtQ[a0]:  5.526  Rcov[a0]:  2.041  CN: [ 0.00 1.86 5.71 ]
+
+Initializing DFT-D2 calculator for fluid / solvation:
+	Pd:  C6:  427.91 Eh-a0^6  R0: 3.097 a0
+
+---------- Setting up ewald sum ----------
+Optimum gaussian width for ewald sums = 6.988221 bohr.
+Real space sum over 845 unit cells with max indices [  6  6  2  ]
+Reciprocal space sum over 8591 terms with max indices [  5  5  35  ]
+
+Computing DFT-D3 correction:
+# coordination-number Pd 6.178 6.178 6.178 6.178 6.178 6.178 6.178 6.178 6.178 8.301 8.301 8.301 8.301 8.301 8.301 8.301 8.301 8.301 8.215 8.215 8.215 8.215 8.215 8.215 8.215 8.215 8.215 6.091 6.091 6.091 6.091 6.091 6.091 6.091 6.091 6.091
+# diagonal-C6 Pd 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87
+EvdW_6 =   -0.221313
+EvdW_8 =   -0.328990
+
+---------- Allocating electronic variables ----------
+Initializing wave functions:  linear combination of atomic orbitals
+Pd pseudo-atom occupations:   s ( 0 )  p ( 6 0 )  d ( 10 )
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:   0  G: -3344.0737290465949627  |grad|_K:  1.237e-02  alpha:  1.000e+00
+LCAOMinimize: 	Step increased G by 5.091716e+01, reducing alpha to 1.750448e-02.
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:   1  G: -3350.1339231324545835  |grad|_K:  6.510e-03  alpha:  1.750e-02  linmin: -2.577e-01  cgtest:  8.939e-01  t[s]:     35.96
+LCAOMinimize: Encountered beta<0, resetting CG.
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:   2  G: -3351.9321959482385864  |grad|_K:  9.025e-03  alpha:  3.223e-02  linmin:  3.428e-02  cgtest: -4.447e-02  t[s]:     40.85
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:   3  G: -3352.7181619129842147  |grad|_K:  5.160e-03  alpha:  7.490e-03  linmin: -1.918e-02  cgtest:  6.221e-01  t[s]:     45.73
+LCAOMinimize: Encountered beta<0, resetting CG.
+LCAOMinimize: 	Predicted alpha/alphaT>3.000000, increasing alphaT to 2.247037e-02.
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:   4  G: -3353.8153524759300126  |grad|_K:  5.242e-03  alpha:  2.661e-02  linmin: -2.816e-02  cgtest:  3.469e-02  t[s]:     52.02
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:   5  G: -3354.4118892610031253  |grad|_K:  4.107e-03  alpha:  1.539e-02  linmin:  4.004e-03  cgtest: -3.629e-01  t[s]:     56.90
+LCAOMinimize: 	Predicted alpha/alphaT>3.000000, increasing alphaT to 4.615809e-02.
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:   6  G: -3355.7238951116228236  |grad|_K:  4.401e-03  alpha:  5.372e-02  linmin:  7.978e-04  cgtest:  6.865e-01  t[s]:     63.22
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:   7  G: -3356.5870296597117886  |grad|_K:  3.740e-03  alpha:  2.957e-02  linmin: -2.594e-03  cgtest:  4.377e-02  t[s]:     68.12
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:   8  G: -3356.7985330825999881  |grad|_K:  7.595e-04  alpha:  8.933e-03  linmin: -1.597e-01  cgtest:  1.135e-01  t[s]:     73.00
+LCAOMinimize: 	Predicted alpha/alphaT>3.000000, increasing alphaT to 2.679887e-02.
+LCAOMinimize: 	Predicted alpha/alphaT>3.000000, increasing alphaT to 8.039661e-02.
+LCAOMinimize: 	Predicted alpha/alphaT>3.000000, increasing alphaT to 2.411898e-01.
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:   9  G: -3357.1896216339255261  |grad|_K:  8.708e-04  alpha:  4.021e-01  linmin: -1.355e-02  cgtest:  7.399e-04  t[s]:     80.70
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:  10  G: -3357.2183509316951131  |grad|_K:  1.046e-03  alpha:  4.876e-02  linmin:  4.559e-02  cgtest: -5.586e-01  t[s]:     85.57
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:  11  G: -3357.2185809450129454  |grad|_K:  9.788e-04  alpha:  9.455e-04  linmin: -7.611e-04  cgtest:  9.967e-01  t[s]:     90.47
+LCAOMinimize: Encountered beta<0, resetting CG.
+LCAOMinimize: 	Predicted alpha/alphaT>3.000000, increasing alphaT to 2.836565e-03.
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:  12  G: -3357.2298538052559707  |grad|_K:  4.349e-04  alpha:  7.689e-03  linmin: -1.697e-02  cgtest:  7.418e-02  t[s]:     96.76
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:  13  G: -3357.2364370903351301  |grad|_K:  6.175e-05  alpha:  2.160e-02  linmin: -1.016e-01  cgtest:  1.687e-01  t[s]:    101.69
+LCAOMinimize: Encountered beta<0, resetting CG.
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:  14  G: -3357.2364981559171611  |grad|_K:  5.096e-05  alpha:  1.166e-02  linmin: -2.402e-02  cgtest:  1.174e-01  t[s]:    106.59
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:  15  G: -3357.2365818249759286  |grad|_K:  2.734e-05  alpha:  1.719e-02  linmin: -2.075e-01  cgtest:  6.687e-01  t[s]:    111.49
+LCAOMinimize: Encountered beta<0, resetting CG.
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:  16  G: -3357.2366235176432383  |grad|_K:  2.715e-05  alpha:  2.838e-02  linmin: -1.838e-01  cgtest:  7.917e-01  t[s]:    116.36
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:  17  G: -3357.2366452675973960  |grad|_K:  3.438e-05  alpha:  2.013e-02  linmin: -5.160e-02  cgtest:  2.074e-01  t[s]:    121.26
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:  18  G: -3357.2367013645925908  |grad|_K:  2.122e-05  alpha:  2.191e-02  linmin: -1.884e-01  cgtest:  2.641e-01  t[s]:    126.16
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:  19  G: -3357.2367189759174835  |grad|_K:  2.141e-05  alpha:  1.927e-02  linmin: -1.445e-01  cgtest:  5.526e-01  t[s]:    131.05
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:  20  G: -3357.2367325250661452  |grad|_K:  1.959e-05  alpha:  1.561e-02  linmin: -1.501e-01  cgtest:  4.697e-01  t[s]:    135.92
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:  21  G: -3357.2367415762810197  |grad|_K:  1.651e-05  alpha:  1.277e-02  linmin: -2.532e-01  cgtest:  7.588e-01  t[s]:    140.81
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:  22  G: -3357.2367452676389803  |grad|_K:  1.588e-05  alpha:  1.033e-02  linmin: -2.787e-01  cgtest:  9.625e-01  t[s]:    145.68
+LCAOMinimize: Encountered beta<0, resetting CG.
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:  23  G: -3357.2367474705943096  |grad|_K:  1.558e-05  alpha:  8.047e-03  linmin: -2.848e-01  cgtest:  9.941e-01  t[s]:    150.59
+LCAOMinimize: Encountered beta<0, resetting CG.
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:  24  G: -3357.2367490626284052  |grad|_K:  1.539e-05  alpha:  6.198e-03  linmin: -2.857e-01  cgtest:  9.996e-01  t[s]:    155.49
+LCAOMinimize: Encountered beta<0, resetting CG.
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:  25  G: -3357.2367502014276397  |grad|_K:  1.525e-05  alpha:  4.696e-03  linmin: -2.850e-01  cgtest:  1.000e+00  t[s]:    160.37
+LCAOMinimize: Encountered beta<0, resetting CG.
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:  26  G: -3357.2367510204271639  |grad|_K:  1.514e-05  alpha:  3.518e-03  linmin: -2.845e-01  cgtest:  1.000e+00  t[s]:    165.25
+LCAOMinimize: Encountered beta<0, resetting CG.
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+LCAOMinimize: Iter:  27  G: -3357.2367516101171532  |grad|_K:  1.507e-05  alpha:  2.614e-03  linmin: -2.842e-01  cgtest:  1.000e+00  t[s]:    170.14
+LCAOMinimize: Encountered beta<0, resetting CG.
+LCAOMinimize: Converged (|Delta G|<1.000000e-06 for 2 iters).
+----- createFluidSolver() ----- (Fluid-side solver setup)
+   Initializing fluid molecule 'H2O'
+     Initializing site 'O'
+       Electron density: proportional to exp(-r/0.36935)*erfc((r-0.51523)/0.36823) with norm 6.826
+       Charge density: gaussian nuclear width 0.478731 with net site charge 0.826
+       Polarizability: cuspless exponential with width 0.32 and norm 3.73
+       Hard sphere radius: 2.57003 bohrs
+       Positions in reference frame:
+         [ +0.000000 +0.000000 +0.000000 ]
+     Initializing site 'H'
+       Electron density: proportional to exp(-r/0.34641)*erfc((r-0)/0.390882) with norm 0.587
+       Charge density: gaussian nuclear width 0.377945 with net site charge -0.413
+       Polarizability: cuspless exponential with width 0.39 and norm 3.3
+       Positions in reference frame:
+         [ +0.000000 -1.441945 +1.122523 ]
+         [ +0.000000 +1.441945 +1.122523 ]
+     Net charge: 0   dipole magnitude: 0.927204
+     Initializing spherical shell mfKernel with radius 2.61727 Bohr
+     deltaS corrections:
+       site 'O': -7.54299
+       site 'H': -6.83917
+   Initializing fluid molecule 'Na+'
+     Initializing site 'Na'
+       Electron density: proportional to exp(-r/0.19682)*erfc((r-0.71491)/0.41314) with norm 8.1383
+       Charge density: gaussian nuclear width 0.365347 with net site charge -1
+       Hard sphere radius: 1.86327 bohrs
+       Positions in reference frame:
+         [ +0.000000 +0.000000 +0.000000 ]
+     Net charge: -1   dipole magnitude: 0
+     Initializing gaussian mfKernel with width: 1.55004 Bohr
+     deltaS corrections:
+       site 'Na': -22.3555
+   Initializing fluid molecule 'F-'
+     Initializing site 'F'
+       Electron density: proportional to exp(-r/0.38886)*erfc((r-0)/0.438782) with norm 8
+       Charge density: gaussian nuclear width 0.374796 with net site charge 1
+       Hard sphere radius: 2.39995 bohrs
+       Positions in reference frame:
+         [ +0.000000 +0.000000 +0.000000 ]
+     Net charge: 1   dipole magnitude: 0
+     Initializing gaussian mfKernel with width: 1.59012 Bohr
+     deltaS corrections:
+       site 'F': -9.04335
+
+Correction to mu due to finite nuclear width = -0.0177215
+   Cavity determined by nc: 0.00142 and sigma: 0.707107
+   Nonlocal vdW cavity from gaussian model electron density with norm = 8 and sigma = 0.993594 bohr
+   Charge asymmetry in cavity with sensitivity pCavity = 36.5 e-bohr/Eh
+   Electrostatic cavity expanded by eta = 1.46 bohrs
+   Weighted density cavitation model constrained by Nbulk: 0.0049383 bohr^-3, Pvap: 3.14029 kPa, Rvdw: 2.61727 bohr and sigmaBulk: 4.62e-05 Eh/bohr^2 at T: 298 K.
+   Weighted density dispersion model using vdW pair potentials with single solvent site with sqrtC6eff: 0.77 SI.
+
+
+---- Citations for features of the code used in this run ----
+
+   Software package:
+      R. Sundararaman, K. Letchworth-Weaver, K.A. Schwarz, D. Gunceler, Y. Ozhabes and T.A. Arias, 'JDFTx: software for joint density-functional theory', SoftwareX 6, 278 (2017)
+
+   gga-PBE exchange-correlation functional:
+      J.P. Perdew, K. Burke and M. Ernzerhof, Phys. Rev. Lett. 77, 3865 (1996)
+
+   Pseudopotentials:
+      KF Garrity, JW Bennett, KM Rabe and D Vanderbilt, Comput. Mater. Sci. 81, 446 (2014)
+
+   Truncated Coulomb potentials:
+      R. Sundararaman and T.A. Arias, Phys. Rev. B 87, 165122 (2013)
+
+   DFT-D3 dispersion correction:
+      S. Grimme, J. Antony, S. Ehrlich and H. Krieg, J. Chem. Phys. 132, 154104 (2010)
+
+   DFT-D2 dispersion correction:
+      S. Grimme, J. Comput. Chem. 27, 1787 (2006)
+
+   Charge-asymmetric nonlocally-determined local-electric (CANDLE) solvation model:
+      R. Sundararaman and W.A. Goddard III, J. Chem. Phys. 142, 064107 (2015)
+
+   Total energy minimization with Auxiliary Hamiltonian:
+      C. Freysoldt, S. Boeck, and J. Neugebauer, Phys. Rev. B 79, 241103(R) (2009)
+
+   Grand-canonical (fixed-potential) DFT:
+      R. Sundararaman, W. A. Goddard III and T. A. Arias, J. Chem. Phys. 146, 114104 (2017)
+
+   Linear-tetrahedron sampling for density of states:
+      G. Lehmann and M. Taut, Phys. status solidi (b) 54, 469 (1972)
+
+   Smooth electrostatic potentials by atom-potential subtraction:
+      R. Sundararaman and Y. Ping, J. Chem. Phys. 146, 104109 (2017)
+
+This list may not be complete. Please suggest additional citations or
+report any other bugs at https://github.com/shankar1729/jdftx/issues
+
+Initialization completed successfully at t[s]:    171.95
+
+
+Computing DFT-D3 correction:
+# coordination-number Pd 6.178 6.178 6.178 6.178 6.178 6.178 6.178 6.178 6.178 8.301 8.301 8.301 8.301 8.301 8.301 8.301 8.301 8.301 8.215 8.215 8.215 8.215 8.215 8.215 8.215 8.215 8.215 6.091 6.091 6.091 6.091 6.091 6.091 6.091 6.091 6.091
+# diagonal-C6 Pd 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87
+EvdW_6 =   -0.221313
+EvdW_8 =   -0.328990
+Fluid solver invoked on fresh (random / LCAO) wavefunctions
+Running a vacuum solve first:
+
+-------- Initial electronic minimization -----------
+	FillingsUpdate:  mu: -0.105806836  nElectrons: 576.000000
+ElecMinimize: Iter:   0  G: -3357.300681286924373  |grad|_K:  4.746e-05  alpha:  1.000e+00
+	FillingsUpdate:  mu: -0.079375922  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.995
+ElecMinimize: Iter:   1  G: -3357.599954482755493  |grad|_K:  2.411e-05  alpha:  3.496e-01  linmin:  1.069e-05  t[s]:    184.96
+	FillingsUpdate:  mu: -0.124237412  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.552
+ElecMinimize: Iter:   2  G: -3357.666589892237425  |grad|_K:  4.403e-05  alpha:  3.018e-01  linmin:  5.667e-07  t[s]:    192.27
+	FillingsUpdate:  mu: -0.103015584  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.314
+ElecMinimize: Iter:   3  G: -3357.690020591385746  |grad|_K:  3.150e-05  alpha:  2.916e-02  linmin: -1.518e-04  t[s]:    199.63
+	FillingsUpdate:  mu: -0.109898236  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.141
+ElecMinimize: Iter:   4  G: -3357.697670504842790  |grad|_K:  1.120e-05  alpha:  1.853e-02  linmin: -8.926e-07  t[s]:    206.98
+ElecMinimize: 	Predicted alpha/alphaT>3.000000, increasing alphaT to 5.560020e-02.
+ElecMinimize: 	Predicted alpha/alphaT>3.000000, increasing alphaT to 1.668006e-01.
+	FillingsUpdate:  mu: -0.083316879  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.113
+	SubspaceRotationAdjust: resetting CG because factor has changed by 0.113019
+ElecMinimize: 	State modified externally: resetting search direction.
+ElecMinimize: Iter:   5  G: -3357.708617168762885  |grad|_K:  1.052e-05  alpha:  2.287e-01
+	FillingsUpdate:  mu: -0.093313351  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0793
+ElecMinimize: Iter:   6  G: -3357.714556461241045  |grad|_K:  9.548e-06  alpha:  1.412e-01  linmin:  3.254e-05  t[s]:    229.58
+	FillingsUpdate:  mu: -0.107672481  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0491
+ElecMinimize: Iter:   7  G: -3357.718597958548344  |grad|_K:  5.043e-06  alpha:  1.164e-01  linmin: -1.692e-05  t[s]:    236.90
+ElecMinimize: 	Predicted alpha/alphaT>3.000000, increasing alphaT to 3.493017e-01.
+	FillingsUpdate:  mu: -0.099534208  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0639
+ElecMinimize: Iter:   8  G: -3357.723772460479722  |grad|_K:  4.060e-06  alpha:  5.330e-01  linmin:  1.244e-05  t[s]:    246.35
+	FillingsUpdate:  mu: -0.096903248  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0467
+ElecMinimize: Iter:   9  G: -3357.725310506253209  |grad|_K:  3.546e-06  alpha:  2.451e-01  linmin:  1.290e-05  t[s]:    253.66
+	FillingsUpdate:  mu: -0.096298486  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0313
+ElecMinimize: Iter:  10  G: -3357.726425648893837  |grad|_K:  1.842e-06  alpha:  2.330e-01  linmin:  1.824e-05  t[s]:    260.97
+	FillingsUpdate:  mu: -0.096338212  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0338
+ElecMinimize: Iter:  11  G: -3357.726888622040406  |grad|_K:  1.070e-06  alpha:  3.588e-01  linmin:  2.302e-05  t[s]:    268.25
+	FillingsUpdate:  mu: -0.096880973  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0375
+ElecMinimize: Iter:  12  G: -3357.727103386670478  |grad|_K:  8.607e-07  alpha:  4.933e-01  linmin:  2.822e-05  t[s]:    275.55
+	FillingsUpdate:  mu: -0.096613212  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.043
+ElecMinimize: Iter:  13  G: -3357.727264414399087  |grad|_K:  6.832e-07  alpha:  5.734e-01  linmin:  3.449e-05  t[s]:    282.89
+	FillingsUpdate:  mu: -0.096250328  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0392
+ElecMinimize: Iter:  14  G: -3357.727362630246716  |grad|_K:  7.436e-07  alpha:  5.567e-01  linmin:  1.587e-05  t[s]:    290.37
+	FillingsUpdate:  mu: -0.095914306  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0337
+ElecMinimize: Iter:  15  G: -3357.727426355105763  |grad|_K:  6.203e-07  alpha:  3.044e-01  linmin:  3.323e-06  t[s]:    297.69
+	FillingsUpdate:  mu: -0.095313603  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0372
+ElecMinimize: Iter:  16  G: -3357.727527724525316  |grad|_K:  6.696e-07  alpha:  6.917e-01  linmin: -5.984e-06  t[s]:    305.00
+	FillingsUpdate:  mu: -0.095319575  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0404
+ElecMinimize: Iter:  17  G: -3357.727654058638109  |grad|_K:  7.261e-07  alpha:  7.345e-01  linmin: -1.430e-05  t[s]:    312.32
+	FillingsUpdate:  mu: -0.094920648  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0378
+ElecMinimize: Iter:  18  G: -3357.727767246715757  |grad|_K:  7.532e-07  alpha:  5.565e-01  linmin: -1.380e-05  t[s]:    319.78
+	FillingsUpdate:  mu: -0.094844074  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0299
+ElecMinimize: Iter:  19  G: -3357.727848491589612  |grad|_K:  7.081e-07  alpha:  3.713e-01  linmin: -7.932e-06  t[s]:    327.25
+	FillingsUpdate:  mu: -0.095063486  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0285
+ElecMinimize: Iter:  20  G: -3357.727941559122428  |grad|_K:  6.363e-07  alpha:  4.815e-01  linmin: -8.516e-06  t[s]:    334.62
+	FillingsUpdate:  mu: -0.095028644  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.03
+ElecMinimize: Iter:  21  G: -3357.728016845425827  |grad|_K:  5.073e-07  alpha:  4.822e-01  linmin: -5.099e-06  t[s]:    341.93
+	FillingsUpdate:  mu: -0.094968237  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0266
+ElecMinimize: Iter:  22  G: -3357.728062953438894  |grad|_K:  4.014e-07  alpha:  4.673e-01  linmin: -1.999e-06  t[s]:    349.21
+	FillingsUpdate:  mu: -0.094926524  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.022
+ElecMinimize: Iter:  23  G: -3357.728087114526261  |grad|_K:  3.248e-07  alpha:  3.926e-01  linmin: -3.704e-07  t[s]:    356.49
+	FillingsUpdate:  mu: -0.094958745  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0231
+ElecMinimize: Iter:  24  G: -3357.728104206035823  |grad|_K:  2.357e-07  alpha:  4.248e-01  linmin:  6.953e-08  t[s]:    363.80
+	FillingsUpdate:  mu: -0.095062340  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0227
+ElecMinimize: Iter:  25  G: -3357.728113918182316  |grad|_K:  1.753e-07  alpha:  4.584e-01  linmin:  1.117e-06  t[s]:    371.14
+	FillingsUpdate:  mu: -0.095074814  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0202
+ElecMinimize: Iter:  26  G: -3357.728118942742185  |grad|_K:  1.278e-07  alpha:  4.290e-01  linmin:  3.638e-06  t[s]:    378.45
+	FillingsUpdate:  mu: -0.095106070  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0206
+ElecMinimize: Iter:  27  G: -3357.728121610401104  |grad|_K:  9.812e-08  alpha:  4.285e-01  linmin:  6.591e-06  t[s]:    385.78
+	FillingsUpdate:  mu: -0.095150452  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0221
+ElecMinimize: Iter:  28  G: -3357.728123193626743  |grad|_K:  7.405e-08  alpha:  4.320e-01  linmin:  1.121e-05  t[s]:    393.15
+	FillingsUpdate:  mu: -0.095155778  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0233
+ElecMinimize: Iter:  29  G: -3357.728124176079291  |grad|_K:  5.559e-08  alpha:  4.710e-01  linmin:  1.398e-05  t[s]:    400.47
+	FillingsUpdate:  mu: -0.095157998  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0257
+ElecMinimize: Iter:  30  G: -3357.728124750165080  |grad|_K:  4.770e-08  alpha:  4.884e-01  linmin:  8.224e-06  t[s]:    407.81
+	FillingsUpdate:  mu: -0.095157490  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.03
+ElecMinimize: Iter:  31  G: -3357.728125150441883  |grad|_K:  4.343e-08  alpha:  4.624e-01  linmin:  2.752e-06  t[s]:    415.14
+	FillingsUpdate:  mu: -0.095165598  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0356
+ElecMinimize: Iter:  32  G: -3357.728125564740822  |grad|_K:  4.100e-08  alpha:  5.760e-01  linmin: -5.287e-06  t[s]:    422.51
+	FillingsUpdate:  mu: -0.095189342  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0395
+ElecMinimize: Iter:  33  G: -3357.728125968671065  |grad|_K:  4.687e-08  alpha:  6.285e-01  linmin: -1.053e-05  t[s]:    429.89
+	FillingsUpdate:  mu: -0.095191686  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0413
+ElecMinimize: Iter:  34  G: -3357.728126370639529  |grad|_K:  4.905e-08  alpha:  4.764e-01  linmin: -9.852e-06  t[s]:    437.24
+	FillingsUpdate:  mu: -0.095201938  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0411
+ElecMinimize: Iter:  35  G: -3357.728126885431266  |grad|_K:  5.185e-08  alpha:  5.548e-01  linmin: -1.173e-05  t[s]:    444.56
+	FillingsUpdate:  mu: -0.095249894  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0391
+ElecMinimize: Iter:  36  G: -3357.728127387783388  |grad|_K:  5.210e-08  alpha:  4.824e-01  linmin: -7.748e-06  t[s]:    451.88
+	FillingsUpdate:  mu: -0.095290579  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0369
+ElecMinimize: Iter:  37  G: -3357.728127897423292  |grad|_K:  4.521e-08  alpha:  4.858e-01  linmin: -5.479e-06  t[s]:    459.16
+	FillingsUpdate:  mu: -0.095294134  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0354
+ElecMinimize: Iter:  38  G: -3357.728128293992995  |grad|_K:  4.053e-08  alpha:  5.040e-01  linmin: -1.757e-06  t[s]:    466.48
+	FillingsUpdate:  mu: -0.095312656  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0342
+ElecMinimize: Iter:  39  G: -3357.728128543759794  |grad|_K:  3.252e-08  alpha:  3.977e-01  linmin:  9.334e-07  t[s]:    473.79
+	FillingsUpdate:  mu: -0.095330334  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0337
+ElecMinimize: Iter:  40  G: -3357.728128722118981  |grad|_K:  2.379e-08  alpha:  4.424e-01  linmin:  1.857e-06  t[s]:    481.10
+	FillingsUpdate:  mu: -0.095335143  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.034
+ElecMinimize: Iter:  41  G: -3357.728128813351304  |grad|_K:  1.860e-08  alpha:  4.236e-01  linmin:  2.441e-06  t[s]:    488.42
+	FillingsUpdate:  mu: -0.095340947  nElectrons: 576.000000
+	SubspaceRotationAdjust: set factor to 0.0361
+ElecMinimize: Iter:  42  G: -3357.728128864244354  |grad|_K:  1.324e-08  alpha:  3.882e-01  linmin:  2.324e-06  t[s]:    495.75
+ElecMinimize: Converged (|Delta G|<1.000000e-07 for 2 iters).
+Setting wave functions to eigenvectors of Hamiltonian
+Converging empty states (this may take a while): |deigs|: 9.356e-03
+Vacuum energy after initial minimize, F = -3357.728128864244354
+
+Shifting auxilliary hamiltonian by -0.069774 to set nElectrons=576.000000
+
+-------- Electronic minimization -----------
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.838886 of unit cell:	Completed after 19 iterations at t[s]:    528.53
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.000000
+ElecMinimize: Iter:   0  G: -3357.733179987374569  |grad|_K:  7.040e-06  alpha:  1.000e+00
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.859114 of unit cell:	Completed after 31 iterations at t[s]:    533.47
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.839296 of unit cell:	Completed after 21 iterations at t[s]:    535.24
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.201065
+	SubspaceRotationAdjust: set factor to 0.0186
+ElecMinimize: Iter:   1  G: -3357.734661644823518  |grad|_K:  3.645e-06  alpha:  1.136e-01  linmin:  3.712e-02  t[s]:    537.85
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.839338 of unit cell:	Completed after 12 iterations at t[s]:    539.81
+ElecMinimize: 	Predicted alpha/alphaT>3.000000, increasing alphaT to 3.407291e-01.
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.839424 of unit cell:	Completed after 14 iterations at t[s]:    541.59
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.839431 of unit cell:	Completed after 3 iterations at t[s]:    543.35
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.219118
+	SubspaceRotationAdjust: set factor to 0.0105
+ElecMinimize: Iter:   2  G: -3357.736042043849466  |grad|_K:  2.154e-06  alpha:  3.566e-01  linmin: -4.968e-05  t[s]:    545.98
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.840326 of unit cell:	Completed after 14 iterations at t[s]:    547.96
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.840644 of unit cell:	Completed after 13 iterations at t[s]:    549.73
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.359424
+	SubspaceRotationAdjust: set factor to 0.00753
+ElecMinimize: Iter:   3  G: -3357.736849611304933  |grad|_K:  1.770e-06  alpha:  4.549e-01  linmin: -4.629e-04  t[s]:    552.37
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.841270 of unit cell:	Completed after 14 iterations at t[s]:    554.34
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.841606 of unit cell:	Completed after 7 iterations at t[s]:    556.14
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.441564
+	SubspaceRotationAdjust: set factor to 0.0074
+ElecMinimize: Iter:   4  G: -3357.737669984609511  |grad|_K:  1.634e-06  alpha:  6.795e-01  linmin:  3.950e-06  t[s]:    558.74
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.842911 of unit cell:	Completed after 14 iterations at t[s]:    560.69
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.842498 of unit cell:	Completed after 12 iterations at t[s]:    562.44
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.510738
+	SubspaceRotationAdjust: set factor to 0.00826
+ElecMinimize: Iter:   5  G: -3357.738151225315960  |grad|_K:  1.324e-06  alpha:  4.750e-01  linmin:  1.487e-05  t[s]:    565.07
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.843243 of unit cell:	Completed after 14 iterations at t[s]:    567.03
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.843639 of unit cell:	Completed after 12 iterations at t[s]:    568.78
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.594446
+	SubspaceRotationAdjust: set factor to 0.00898
+ElecMinimize: Iter:   6  G: -3357.738629662164840  |grad|_K:  1.300e-06  alpha:  7.154e-01  linmin:  7.099e-05  t[s]:    571.40
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.844447 of unit cell:	Completed after 15 iterations at t[s]:    573.35
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.844475 of unit cell:	Completed after 2 iterations at t[s]:    575.09
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.657513
+	SubspaceRotationAdjust: set factor to 0.0101
+ElecMinimize: Iter:   7  G: -3357.739105627945264  |grad|_K:  1.375e-06  alpha:  7.401e-01  linmin:  1.196e-04  t[s]:    577.69
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.845518 of unit cell:	Completed after 15 iterations at t[s]:    579.65
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.845566 of unit cell:	Completed after 3 iterations at t[s]:    581.38
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.735118
+	SubspaceRotationAdjust: set factor to 0.011
+ElecMinimize: Iter:   8  G: -3357.739659552224111  |grad|_K:  1.594e-06  alpha:  7.735e-01  linmin:  1.430e-04  t[s]:    583.98
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.847659 of unit cell:	Completed after 14 iterations at t[s]:    585.94
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.847419 of unit cell:	Completed after 12 iterations at t[s]:    587.70
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.855505
+	SubspaceRotationAdjust: set factor to 0.0114
+ElecMinimize: Iter:   9  G: -3357.740315652513345  |grad|_K:  1.741e-06  alpha:  6.834e-01  linmin:  1.595e-04  t[s]:    590.33
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.848855 of unit cell:	Completed after 10 iterations at t[s]:    592.27
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.848930 of unit cell:	Completed after 3 iterations at t[s]:    594.00
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 576.959261
+	SubspaceRotationAdjust: set factor to 0.0114
+ElecMinimize: Iter:  10  G: -3357.741136174377061  |grad|_K:  1.740e-06  alpha:  7.210e-01  linmin:  1.906e-04  t[s]:    596.63
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.851009 of unit cell:	Completed after 14 iterations at t[s]:    598.59
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.850954 of unit cell:	Completed after 3 iterations at t[s]:    600.32
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.098602
+	SubspaceRotationAdjust: set factor to 0.0112
+ElecMinimize: Iter:  11  G: -3357.741929571133369  |grad|_K:  1.678e-06  alpha:  7.003e-01  linmin:  1.687e-04  t[s]:    602.92
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.851591 of unit cell:	Completed after 16 iterations at t[s]:    604.89
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.851610 of unit cell:	Completed after 3 iterations at t[s]:    606.63
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.151725
+	SubspaceRotationAdjust: set factor to 0.0112
+ElecMinimize: Iter:  12  G: -3357.742692732963405  |grad|_K:  1.651e-06  alpha:  7.220e-01  linmin:  5.049e-06  t[s]:    609.60
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.852737 of unit cell:	Completed after 16 iterations at t[s]:    611.56
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.852610 of unit cell:	Completed after 13 iterations at t[s]:    613.32
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.229660
+	SubspaceRotationAdjust: set factor to 0.012
+ElecMinimize: Iter:  13  G: -3357.743354391849152  |grad|_K:  1.679e-06  alpha:  6.363e-01  linmin:  1.659e-05  t[s]:    615.94
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.852944 of unit cell:	Completed after 15 iterations at t[s]:    617.91
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.852939 of unit cell:	Completed after 0 iterations at t[s]:    619.65
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.259812
+	SubspaceRotationAdjust: set factor to 0.0141
+ElecMinimize: Iter:  14  G: -3357.744027404678036  |grad|_K:  1.653e-06  alpha:  6.270e-01  linmin:  2.787e-05  t[s]:    622.32
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.853273 of unit cell:	Completed after 8 iterations at t[s]:    624.27
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.853314 of unit cell:	Completed after 3 iterations at t[s]:    626.02
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.295571
+	SubspaceRotationAdjust: set factor to 0.0172
+ElecMinimize: Iter:  15  G: -3357.744760119766397  |grad|_K:  1.747e-06  alpha:  7.052e-01  linmin:  8.263e-06  t[s]:    628.65
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.853805 of unit cell:	Completed after 14 iterations at t[s]:    630.63
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.853884 of unit cell:	Completed after 5 iterations at t[s]:    632.36
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.353620
+	SubspaceRotationAdjust: set factor to 0.0204
+ElecMinimize: Iter:  16  G: -3357.745713123323640  |grad|_K:  1.961e-06  alpha:  8.201e-01  linmin:  3.741e-06  t[s]:    635.05
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.854224 of unit cell:	Completed after 17 iterations at t[s]:    637.02
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.854224 of unit cell:	Completed after 0 iterations at t[s]:    638.74
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.402543
+	SubspaceRotationAdjust: set factor to 0.0229
+ElecMinimize: Iter:  17  G: -3357.746912310694370  |grad|_K:  2.226e-06  alpha:  8.182e-01  linmin:  2.137e-05  t[s]:    641.35
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855192 of unit cell:	Completed after 20 iterations at t[s]:    643.32
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855017 of unit cell:	Completed after 14 iterations at t[s]:    645.08
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.502764
+	SubspaceRotationAdjust: set factor to 0.0249
+ElecMinimize: Iter:  18  G: -3357.748166046065762  |grad|_K:  2.078e-06  alpha:  6.622e-01  linmin:  2.794e-05  t[s]:    647.68
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855305 of unit cell:	Completed after 18 iterations at t[s]:    649.65
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855285 of unit cell:	Completed after 5 iterations at t[s]:    651.40
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.557295
+	SubspaceRotationAdjust: set factor to 0.0263
+ElecMinimize: Iter:  19  G: -3357.749171979210587  |grad|_K:  1.695e-06  alpha:  6.136e-01  linmin:  2.532e-05  t[s]:    654.02
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855656 of unit cell:	Completed after 16 iterations at t[s]:    655.98
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855612 of unit cell:	Completed after 5 iterations at t[s]:    657.71
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.611743
+	SubspaceRotationAdjust: set factor to 0.0263
+ElecMinimize: Iter:  20  G: -3357.749757852625407  |grad|_K:  1.318e-06  alpha:  5.368e-01  linmin:  3.636e-06  t[s]:    660.34
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855287 of unit cell:	Completed after 17 iterations at t[s]:    662.30
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855366 of unit cell:	Completed after 13 iterations at t[s]:    664.06
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.597346
+	SubspaceRotationAdjust: set factor to 0.0199
+ElecMinimize: Iter:  21  G: -3357.750029533313864  |grad|_K:  1.325e-06  alpha:  4.100e-01  linmin:  1.846e-05  t[s]:    666.69
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855885 of unit cell:	Completed after 19 iterations at t[s]:    668.66
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855634 of unit cell:	Completed after 17 iterations at t[s]:    670.44
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.632430
+	SubspaceRotationAdjust: set factor to 0.0135
+ElecMinimize: Iter:  22  G: -3357.750167527260601  |grad|_K:  8.657e-07  alpha:  2.066e-01  linmin:  6.232e-05  t[s]:    673.07
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855624 of unit cell:	Completed after 11 iterations at t[s]:    675.01
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855613 of unit cell:	Completed after 12 iterations at t[s]:    676.77
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.636911
+	SubspaceRotationAdjust: set factor to 0.0172
+ElecMinimize: Iter:  23  G: -3357.750285405976229  |grad|_K:  6.156e-07  alpha:  4.144e-01  linmin:  5.814e-05  t[s]:    679.39
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855505 of unit cell:	Completed after 13 iterations at t[s]:    681.34
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855505 of unit cell:	Completed after 0 iterations at t[s]:    683.06
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.629190
+	SubspaceRotationAdjust: set factor to 0.0169
+ElecMinimize: Iter:  24  G: -3357.750345278388522  |grad|_K:  4.595e-07  alpha:  4.151e-01  linmin: -6.641e-05  t[s]:    685.67
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855596 of unit cell:	Completed after 15 iterations at t[s]:    687.63
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855587 of unit cell:	Completed after 3 iterations at t[s]:    689.35
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.640039
+	SubspaceRotationAdjust: set factor to 0.0147
+ElecMinimize: Iter:  25  G: -3357.750375284839265  |grad|_K:  4.241e-07  alpha:  3.723e-01  linmin:  8.631e-04  t[s]:    691.97
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855517 of unit cell:	Completed after 13 iterations at t[s]:    693.92
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855517 of unit cell:	Completed after 0 iterations at t[s]:    695.64
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.634203
+	SubspaceRotationAdjust: set factor to 0.0194
+ElecMinimize: Iter:  26  G: -3357.750400612719659  |grad|_K:  3.031e-07  alpha:  3.741e-01  linmin: -5.537e-04  t[s]:    698.25
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855492 of unit cell:	Completed after 3 iterations at t[s]:    700.18
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855476 of unit cell:	Completed after 3 iterations at t[s]:    701.90
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.630949
+	SubspaceRotationAdjust: set factor to 0.0226
+ElecMinimize: Iter:  27  G: -3357.750422749761583  |grad|_K:  3.269e-07  alpha:  6.253e-01  linmin: -1.107e-05  t[s]:    704.52
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855520 of unit cell:	Completed after 14 iterations at t[s]:    706.48
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855526 of unit cell:	Completed after 3 iterations at t[s]:    708.20
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.637120
+	SubspaceRotationAdjust: set factor to 0.0187
+ElecMinimize: Iter:  28  G: -3357.750451330206943  |grad|_K:  4.247e-07  alpha:  7.027e-01  linmin:  6.544e-05  t[s]:    710.84
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855277 of unit cell:	Completed after 14 iterations at t[s]:    712.79
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855386 of unit cell:	Completed after 14 iterations at t[s]:    714.55
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.622517
+	SubspaceRotationAdjust: set factor to 0.0161
+ElecMinimize: Iter:  29  G: -3357.750478995722915  |grad|_K:  4.713e-07  alpha:  3.987e-01  linmin:  5.488e-05  t[s]:    717.17
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855378 of unit cell:	Completed after 12 iterations at t[s]:    719.12
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855373 of unit cell:	Completed after 8 iterations at t[s]:    720.87
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.620653
+	SubspaceRotationAdjust: set factor to 0.0181
+ElecMinimize: Iter:  30  G: -3357.750532245317572  |grad|_K:  5.077e-07  alpha:  6.336e-01  linmin:  5.960e-06  t[s]:    723.49
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855379 of unit cell:	Completed after 12 iterations at t[s]:    725.44
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855380 of unit cell:	Completed after 2 iterations at t[s]:    727.16
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.619590
+	SubspaceRotationAdjust: set factor to 0.0186
+ElecMinimize: Iter:  31  G: -3357.750603172685715  |grad|_K:  6.190e-07  alpha:  7.205e-01  linmin: -8.523e-05  t[s]:    729.76
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855042 of unit cell:	Completed after 16 iterations at t[s]:    731.72
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855149 of unit cell:	Completed after 14 iterations at t[s]:    733.48
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.592967
+	SubspaceRotationAdjust: set factor to 0.0149
+ElecMinimize: Iter:  32  G: -3357.750677499559970  |grad|_K:  6.757e-07  alpha:  4.976e-01  linmin:  1.965e-05  t[s]:    736.08
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855200 of unit cell:	Completed after 16 iterations at t[s]:    738.04
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855190 of unit cell:	Completed after 11 iterations at t[s]:    739.79
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.594023
+	SubspaceRotationAdjust: set factor to 0.0125
+ElecMinimize: Iter:  33  G: -3357.750744825687434  |grad|_K:  5.861e-07  alpha:  3.889e-01  linmin:  6.618e-06  t[s]:    742.39
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855132 of unit cell:	Completed after 5 iterations at t[s]:    744.32
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855115 of unit cell:	Completed after 4 iterations at t[s]:    746.05
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.582798
+	SubspaceRotationAdjust: set factor to 0.014
+ElecMinimize: Iter:  34  G: -3357.750810508843642  |grad|_K:  4.656e-07  alpha:  5.023e-01  linmin:  4.777e-06  t[s]:    748.66
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.854972 of unit cell:	Completed after 13 iterations at t[s]:    750.61
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.854972 of unit cell:	Completed after 0 iterations at t[s]:    752.32
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.565997
+	SubspaceRotationAdjust: set factor to 0.0123
+ElecMinimize: Iter:  35  G: -3357.750851891990351  |grad|_K:  3.559e-07  alpha:  5.010e-01  linmin:  5.803e-05  t[s]:    755.03
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.854995 of unit cell:	Completed after 12 iterations at t[s]:    756.98
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.854993 of unit cell:	Completed after 3 iterations at t[s]:    758.71
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.566641
+	SubspaceRotationAdjust: set factor to 0.0101
+ElecMinimize: Iter:  36  G: -3357.750873345081800  |grad|_K:  2.591e-07  alpha:  4.492e-01  linmin:  4.058e-05  t[s]:    761.32
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.854937 of unit cell:	Completed after 12 iterations at t[s]:    763.27
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.854945 of unit cell:	Completed after 1 iterations at t[s]:    764.99
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.561155
+	SubspaceRotationAdjust: set factor to 0.00979
+ElecMinimize: Iter:  37  G: -3357.750883218420313  |grad|_K:  1.916e-07  alpha:  3.877e-01  linmin:  2.230e-04  t[s]:    767.62
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.854933 of unit cell:	Completed after 3 iterations at t[s]:    769.54
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.854933 of unit cell:	Completed after 0 iterations at t[s]:    771.25
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.559463
+	SubspaceRotationAdjust: set factor to 0.0112
+ElecMinimize: Iter:  38  G: -3357.750888984881840  |grad|_K:  1.213e-07  alpha:  4.191e-01  linmin: -3.105e-04  t[s]:    773.87
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.854934 of unit cell:	Completed after 3 iterations at t[s]:    775.80
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.854934 of unit cell:	Completed after 0 iterations at t[s]:    777.52
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.559362
+	SubspaceRotationAdjust: set factor to 0.0136
+ElecMinimize: Iter:  39  G: -3357.750891971331839  |grad|_K:  9.318e-08  alpha:  5.179e-01  linmin: -5.916e-04  t[s]:    780.12
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.854927 of unit cell:	Completed after 2 iterations at t[s]:    782.03
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.854926 of unit cell:	Completed after 0 iterations at t[s]:    783.75
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.558382
+	SubspaceRotationAdjust: set factor to 0.0175
+ElecMinimize: Iter:  40  G: -3357.750894032992619  |grad|_K:  8.085e-08  alpha:  6.001e-01  linmin: -3.686e-04  t[s]:    786.35
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.854920 of unit cell:	Completed after 3 iterations at t[s]:    788.27
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.854920 of unit cell:	Completed after 0 iterations at t[s]:    790.00
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.557658
+	SubspaceRotationAdjust: set factor to 0.0191
+ElecMinimize: Iter:  41  G: -3357.750895487635262  |grad|_K:  8.907e-08  alpha:  5.716e-01  linmin: -3.394e-04  t[s]:    792.63
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.854942 of unit cell:	Completed after 3 iterations at t[s]:    794.55
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.854943 of unit cell:	Completed after 0 iterations at t[s]:    796.27
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.559751
+	SubspaceRotationAdjust: set factor to 0.0247
+ElecMinimize: Iter:  42  G: -3357.750897308015738  |grad|_K:  9.163e-08  alpha:  5.825e-01  linmin: -1.856e-04  t[s]:    798.88
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.854952 of unit cell:	Completed after 3 iterations at t[s]:    800.85
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.854953 of unit cell:	Completed after 0 iterations at t[s]:    802.57
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.560688
+	SubspaceRotationAdjust: set factor to 0.0304
+ElecMinimize: Iter:  43  G: -3357.750899592260794  |grad|_K:  1.176e-07  alpha:  6.920e-01  linmin: -2.140e-04  t[s]:    805.20
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.854955 of unit cell:	Completed after 3 iterations at t[s]:    807.12
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.854955 of unit cell:	Completed after 2 iterations at t[s]:    808.84
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.560683
+	SubspaceRotationAdjust: set factor to 0.0337
+ElecMinimize: Iter:  44  G: -3357.750902393371689  |grad|_K:  1.447e-07  alpha:  5.156e-01  linmin:  8.265e-05  t[s]:    811.48
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855023 of unit cell:	Completed after 11 iterations at t[s]:    813.43
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855009 of unit cell:	Completed after 2 iterations at t[s]:    815.15
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.565988
+	SubspaceRotationAdjust: set factor to 0.031
+ElecMinimize: Iter:  45  G: -3357.750905583726308  |grad|_K:  1.841e-07  alpha:  4.071e-01  linmin:  1.666e-04  t[s]:    817.75
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.854990 of unit cell:	Completed after 11 iterations at t[s]:    819.69
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.854997 of unit cell:	Completed after 3 iterations at t[s]:    821.42
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.564685
+	SubspaceRotationAdjust: set factor to 0.025
+ElecMinimize: Iter:  46  G: -3357.750908840098418  |grad|_K:  1.828e-07  alpha:  2.621e-01  linmin:  1.460e-04  t[s]:    824.03
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855037 of unit cell:	Completed after 9 iterations at t[s]:    825.97
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855044 of unit cell:	Completed after 1 iterations at t[s]:    827.69
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.569376
+	SubspaceRotationAdjust: set factor to 0.0243
+ElecMinimize: Iter:  47  G: -3357.750912730457458  |grad|_K:  1.653e-07  alpha:  3.119e-01  linmin: -3.991e-04  t[s]:    830.31
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855059 of unit cell:	Completed after 3 iterations at t[s]:    832.23
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855067 of unit cell:	Completed after 2 iterations at t[s]:    833.96
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.571577
+	SubspaceRotationAdjust: set factor to 0.0274
+ElecMinimize: Iter:  48  G: -3357.750918351379369  |grad|_K:  1.681e-07  alpha:  4.834e-01  linmin: -1.219e-04  t[s]:    836.57
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855046 of unit cell:	Completed after 11 iterations at t[s]:    838.52
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855049 of unit cell:	Completed after 0 iterations at t[s]:    840.24
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.569691
+	SubspaceRotationAdjust: set factor to 0.0236
+ElecMinimize: Iter:  49  G: -3357.750922968068608  |grad|_K:  2.077e-07  alpha:  4.096e-01  linmin:  3.676e-04  t[s]:    842.86
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855135 of unit cell:	Completed after 13 iterations at t[s]:    844.81
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855086 of unit cell:	Completed after 11 iterations at t[s]:    846.57
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.573329
+	SubspaceRotationAdjust: set factor to 0.0231
+ElecMinimize: Iter:  50  G: -3357.750925425335481  |grad|_K:  1.287e-07  alpha:  1.747e-01  linmin:  1.187e-04  t[s]:    849.17
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855088 of unit cell:	Completed after 2 iterations at t[s]:    851.09
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855090 of unit cell:	Completed after 3 iterations at t[s]:    852.81
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.573555
+	SubspaceRotationAdjust: set factor to 0.0304
+ElecMinimize: Iter:  51  G: -3357.750928060405840  |grad|_K:  1.160e-07  alpha:  4.063e-01  linmin: -4.351e-04  t[s]:    855.42
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855061 of unit cell:	Completed after 10 iterations at t[s]:    857.36
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855066 of unit cell:	Completed after 0 iterations at t[s]:    859.12
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.571043
+	SubspaceRotationAdjust: set factor to 0.0235
+ElecMinimize: Iter:  52  G: -3357.750929889446070  |grad|_K:  1.383e-07  alpha:  3.317e-01  linmin:  4.537e-04  t[s]:    861.78
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855098 of unit cell:	Completed after 11 iterations at t[s]:    863.76
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855082 of unit cell:	Completed after 3 iterations at t[s]:    865.49
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.572530
+	SubspaceRotationAdjust: set factor to 0.02
+ElecMinimize: Iter:  53  G: -3357.750930978686483  |grad|_K:  9.842e-08  alpha:  1.656e-01  linmin:  5.021e-04  t[s]:    868.10
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855077 of unit cell:	Completed after 0 iterations at t[s]:    870.01
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855071 of unit cell:	Completed after 2 iterations at t[s]:    871.77
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.571148
+	SubspaceRotationAdjust: set factor to 0.0304
+ElecMinimize: Iter:  54  G: -3357.750932055370868  |grad|_K:  6.901e-08  alpha:  3.483e-01  linmin:  2.982e-04  t[s]:    874.37
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855056 of unit cell:	Completed after 7 iterations at t[s]:    876.30
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855059 of unit cell:	Completed after 0 iterations at t[s]:    878.05
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.569796
+	SubspaceRotationAdjust: set factor to 0.021
+ElecMinimize: Iter:  55  G: -3357.750932503866807  |grad|_K:  9.363e-08  alpha:  2.833e-01  linmin: -4.491e-04  t[s]:    880.67
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855077 of unit cell:	Completed after 3 iterations at t[s]:    882.60
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855070 of unit cell:	Completed after 0 iterations at t[s]:    884.32
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.570739
+	SubspaceRotationAdjust: set factor to 0.018
+ElecMinimize: Iter:  56  G: -3357.750933178357172  |grad|_K:  7.271e-08  alpha:  1.791e-01  linmin:  6.288e-04  t[s]:    886.98
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855067 of unit cell:	Completed after 1 iterations at t[s]:    888.90
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855066 of unit cell:	Completed after 0 iterations at t[s]:    890.61
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.570180
+	SubspaceRotationAdjust: set factor to 0.0257
+ElecMinimize: Iter:  57  G: -3357.750933582972266  |grad|_K:  5.392e-08  alpha:  2.164e-01  linmin: -1.295e-03  t[s]:    893.23
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855061 of unit cell:	Completed after 0 iterations at t[s]:    895.18
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855058 of unit cell:	Completed after 1 iterations at t[s]:    896.90
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.569124
+	SubspaceRotationAdjust: set factor to 0.0301
+ElecMinimize: Iter:  58  G: -3357.750934051696731  |grad|_K:  6.170e-08  alpha:  3.807e-01  linmin:  2.427e-04  t[s]:    899.51
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855061 of unit cell:	Completed after 2 iterations at t[s]:    901.43
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855060 of unit cell:	Completed after 0 iterations at t[s]:    903.15
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.569101
+	SubspaceRotationAdjust: set factor to 0.0357
+ElecMinimize: Iter:  59  G: -3357.750934480566684  |grad|_K:  6.497e-08  alpha:  3.230e-01  linmin:  2.006e-05  t[s]:    905.77
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855059 of unit cell:	Completed after 3 iterations at t[s]:    907.69
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855060 of unit cell:	Completed after 0 iterations at t[s]:    909.41
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.568824
+	SubspaceRotationAdjust: set factor to 0.0382
+ElecMinimize: Iter:  60  G: -3357.750934848564611  |grad|_K:  6.215e-08  alpha:  2.291e-01  linmin:  1.718e-04  t[s]:    912.03
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855043 of unit cell:	Completed after 2 iterations at t[s]:    913.95
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855044 of unit cell:	Completed after 0 iterations at t[s]:    915.66
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.567112
+	SubspaceRotationAdjust: set factor to 0.0514
+ElecMinimize: Iter:  61  G: -3357.750935141744321  |grad|_K:  5.618e-08  alpha:  2.134e-01  linmin: -4.402e-05  t[s]:    918.27
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855031 of unit cell:	Completed after 3 iterations at t[s]:    920.19
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855030 of unit cell:	Completed after 0 iterations at t[s]:    921.91
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.565545
+	SubspaceRotationAdjust: set factor to 0.0435
+ElecMinimize: Iter:  62  G: -3357.750935421330723  |grad|_K:  6.975e-08  alpha:  2.254e-01  linmin: -3.411e-04  t[s]:    924.51
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855035 of unit cell:	Completed after 2 iterations at t[s]:    926.45
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855035 of unit cell:	Completed after 0 iterations at t[s]:    928.20
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.565837
+	SubspaceRotationAdjust: set factor to 0.0649
+ElecMinimize: Iter:  63  G: -3357.750935865952670  |grad|_K:  6.216e-08  alpha:  2.116e-01  linmin: -6.328e-05  t[s]:    930.81
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855046 of unit cell:	Completed after 3 iterations at t[s]:    932.73
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855045 of unit cell:	Completed after 0 iterations at t[s]:    934.45
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.566709
+	SubspaceRotationAdjust: set factor to 0.052
+ElecMinimize: Iter:  64  G: -3357.750936154701321  |grad|_K:  8.591e-08  alpha:  1.930e-01  linmin: -1.001e-04  t[s]:    937.12
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855032 of unit cell:	Completed after 2 iterations at t[s]:    939.07
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855034 of unit cell:	Completed after 0 iterations at t[s]:    940.79
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.565427
+	SubspaceRotationAdjust: set factor to 0.0754
+ElecMinimize: Iter:  65  G: -3357.750936643285058  |grad|_K:  7.026e-08  alpha:  1.678e-01  linmin: -5.003e-05  t[s]:    943.42
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855019 of unit cell:	Completed after 3 iterations at t[s]:    945.39
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855020 of unit cell:	Completed after 0 iterations at t[s]:    947.13
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.563917
+	SubspaceRotationAdjust: set factor to 0.0676
+ElecMinimize: Iter:  66  G: -3357.750936960678700  |grad|_K:  8.166e-08  alpha:  1.646e-01  linmin: -1.554e-04  t[s]:    949.78
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855027 of unit cell:	Completed after 2 iterations at t[s]:    951.73
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855028 of unit cell:	Completed after 0 iterations at t[s]:    953.45
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.564621
+	SubspaceRotationAdjust: set factor to 0.0899
+ElecMinimize: Iter:  67  G: -3357.750937475668707  |grad|_K:  7.528e-08  alpha:  1.852e-01  linmin: -1.461e-04  t[s]:    957.17
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855053 of unit cell:	Completed after 3 iterations at t[s]:    959.09
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855045 of unit cell:	Completed after 1 iterations at t[s]:    960.82
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.566299
+	SubspaceRotationAdjust: set factor to 0.0724
+ElecMinimize: Iter:  68  G: -3357.750937726816119  |grad|_K:  1.032e-07  alpha:  1.282e-01  linmin:  1.561e-04  t[s]:    963.45
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855043 of unit cell:	Completed after 3 iterations at t[s]:    965.37
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855043 of unit cell:	Completed after 0 iterations at t[s]:    967.09
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.566005
+	SubspaceRotationAdjust: set factor to 0.12
+ElecMinimize: Iter:  69  G: -3357.750938167715049  |grad|_K:  8.360e-08  alpha:  1.200e-01  linmin: -6.440e-05  t[s]:    969.74
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855026 of unit cell:	Completed after 2 iterations at t[s]:    971.66
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855025 of unit cell:	Completed after 0 iterations at t[s]:    973.39
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.564234
+	SubspaceRotationAdjust: set factor to 0.116
+ElecMinimize: Iter:  70  G: -3357.750938519741794  |grad|_K:  8.003e-08  alpha:  1.265e-01  linmin: -1.016e-04  t[s]:    976.03
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855026 of unit cell:	Completed after 1 iterations at t[s]:    977.96
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855027 of unit cell:	Completed after 0 iterations at t[s]:    979.71
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.564351
+	SubspaceRotationAdjust: set factor to 0.16
+ElecMinimize: Iter:  71  G: -3357.750938986737310  |grad|_K:  7.675e-08  alpha:  1.703e-01  linmin: -3.029e-04  t[s]:    982.34
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855054 of unit cell:	Completed after 4 iterations at t[s]:    984.29
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855040 of unit cell:	Completed after 2 iterations at t[s]:    986.05
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.565684
+	SubspaceRotationAdjust: set factor to 0.129
+ElecMinimize: Iter:  72  G: -3357.750939153007494  |grad|_K:  9.991e-08  alpha:  8.262e-02  linmin:  3.588e-04  t[s]:    988.68
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855031 of unit cell:	Completed after 2 iterations at t[s]:    990.62
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855032 of unit cell:	Completed after 0 iterations at t[s]:    992.35
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.564878
+	SubspaceRotationAdjust: set factor to 0.215
+ElecMinimize: Iter:  73  G: -3357.750939394482884  |grad|_K:  7.446e-08  alpha:  7.853e-02  linmin: -1.216e-04  t[s]:    995.19
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855014 of unit cell:	Completed after 4 iterations at t[s]:    997.13
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855022 of unit cell:	Completed after 0 iterations at t[s]:    998.85
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.563902
+	SubspaceRotationAdjust: set factor to 0.13
+ElecMinimize: Iter:  74  G: -3357.750939500530421  |grad|_K:  1.487e-07  alpha:  4.537e-02  linmin:  7.187e-04  t[s]:   1001.46
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855017 of unit cell:	Completed after 2 iterations at t[s]:   1003.38
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855020 of unit cell:	Completed after 0 iterations at t[s]:   1005.10
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.563733
+	SubspaceRotationAdjust: set factor to 0.121
+ElecMinimize: Iter:  75  G: -3357.750939591816405  |grad|_K:  8.197e-08  alpha:  2.242e-02  linmin:  3.353e-06  t[s]:   1007.70
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855025 of unit cell:	Completed after 0 iterations at t[s]:   1009.62
+ElecMinimize: 	Predicted alpha/alphaT>3.000000, increasing alphaT to 6.725584e-02.
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855035 of unit cell:	Completed after 3 iterations at t[s]:   1011.36
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855031 of unit cell:	Completed after 0 iterations at t[s]:   1013.09
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.564913
+	SubspaceRotationAdjust: set factor to 0.0841
+ElecMinimize: Iter:  76  G: -3357.750939729488437  |grad|_K:  6.637e-08  alpha:  5.111e-02  linmin:  4.318e-04  t[s]:   1015.72
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855030 of unit cell:	Completed after 0 iterations at t[s]:   1017.67
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855029 of unit cell:	Completed after 0 iterations at t[s]:   1019.43
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.564778
+	SubspaceRotationAdjust: set factor to 0.114
+ElecMinimize: Iter:  77  G: -3357.750939898916386  |grad|_K:  6.120e-08  alpha:  1.256e-01  linmin: -7.809e-06  t[s]:   1022.08
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855012 of unit cell:	Completed after 2 iterations at t[s]:   1024.01
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855020 of unit cell:	Completed after 0 iterations at t[s]:   1025.73
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.563888
+	SubspaceRotationAdjust: set factor to 0.0849
+ElecMinimize: Iter:  78  G: -3357.750939980903695  |grad|_K:  7.882e-08  alpha:  6.646e-02  linmin:  5.512e-04  t[s]:   1028.41
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855022 of unit cell:	Completed after 1 iterations at t[s]:   1030.37
+	Linear fluid (dielectric constant: 78.4, screening length: 8.12261 Bohr) occupying 0.855022 of unit cell:	Completed after 0 iterations at t[s]:   1032.11
+	FillingsUpdate:  mu: -0.165115000  nElectrons: 577.564113
+	SubspaceRotationAdjust: set factor to 0.108
+ElecMinimize: Iter:  79  G: -3357.750940050068493  |grad|_K:  5.468e-08  alpha:  4.945e-02  linmin: -3.699e-04  t[s]:   1034.71
+ElecMinimize: Converged (|Delta G|<1.000000e-07 for 2 iters).
+Setting wave functions to eigenvectors of Hamiltonian
+Converging empty states (this may take a while): |deigs|: 6.075e-04
+Single-point solvation energy estimate, DeltaG = -0.022811185824139
+
+Computing DFT-D3 correction:
+# coordination-number Pd 6.178 6.178 6.178 6.178 6.178 6.178 6.178 6.178 6.178 8.301 8.301 8.301 8.301 8.301 8.301 8.301 8.301 8.301 8.215 8.215 8.215 8.215 8.215 8.215 8.215 8.215 8.215 6.091 6.091 6.091 6.091 6.091 6.091 6.091 6.091 6.091
+# diagonal-C6 Pd 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87 265.87
+EvdW_6 =   -0.221313
+EvdW_8 =   -0.328990
+
+# Ionic positions in cartesian coordinates:
+ion Pd   0.000004000000000   0.000002000000000  31.855119999999992 0
+ion Pd  -2.600956000000000   4.504996999999999  31.855119999999992 0
+ion Pd  -5.201915999999999   9.009990999999998  31.855119999999992 0
+ion Pd   5.201922999999999   0.000002000000000  31.855119999999992 0
+ion Pd   2.600963000000000   4.504996999999999  31.855119999999992 0
+ion Pd   0.000004000000001   9.009990999999998  31.855119999999992 0
+ion Pd  10.403842999999998   0.000002000000000  31.855119999999992 0
+ion Pd   7.802882999999998   4.504996999999999  31.855119999999992 0
+ion Pd   5.201922999999998   9.009990999999998  31.855119999999992 0
+ion Pd   0.000004000000000   3.003331999999999  36.102469999999990 0
+ion Pd  -2.600955999999999   7.508325999999999  36.102469999999990 0
+ion Pd  -5.201915999999999  12.013319999999998  36.102469999999990 0
+ion Pd   5.201922999999999   3.003331999999999  36.102469999999990 0
+ion Pd   2.600963000000000   7.508325999999999  36.102469999999990 0
+ion Pd   0.000004000000000  12.013319999999998  36.102469999999990 0
+ion Pd  10.403842999999998   3.003331999999999  36.102469999999990 0
+ion Pd   7.802882999999996   7.508325999999999  36.102469999999990 0
+ion Pd   5.201922999999999  12.013319999999998  36.102469999999990 0
+ion Pd   2.600947000000000   1.501651000000000  40.329916999999995 1
+ion Pd  -0.000016000000000   6.006643999999998  40.329911999999993 1
+ion Pd  -2.600971999999999  10.511641999999998  40.329913999999995 1
+ion Pd   7.802870999999999   1.501654000000000  40.329916999999995 1
+ion Pd   5.201911999999998   6.006643999999998  40.329909999999991 1
+ion Pd   2.600948000000000  10.511646999999998  40.329911999999993 1
+ion Pd  13.004788999999999   1.501657000000000  40.329918999999990 1
+ion Pd  10.403831999999998   6.006644999999999  40.329915999999990 1
+ion Pd   7.802871999999996  10.511645999999997  40.329914999999993 1
+ion Pd   0.000007000000000   0.000026000000000  44.625495999999984 1
+ion Pd  -2.600959000000000   4.505000999999999  44.625489999999992 1
+ion Pd  -5.201905999999999   9.010002999999998  44.625477999999994 1
+ion Pd   5.201924000000000   0.000017000000000  44.625484999999991 1
+ion Pd   2.600957000000000   4.504991999999999  44.625467999999991 1
+ion Pd  -0.000008999999999   9.010004999999998  44.625461999999992 1
+ion Pd  10.403848999999997   0.000036000000000  44.625478999999991 1
+ion Pd   7.802902999999999   4.504998999999999  44.625476999999982 1
+ion Pd   5.201936999999998   9.010011999999998  44.625451999999996 1
+
+# Forces in Cartesian coordinates:
+force Pd  -0.000001491328083  -0.000000901389462  -0.003374510470372 0
+force Pd  -0.000000912058128  -0.000003152495124  -0.003372992732471 0
+force Pd  -0.000001542468560  -0.000001446570502  -0.003373694736070 0
+force Pd  -0.000000916457660  -0.000000410521645  -0.003373560152527 0
+force Pd  -0.000000713521286  -0.000002369996358  -0.003373285651809 0
+force Pd  -0.000000484328468  -0.000001517218365  -0.003373660268484 0
+force Pd  -0.000000697586657  -0.000000765788162  -0.003373526368411 0
+force Pd  -0.000001274771948  -0.000002601666339  -0.003373023337356 0
+force Pd  -0.000000929418642  -0.000001378057759  -0.003373222903406 0
+force Pd   0.000001135857459   0.000000632186424   0.002114871050052 0
+force Pd   0.000000932101590   0.000000458822732   0.002116012624626 0
+force Pd   0.000000764688682   0.000000937452723   0.002116186244621 0
+force Pd   0.000000640470579   0.000000855570359   0.002114844941497 0
+force Pd   0.000000945378816   0.000000298348277   0.002115661967921 0
+force Pd   0.000000768712027   0.000000755333351   0.002115531191437 0
+force Pd   0.000000576077697   0.000000688830535   0.002114111153990 0
+force Pd   0.000000458869305   0.000000303764167   0.002115551338301 0
+force Pd   0.000000887823883   0.000000598362152   0.002115242494289 0
+force Pd  -0.000000548481509  -0.000001407912335   0.000601107613333 1
+force Pd  -0.000000231036075  -0.000000438932115   0.000601465411330 1
+force Pd  -0.000000806663317  -0.000000137202584   0.000601586504597 1
+force Pd  -0.000001091385863  -0.000001349608079   0.000602075703595 1
+force Pd  -0.000000730538341  -0.000000410403903   0.000601477263689 1
+force Pd  -0.000000630115068  -0.000000824677694   0.000601988214492 1
+force Pd  -0.000000145983738  -0.000001538971303   0.000602781423945 1
+force Pd  -0.000000932908773  -0.000000119093174   0.000601134775283 1
+force Pd  -0.000000457523451  -0.000000446631166   0.000601823880259 1
+force Pd  -0.000000588921577  -0.000000276691313   0.000731174447571 1
+force Pd   0.000000639039278  -0.000000534239038   0.000731188375614 1
+force Pd  -0.000000672787193   0.000001576108622   0.000731246498553 1
+force Pd   0.000000139216041   0.000000322578901   0.000731023846094 1
+force Pd   0.000000182982376   0.000000434578213   0.000732453694721 1
+force Pd   0.000001581173184   0.000001437812245   0.000732527697264 1
+force Pd   0.000000297905995  -0.000001141216074   0.000730666095318 1
+force Pd  -0.000000947771816   0.000000020813356   0.000730796649982 1
+force Pd  -0.000000982955232   0.000001516512708   0.000732307648350 1
+
+# Energy components:
+   A_diel =       -0.7342218016995256
+   Eewald =    97381.6894233673956478
+       EH =   100905.1837691649852786
+     Eloc =  -201853.5641291812935378
+      Enl =     -515.7521204022665415
+     EvdW =       -0.5503025843654692
+      Exc =     -564.4662056309294940
+ Exc_core =      124.0209485154694562
+       KE =     1071.1452256094164568
+  MuShift =       -0.0277184673097003
+-------------------------------------
+     Etot =    -3453.0553314105982281
+       TS =        0.0601070784245329
+-------------------------------------
+        F =    -3453.1154384890228357
+      muN =      -95.3644984389543851
+-------------------------------------
+        G =    -3357.7509400500684933
+
+IonicMinimize: Iter:   0  G: -3357.750940050068493  |grad|_K:  3.867e-04  t[s]:   1068.97
+IonicMinimize: None of the convergence criteria satisfied after 0 iterations.
+
+#--- Lowdin population analysis ---
+# oxidation-state Pd -0.070 -0.070 -0.070 -0.070 -0.070 -0.070 -0.070 -0.070 -0.070 -0.002 -0.002 -0.002 -0.002 -0.002 -0.002 -0.002 -0.002 -0.002 -0.002 -0.002 -0.002 -0.002 -0.002 -0.002 -0.002 -0.002 -0.002 -0.071 -0.071 -0.071 -0.071 -0.071 -0.071 -0.071 -0.071 -0.071
+
+
+Dumping 'fillings' ... done
+Dumping 'wfns' ... done
+Dumping 'fluidState' ... done
+Dumping 'force' ... done
+Dumping 'n' ... done
+Dumping 'tau' ... done
+Dumping 'd_tot' ... done
+Dumping 'V_fluidTot' ... done
+Dumping 'eigenvals' ... done
+Dumping 'bandProjections' ... done
+Dumping 'eigStats' ... 
+	eMin: -2.004143 at state 10 ( [ +0.500000 +0.500000 +0.000000 ] spin 0 )
+	HOMO: -0.165583 at state 6 ( [ +0.250000 +0.500000 +0.000000 ] spin 0 )
+	mu  : -0.165115
+	LUMO: -0.164894 at state 0 ( [ +0.000000 +0.000000 +0.000000 ] spin 0 )
+	eMax: +0.099337 at state 0 ( [ +0.000000 +0.000000 +0.000000 ] spin 0 )
+	HOMO-LUMO gap: +0.000689
+	Optical gap  : +0.001165 at state 0 ( [ +0.000000 +0.000000 +0.000000 ] spin 0 )
+Dumping 'Ecomponents' ... done
+Dumping 'nbound' ... done
+Dumping 'kPts' ... done
+Dumping 'dos' ... done.
+End date and time: Tue Jun 11 01:11:44 2024  (Duration: 0-0:18:00.46)
+Done!
+
+PROFILER:             augmentDensityGrid     0.015594 +/-     0.000012 s,  311 calls,      4.849860 s total
+PROFILER:         augmentDensityGridGrad     0.153279 +/-     0.092376 s,  155 calls,     23.758194 s total
+PROFILER:        augmentDensitySpherical     0.011206 +/-     0.000395 s, 4976 calls,     55.760316 s total
+PROFILER:    augmentDensitySphericalGrad     0.011535 +/-     0.000368 s, 3002 calls,     34.629337 s total
+PROFILER:                 augmentOverlap     0.016387 +/-     0.002935 s, 8948 calls,    146.626520 s total
+PROFILER:                     changeGrid     0.000048 +/-     0.000002 s, 8010 calls,      0.383429 s total
+PROFILER:        ColumnBundle::randomize     0.038467 +/-     0.000154 s,   16 calls,      0.615470 s total
+PROFILER:                     diagouterI     0.033857 +/-     0.003230 s, 5024 calls,    170.096092 s total
+PROFILER:              EdensityAndVscloc     0.029333 +/-     0.029028 s,  312 calls,      9.151933 s total
+PROFILER:                     EnlAndGrad     0.009181 +/-     0.000247 s, 4554 calls,     41.812076 s total
+PROFILER:            ExCorrCommunication     0.000007 +/-     0.000007 s,  946 calls,      0.006177 s total
+PROFILER:               ExCorrFunctional     0.000405 +/-     0.000076 s,  316 calls,      0.127909 s total
+PROFILER:                    ExCorrTotal     0.001817 +/-     0.000158 s,  316 calls,      0.574186 s total
+PROFILER:                   Idag_DiagV_I     0.055546 +/-     0.019871 s, 2986 calls,    165.860068 s total
+PROFILER:                    initWeights     0.481859 +/-     0.000000 s,    1 calls,      0.481859 s total
+PROFILER:                    inv(matrix)     0.001723 +/-     0.000020 s, 3952 calls,      6.808737 s total
+PROFILER:            matrix::diagonalize     0.006433 +/-     0.000876 s, 7946 calls,     51.118070 s total
+PROFILER:                    matrix::set     0.000011 +/-     0.000015 s, 275960 calls,      2.991283 s total
+PROFILER:            orthoMatrix(matrix)     0.001250 +/-     0.000272 s, 4474 calls,      5.591600 s total
+PROFILER:     RadialFunctionR::transform     0.009823 +/-     0.018093 s,   58 calls,      0.569712 s total
+PROFILER:                    reduceKmesh     0.000016 +/-     0.000000 s,    1 calls,      0.000016 s total
+PROFILER:   VanDerWaalsD3::energyAndGrad     0.897809 +/-     0.008497 s,    3 calls,      2.693428 s total
+PROFILER:               WavefunctionDrag     0.676626 +/-     0.000000 s,    1 calls,      0.676626 s total
+PROFILER:                            Y*M     0.004782 +/-     0.001723 s, 30772 calls,    147.159973 s total
+PROFILER:                          Y1^Y2     0.007028 +/-     0.002722 s, 19500 calls,    137.042402 s total
+
+MEMUSAGE:                   ColumnBundle    23.695017 GB
+MEMUSAGE:        complexScalarFieldTilde     0.019531 GB
+MEMUSAGE:                    IndexArrays     0.023228 GB
+MEMUSAGE:                         matrix     0.438400 GB
+MEMUSAGE:                           misc     0.021686 GB
+MEMUSAGE:                     RealKernel     0.006798 GB
+MEMUSAGE:                    ScalarField     0.648880 GB
+MEMUSAGE:               ScalarFieldTilde     0.488514 GB
+MEMUSAGE:                          Total    24.446167 GB

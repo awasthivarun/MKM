@@ -1,0 +1,72 @@
+lattice \
+7.664624  0.000000  0.000000  \
+0.000000  7.664624  0.000000  \
+0.000000  0.000000  7.664624  
+
+dump-name $VAR
+initial-state $VAR
+elec-ex-corr gga
+van-der-waals D3
+elec-cutoff 20 100
+elec-n-bands 48
+kpoint-folding 6 6 6
+electronic-minimize nIterations 100 energyDiffThreshold 1e-07
+elec-smearing Gauss 0.003675
+spintype no-spin
+core-overlap-check none
+converge-empty-states yes
+symmetries automatic
+dump End Dtot BoundCharge
+dump End Forces
+dump End Ecomponents
+dump End VfluidTot
+dump End ElecDensity
+dump End KEdensity
+dump End EigStats
+dump End BandEigs
+dump End DOS
+dump End BandProjections
+dump End Kpoints
+band-projection-params yes no
+density-of-states  \
+Orbital Ag 1 s \
+Orbital Ag 1 d \
+Orbital Ag 1 dxy \
+Orbital Ag 1 dxz \
+Orbital Ag 1 dyz \
+Orbital Ag 1 dz2 \
+Orbital Ag 1 dx2-y2 \
+Orbital Ag 2 s \
+Orbital Ag 2 d \
+Orbital Ag 2 dxy \
+Orbital Ag 2 dxz \
+Orbital Ag 2 dyz \
+Orbital Ag 2 dz2 \
+Orbital Ag 2 dx2-y2 \
+Orbital Ag 3 s \
+Orbital Ag 3 d \
+Orbital Ag 3 dxy \
+Orbital Ag 3 dxz \
+Orbital Ag 3 dyz \
+Orbital Ag 3 dz2 \
+Orbital Ag 3 dx2-y2 \
+Orbital Ag 4 s \
+Orbital Ag 4 d \
+Orbital Ag 4 dxy \
+Orbital Ag 4 dxz \
+Orbital Ag 4 dyz \
+Orbital Ag 4 dz2 \
+Orbital Ag 4 dx2-y2 \
+Total
+
+coords-type cartesian
+ion Ag -0.000001 -0.000001 -0.000001 	 1
+ion Ag -0.000001 3.832310 3.832310 	 1
+ion Ag 3.832310 -0.000001 3.832310 	 1
+ion Ag 3.832310 3.832310 -0.000001 	 1
+
+ion-species GBRV_v1.5/$ID_pbe_v1.uspp
+
+coulomb-interaction periodic
+dump End Forces
+dump End Ecomponents

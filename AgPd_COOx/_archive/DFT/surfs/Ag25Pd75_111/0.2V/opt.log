@@ -1,0 +1,5 @@
+      Step     Time          Energy         fmax
+*Force-consistent energies used in optimization.
+FIRE:    0 03:12:00  -104150.757424*       0.0511
+FIRE:    1 03:16:21  -104150.757480*       0.0687
+FIRE:    2 03:20:59  -104150.757582*       0.0321
