@@ -407,9 +407,9 @@ def plot_coverages(trace):
             index_map[(C, P)] = (_idx, _idx + L)
             _idx += L
 
-    cov_vars = ['theta_CO', 'theta_OH', 'theta_COOH', 'theta_empty']
-    cov_colors = ['tab:red', 'tab:blue', 'tab:green', 'tab:gray']
-    cov_labels = [r'$\theta_{CO}$', r'$\theta_{OH}$', r'$\theta_{COOH}$', r'$\theta_{*}$']
+    cov_vars = ['theta_CO', 'theta_COOH', 'theta_OH_Ag', 'theta_OH_Pd']
+    cov_colors = ['tab:red', 'tab:green', 'tab:blue', 'tab:cyan']
+    cov_labels = [r'$\theta_{CO}$', r'$\theta_{COOH}$', r'$\theta_{OH,Ag}$', r'$\theta_{OH,Pd}$']
 
     for i, C_KOH in enumerate(C_KOH_list):
         for j, P_CO in enumerate(P_CO_list):
@@ -428,7 +428,7 @@ def plot_coverages(trace):
                 ax.fill_between(truncated_E_exp[(C_KOH, P_CO)], lower, upper, color=col, alpha=0.15, linewidth=0)
                 ax.plot(truncated_E_exp[(C_KOH, P_CO)], mu, color=col, label=lab, lw=2.5)
 
-                sum_vals = vals.copy() if sum_vals is None else sum_vals + vals
+                # sum_vals = vals.copy() if sum_vals is None else sum_vals + vals
 
             if sum_vals is not None:
                 mu_sum = np.mean(sum_vals, axis=(0, 1))
