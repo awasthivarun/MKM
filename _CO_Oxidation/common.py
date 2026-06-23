@@ -521,7 +521,7 @@ class PlottingContext:
         if perturb_labels is None:
             perturb_labels = [v.replace('_0', '') for v in perturb_vars]
 
-        delta_rel = 1e-4
+        delta_rel = 0
         target_node = model['log_rate']
         replacements, sym_inputs, input_names = {}, [], []
         post = trace.posterior
@@ -559,7 +559,7 @@ class PlottingContext:
         for i, var_name in enumerate(perturb_vars):
             var_idx = input_names.index(var_name)
             base_val_array = base_inputs[var_idx]
-            delta = delta_rel*np.abs(base_inputs[var_idx]) + 1e-8
+            delta = delta_rel*np.abs(base_inputs[var_idx]) + 1e-4
 
             inputs_plus = list(base_inputs)
             inputs_plus[var_idx] = inputs_plus[var_idx] + delta
@@ -625,7 +625,7 @@ class PlottingContext:
                         ax.text(1.05, 0.5, f'{P_val} atm', transform=ax.transAxes, rotation=-90, va='center', fontsize=label_size, fontweight='bold')
                     if i == 0 and j == 0:
                         ax.legend(loc='best', frameon=False, fontsize=10)
-            plt.tight_layout()
+            plt.tight_layout(); ax.set_ylim([-0.05, 1.05])
             plt.subplots_adjust(right=0.92, top=0.90, bottom=0.08, left=0.10)
             plt.show()
 
