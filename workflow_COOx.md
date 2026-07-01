@@ -43,18 +43,21 @@ Fitting:
    1) Calcualte model kinetic observables (see notes about kinetic observables above for shape of KOs - length is same as E_in) (add_post_sampling_observables function)
    2) Plot posteriors and pair plots (plot_posteriors function) 
    3) Calculate flattened r2 (calculate_flattened_r2 function). Not technically the correct for non-linear models, but its a good qualitative metric. 
-   4) Plot model fits: 
-      1) Plot rates (experimental (+exp SD) vs model (+ 95% CI from ppc)). Plot size: n_C columns, n_P rows. 
-      2) Plot log rates (experimental (+exp SD) vs model (+ 95% CI from model parameter uncertainty)). Plot size: n_C columns, n_P rows. 
-      3) Plot alpha (experimental (+exp SD) vs model (+ 95% CI from model parameter uncertainty))
+   4) PLot LOO-PIT and energy plot. 
+   5) Plot model fits: 
+      1) Plot pointiwise LOo-CV (summed up for replicates). Plot size: n_C columns, n_P rows.
+      2) Plot rates (experimental (+exp SD) vs model (+ 95% CI from ppc)). Plot size: n_C columns, n_P rows. 
+      3) Plot log rates (experimental (+exp SD) vs model (+ 95% CI from model parameter uncertainty)). Plot size: n_C columns, n_P rows. 
+      4) Plot residual of log rates (experimental (+exp SD) vs model (+ 95% CI from model parameter uncertainty)). Plot size: n_C columns, n_P rows. 
+      5) Plot alpha (experimental (+exp SD) vs model (+ 95% CI from model parameter uncertainty))
          1) Default plot size: n_C columns, n_P rows. 
          2) Consolidated plot size: n_C columns, 1 row. Each subplot has n_P pair of lines (experimental and model). SDs are not included in consolidated plot. 
-      4) Plot delta_OH/delta_H (experimental (+exp SD) vs model (+ 95% CI from model parameter uncertainty))
+      6) Plot delta_OH/delta_H (experimental (+exp SD) vs model (+ 95% CI from model parameter uncertainty))
          1) Default plot size: n_P columns, 1 row. 
          2) Consolidated plot size: 1 column, 1 row. Plot has n_P pair of lines (experimental and model). SDs are not included in consolidated plot. 
-      5) Plot delta_CO (experimental (+exp SD) vs model (+ 95% CI from model parameter uncertainty))
+      7) Plot delta_CO (experimental (+exp SD) vs model (+ 95% CI from model parameter uncertainty))
          1) Default plot size: n_C columns, n_P-1 rows. 
          2) Consolidated plot size: n_C columns, 1 row. Each subplot has n_P-1 pair of lines (experimental and model). SDs are not included in consolidated plot. 
-   5) Plot modeled surface coverages (saved as deterministic variables) (plot_coverages function - includes 95% CI from model parameter uncertainty)
-   6) Calculate and plot DRCs (plot_drc function - includes 95% CI from model parameter uncertainty)
+   6) Plot modeled surface coverages (saved as deterministic variables) (plot_coverages function - includes 95% CI from model parameter uncertainty)
+   7) Calculate and plot DRCs (plot_drc function - includes 95% CI from model parameter uncertainty) (optional, only plotted when there are multiple rate controlling steps). 
 

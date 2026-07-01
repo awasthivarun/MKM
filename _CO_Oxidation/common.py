@@ -154,6 +154,15 @@ class PlottingContext:
         p_list = self.state['P_CO_list']
 
         log_rate_samples = trace.posterior['log_rate'].values
+        exp_log_rates_list = []
+        for C in conc_list:
+            for P in p_list:
+                exp_log_rates_list.append(self.state['truncated_log_rate_exp'][(C, P)])
+        
+        exp_log_rates_flat = np.concatenate(exp_log_rates_list)
+        log_residuals = exp_log_rates_flat[None, None, :] - log_rate_samples
+        trace.posterior['log_residual'] = (trace.posterior['log_rate'].dims, log_residuals)
+
         alpha_samples = np.zeros_like(log_rate_samples)
         model_log_rates = {}
         start = 0
@@ -213,15 +222,54 @@ class PlottingContext:
         y_pred_flat = y_pred.reshape(chains * draws, -1)
         y_true_flat = y_true.flatten()
         return az.r2_score(y_true_flat, y_pred_flat)['r2']
+    
+    def simulate_fake_data(self, model):
+        print("Simulating fake data from prior means...")
+        with model:
+            prior = pm.sample_prior_predictive(samples=5000)
+        
+        fake_trace_dict = {}
+        print("--- True Parameters (Prior Mu) ---")
+        free_rv_names = [rv.name for rv in model.free_RVs]
+        for var in prior.prior.data_vars:
+            if str(var) in free_rv_names:
+                if str(var) == 'sigma_rel': val = 0.01
+                else: val = prior.prior[var].mean().values
+                fake_trace_dict[str(var)] = np.array([[val]])
+                print(f"{var}: {val:.3f}")
+      
+        fake_trace = az.from_dict(posterior=fake_trace_dict)
+        with model:
+            ppc = pm.sample_posterior_predictive(fake_trace)    
+        rate_var = [v for v in ppc.posterior_predictive.data_vars if not str(v).endswith("__")][0]
+        new_obs = ppc.posterior_predictive[rate_var].values[0, 0]
+        
+        # Overwrite the global state so the next model instantiation uses the fake data
+        self.state['rate_obs_matrix'] = new_obs
+        print("IMPORTANT: Re-run 'with pm.Model() as ModelName:' cell to bake the fake data into the likelihood, then run fit_and_evaluate().")
 
     def plot_posteriors(self, trace, model):
         delta_name = self.cfg['delta_name']
         all_vars = list(trace.posterior.data_vars)
-        excluded_vars = ['alpha', delta_name, 'delta_CO', 'rate', 'log_rate']
+        excluded_vars = ['alpha', delta_name, 'delta_CO', 'rate', 'log_rate', 'log_residual']
         var_names = [v for v in all_vars if not v.endswith("__")]
         kinetic_vars = [v for v in var_names if not v.startswith(('theta', 'phi')) and v not in excluded_vars]
         summary = az.summary(trace, var_names=kinetic_vars)
         print(summary)
+
+        if not hasattr(trace, "prior"):
+            with model:
+                valid_prior_vars = [v for v in kinetic_vars if v in model.named_vars]
+                prior_trace = pm.sample_prior_predictive(samples=10000, var_names=valid_prior_vars)
+                trace.add_groups({"prior": prior_trace.prior})
+
+        print("\n--- Prior-to-Posterior Contraction ---")
+        for var in kinetic_vars:
+            if var in trace.prior.data_vars:
+                prior_var = np.var(trace.prior[var].values)
+                post_var = np.var(trace.posterior[var].values)
+                contraction = 1.0 - (post_var / prior_var)
+                print(f"{var}: {contraction:.3f}")
 
         num_vars = len(kinetic_vars)
         cols = min(4, max(1, num_vars))
@@ -232,28 +280,64 @@ class PlottingContext:
         with plt.rc_context(rc_update):
             if kinetic_vars:
                 axes = az.plot_posterior(trace, var_names=kinetic_vars, hdi_prob=0.95, round_to=3, figsize=figsize_post, grid=(rows, cols), textsize=10)
-                axes_flat = np.array(axes).flatten()
-                for ax in axes_flat:
+                axes_flat = np.atleast_1d(axes).flatten()
+                for ax, var_name in zip(axes_flat, kinetic_vars):
+                    for spine in ['top', 'left', 'right']:
+                        ax.spines[spine].set_visible(False)
+                    if hasattr(trace, 'prior') and var_name in trace.prior.data_vars:
+                        orig_xlim = ax.get_xlim()
+                        ax_prior = ax.twinx()
+                        prior_samples = trace.prior[var_name].values.flatten()
+                        az.plot_dist(prior_samples, ax=ax_prior, color='gray', plot_kwargs={'alpha': 0.8}, fill_kwargs={'alpha': 0.15})
+                        lines = ax_prior.get_lines()
+                        if lines:
+                            x_data = lines[0].get_xdata()
+                            y_data = lines[0].get_ydata()
+                            mask = (x_data >= orig_xlim[0]) & (x_data <= orig_xlim[1])
+                            if np.any(mask):
+                                y_max_visible = np.max(y_data[mask])
+                                if y_max_visible > 0:
+                                    ax_prior.set_ylim(0, y_max_visible * 1.15) 
+                        ax_prior.set_yticks([])
+                        for spine in ax_prior.spines.values():
+                            spine.set_visible(False)
+                        ax.set_xlim(orig_xlim)
+                        ax.set_zorder(ax_prior.get_zorder() + 1)
+                        ax.patch.set_visible(False) 
+
                     if ax is not None and hasattr(ax, 'texts'):
                         for text_obj in ax.texts:
                             if 'mean' in text_obj.get_text():
                                 text_obj.set_fontweight('bold')
                         ax.title.set_fontweight('bold')
+                        
                 plt.subplots_adjust(hspace=0.5, wspace=0.3, top=0.88)
                 plt.show()
+
             if len(kinetic_vars) > 1:
                 plot_pair_vars = [v for v in kinetic_vars if v not in ['CO_converge_error', 'OH_converge_error', 'sigma_base', 'sigma_rel', 'exponent']]
                 az.plot_pair(trace, var_names=plot_pair_vars, kind='kde', divergences=True, figsize=(8, 8), textsize=10)
                 plt.show()
 
         with model:
-            ppc = pm.sample_posterior_predictive(trace, progressbar=False)
+            ppc = pm.sample_posterior_predictive(trace, progressbar=False, extend_inferencedata=True)
         for var_name in ppc.observed_data.data_vars:
             r2 = self.calculate_flattened_r2(ppc, var_name)
             print(f"{var_name}: {r2:.3f}")
+
+            fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+            az.plot_loo_pit(idata=trace, y=var_name, ecdf=False, color='blue', ax=axes[0], hdi_prob=0.95)
+            axes[0].set_title(f"LOO-PIT (KDE Density): {var_name}", fontweight='bold')
+            az.plot_loo_pit(idata=trace, y=var_name, ecdf=True, color='blue', ax=axes[1], hdi_prob=0.95)
+            axes[1].set_title(f"LOO-PIT (ECDF Difference): {var_name}", fontweight='bold')
+            az.plot_energy(trace, ax=axes[2])
+            axes[2].set_title("Energy", fontweight='bold')
+            plt.tight_layout()
+            plt.show()
+
         return ppc
 
-    def plot_model_fits(self, trace, ppc, consolidated=False):
+    def plot_model_fits(self, trace, ppc, loo, consolidated=False):
         conc_list = self.state[self.cfg['concentration_list_name']]
         p_list = self.state['P_CO_list']
         delta_name = self.cfg['delta_name']
@@ -278,7 +362,7 @@ class PlottingContext:
         def get_model_slice(var_fit, C_val, P_val, is_ppc=False):
             dataset = ppc.posterior_predictive if is_ppc else trace.posterior
             track_name = ppc_var if is_ppc else var_fit
-            if var_fit in ['log_rate', 'alpha', 'rate'] or is_ppc:
+            if var_fit in ['log_rate', 'alpha', 'rate', 'log_residual'] or is_ppc:
                 data_arr = dataset[track_name]
                 if is_ppc and data_arr.ndim == 4:
                     if data_arr.shape[2] < data_arr.shape[3]:
@@ -314,6 +398,20 @@ class PlottingContext:
                         length = len(common_E)
                         if C == C_val and P1 == P_val:
                             return dataset[var_fit][:, :, idx:idx + length], common_E
+                        idx += length
+            elif var_fit == 'loo':
+                loo_vals = loo.loo_i.values
+                if loo_vals.ndim > 1:
+                    if loo_vals.shape[0] < loo_vals.shape[1]:
+                        loo_vals = loo_vals.sum(axis=0) 
+                    else:
+                        loo_vals = loo_vals.sum(axis=1)
+                idx = 0
+                for C in conc_list:
+                    for P in p_list:
+                        length = len(self.state['truncated_E_exp'][(C, P)])
+                        if C == C_val and P == P_val:
+                            return loo_vals[idx:idx + length], self.state['truncated_E_exp'][(C, P)]
                         idx += length
             raise ValueError(f'No matching data slice found for {var_fit} at C={C_val}, P={P_val}.')
 
@@ -405,24 +503,37 @@ class PlottingContext:
                     else:
                         ax = axes_2d[j, i]; C_lookup = C_val
                     cond_key = (C_lookup, P_val)
-
-                    mean_key, sd_key, E_key = var_map[var_fit]
-                    exp_mean = self.state[mean_key][cond_key]
-                    exp_sd = self.state[sd_key][cond_key]
-                    E_exp = self.state[E_key][cond_key]
-
-                    model_slice, E_model = get_model_slice(var_fit, C_val, P_val, is_ppc=is_ppc)
-                    model_mean = model_slice.mean(dim=("chain", "draw"))
-                    hdi_95 = az.hdi(model_slice, hdi_prob=0.95)[model_slice.name]
-                    hdi_90 = az.hdi(model_slice, hdi_prob=0.90)[model_slice.name]
-                    if not consolidated:
-                        exp_ci = exp_sd * ci_multiplier
-                        ax.fill_between(E_exp, exp_mean - exp_ci, exp_mean + exp_ci, color='gray', alpha=0.3, linewidth=0, zorder=1)
-                    ax.plot(E_exp, exp_mean, color='black', lw=2.5, alpha=0.6, zorder=2)
-                    ax.fill_between(E_model, hdi_95[:, 0].values, hdi_95[:, 1].values, color=colors[j], alpha=0.15, linewidth=0, zorder=3)
-                    ax.fill_between(E_model, hdi_90[:, 0].values, hdi_90[:, 1].values, color=colors[j], alpha=0.30, linewidth=0, zorder=4)
-                    ax.plot(E_model, model_mean, color=colors[j], lw=3.2, zorder=5)
                     
+                    if var_fit == 'loo':
+                        loo_slice, E_model = get_model_slice(var_fit, C_val, P_val, is_ppc=False)
+                        ax.scatter(E_model, loo_slice, color=colors[j], alpha=0.8, edgecolor='k', s=30, zorder=5)
+
+                    else: 
+                        model_slice, E_model = get_model_slice(var_fit, C_val, P_val, is_ppc=is_ppc)
+                        model_mean = model_slice.mean(dim=("chain", "draw")) # Median is also good here!
+                        hdi_95 = az.hdi(model_slice, hdi_prob=0.95)[model_slice.name]
+                        hdi_90 = az.hdi(model_slice, hdi_prob=0.90)[model_slice.name]
+
+                        if var_fit == 'log_residual':
+                            ax.axhline(0, color='black', linestyle='--', lw=2, alpha=0.7, zorder=2)
+                            ax.fill_between(E_model, hdi_95[:, 0].values, hdi_95[:, 1].values, color=colors[j], alpha=0.15, linewidth=0, zorder=3)
+                            ax.fill_between(E_model, hdi_90[:, 0].values, hdi_90[:, 1].values, color=colors[j], alpha=0.30, linewidth=0, zorder=4)
+                            ax.plot(E_model, model_mean, color=colors[j], lw=3.2, zorder=5)
+                        
+                        else: 
+                            mean_key, sd_key, E_key = var_map[var_fit]
+                            exp_mean = self.state[mean_key][cond_key]
+                            exp_sd = self.state[sd_key][cond_key]
+                            E_exp = self.state[E_key][cond_key]
+
+                            if not consolidated:
+                                exp_ci = exp_sd * ci_multiplier
+                                ax.fill_between(E_exp, exp_mean - exp_ci, exp_mean + exp_ci, color='gray', alpha=0.3, linewidth=0, zorder=1)
+                            ax.plot(E_exp, exp_mean, color='black', lw=2.5, alpha=0.6, zorder=2)
+                            ax.fill_between(E_model, hdi_95[:, 0].values, hdi_95[:, 1].values, color=colors[j], alpha=0.15, linewidth=0, zorder=3)
+                            ax.fill_between(E_model, hdi_90[:, 0].values, hdi_90[:, 1].values, color=colors[j], alpha=0.30, linewidth=0, zorder=4)
+                            ax.plot(E_model, model_mean, color=colors[j], lw=3.2, zorder=5)
+                        
                     is_OH_grid = (var_fit == self.cfg['delta_name'])
                     is_CO_grid = (var_fit == 'delta_CO')
                     if j == 0 and not is_OH_grid: 
@@ -443,8 +554,10 @@ class PlottingContext:
 
         rc_update = {'font.size': 10, 'axes.linewidth': 1, 'lines.linewidth': 2}
         with plt.rc_context(rc_update):
+            plot_grid('loo', n_P, n_C, figsize_main, "Pointwise ELPD", "Pointwise LOO-CV (ELPD)")
             plot_grid(ppc_var, n_P, n_C, figsize_main, "TOF (1/s)" if ppc_var == 'rate' else "log Rate", "Rate" if ppc_var == 'rate' else "Log Rate")
             plot_grid(non_ppc_var, n_P, n_C, figsize_main, "log Rate" if non_ppc_var == 'log_rate' else "TOF (1/s)", "Log Rate" if non_ppc_var == 'log_rate' else "Rate")
+            plot_grid('log_residual', n_P, n_C, figsize_main, "Exp - Model", "Log Residual")
             if consolidated:
                 plot_grid('alpha', 1, n_C, figsize_cons, 'alpha', 'Transfer Coefficients', consolidated=True)
                 plot_grid(delta_name, 1, 1, figsize_1x1, self.cfg['delta_ylabel'], self.cfg['delta_title'], consolidated=True)

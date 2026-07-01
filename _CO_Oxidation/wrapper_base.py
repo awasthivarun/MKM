@@ -9,6 +9,7 @@ plot_posteriors = _CTX.plot_posteriors
 plot_model_fits = _CTX.plot_model_fits
 plot_coverages = _CTX.plot_coverages
 plot_drc = _CTX.plot_drc
+simulate_fake_data = _CTX.simulate_fake_data
 
 def __getattr__(name):
     return getattr(_CTX, name)
