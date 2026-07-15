@@ -1,0 +1,41 @@
+# 1. Python & Caching
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 2. PyTensor & PyMC Specific
+.pytensor/
+.theano/
+*.nc
+*.ndjson
+
+# 3. Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+develop-eggs/
+dist/
+build/
+eggs/
+.eggs/
+*.egg-info/
+
+# 4. Jupyter Notebooks
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# 5. Operating System & IDEs
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json

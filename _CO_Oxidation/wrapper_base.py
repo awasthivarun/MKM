@@ -1,4 +1,4 @@
-from _CO_Oxidation.common import build_context
+from _CO_Oxidation.context import build_context
 
 _CTX = build_context(env_type='base')
 
