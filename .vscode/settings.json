@@ -1,7 +1,0 @@
-{
-    "window.zoomLevel": -0.5,
-    "python-envs.defaultEnvManager": "ms-python.python:conda",
-    "python-envs.defaultPackageManager": "ms-python.python:conda",
-    "markdown.validate.enabled": true,
-    "editor.fontSize": 12
-}
