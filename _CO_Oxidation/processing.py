@@ -92,42 +92,49 @@ class ProcessingMixin:
         trace.posterior['alpha'] = (trace.posterior['log_rate'].dims, alpha_samples)
 
         delta_name = self.cfg['delta_name']
-        delta_list = []
-        ln_C = np.log(conc_list)
-        w_C = ((ln_C - np.mean(ln_C)) / np.sum((ln_C - np.mean(ln_C)) ** 2))[None, None, :, None]
-        for P in p_list:
-            E_arrays = [np.round(self.state['truncated_E_exp'][(C, P)], 6) for C in conc_list]
-            common_E = E_arrays[0]
-            for arr in E_arrays[1:]:
-                common_E = np.intersect1d(common_E, arr)
-            if common_E.size == 0:
-                raise ValueError(f'No common energies found for {delta_name} at P_CO={P}.')
-            rates_for_fit = []
-            for C in conc_list:
-                E_arr = np.round(self.state['truncated_E_exp'][(C, P)], 6)
-                mask = np.isin(E_arr, common_E)
-                rates_for_fit.append(model_log_rates[(C, P)][:, :, mask])
-            rates_for_fit = np.stack(rates_for_fit, axis=2)
-            delta_vals = np.sum(w_C * rates_for_fit, axis=2)
-            delta_list.append(delta_vals)
-        trace.posterior[delta_name] = (("chain", "draw", f'{delta_name}_flat'), np.concatenate(delta_list, axis=2))
-
-        delta_co_list = []
-        for C in conc_list:
-            for i in range(len(p_list) - 1):
-                P1, P2 = p_list[i], p_list[i + 1]
-                E1 = np.round(self.state['truncated_E_exp'][(C, P1)], 6)
-                E2 = np.round(self.state['truncated_E_exp'][(C, P2)], 6)
-                common_E = np.intersect1d(E1, E2)
+        if len(conc_list) > 1:
+            delta_list = []
+            ln_C = np.log(conc_list)
+            w_C = ((ln_C - np.mean(ln_C)) / np.sum((ln_C - np.mean(ln_C)) ** 2))[None, None, :, None]
+            for P in p_list:
+                E_arrays = [np.round(self.state['truncated_E_exp'][(C, P)], 6) for C in conc_list]
+                common_E = E_arrays[0]
+                for arr in E_arrays[1:]:
+                    common_E = np.intersect1d(common_E, arr)
                 if common_E.size == 0:
-                    raise ValueError(f'No common energies found for delta_CO at C={C}, P={P1}/{P2}.')
-                mask1 = np.isin(E1, common_E)
-                mask2 = np.isin(E2, common_E)
-                lr1 = model_log_rates[(C, P1)][:, :, mask1]
-                lr2 = model_log_rates[(C, P2)][:, :, mask2]
-                delta_co = (lr2 - lr1) / np.log(P2 / P1)
-                delta_co_list.append(delta_co)
-        trace.posterior['delta_CO'] = (("chain", "draw", 'delta_CO_flat'), np.concatenate(delta_co_list, axis=2))
+                    raise ValueError(f'No common energies found for {delta_name} at P_CO={P}.')
+                rates_for_fit = []
+                for C in conc_list:
+                    E_arr = np.round(self.state['truncated_E_exp'][(C, P)], 6)
+                    mask = np.isin(E_arr, common_E)
+                    rates_for_fit.append(model_log_rates[(C, P)][:, :, mask])
+                rates_for_fit = np.stack(rates_for_fit, axis=2)
+                delta_vals = np.sum(w_C * rates_for_fit, axis=2)
+                delta_list.append(delta_vals)
+            trace.posterior[delta_name] = (("chain", "draw", f'{delta_name}_flat'), np.concatenate(delta_list, axis=2))
+        else: 
+            print(f"Notice: Only 1 concentration detected. Skipping {delta_name} calculations.")
+
+        if len(p_list) > 1:
+            delta_co_list = []
+            for C in conc_list:
+                for i in range(len(p_list) - 1):
+                    P1, P2 = p_list[i], p_list[i + 1]
+                    E1 = np.round(self.state['truncated_E_exp'][(C, P1)], 6)
+                    E2 = np.round(self.state['truncated_E_exp'][(C, P2)], 6)
+                    common_E = np.intersect1d(E1, E2)
+                    if common_E.size == 0:
+                        raise ValueError(f'No common energies found for delta_CO at C={C}, P={P1}/{P2}.')
+                    mask1 = np.isin(E1, common_E)
+                    mask2 = np.isin(E2, common_E)
+                    lr1 = model_log_rates[(C, P1)][:, :, mask1]
+                    lr2 = model_log_rates[(C, P2)][:, :, mask2]
+                    delta_co = (lr2 - lr1) / np.log(P2 / P1)
+                    delta_co_list.append(delta_co)
+            trace.posterior['delta_CO'] = (("chain", "draw", 'delta_CO_flat'), np.concatenate(delta_co_list, axis=2))
+        else: 
+            print("Notice: Only 1 pressure detected. Skipping delta_CO calculations.")
+        
         return trace
 
     @staticmethod

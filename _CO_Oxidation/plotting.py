@@ -229,12 +229,12 @@ class PlottingMixin:
             plot_grid('log_residual', n_P, n_C, figsize_main, "Exp - Model", "Log Residual")
             if consolidated:
                 plot_grid('alpha', 1, n_C, figsize_cons, 'alpha', 'Transfer Coefficients', consolidated=True)
-                plot_grid(delta_name, 1, 1, figsize_1x1, self.cfg['delta_ylabel'], self.cfg['delta_title'], consolidated=True)
-                plot_grid('delta_CO', 1, n_C, figsize_cons, 'Order (CO)', 'CO Reaction Order', consolidated=True)
+                if n_C > 1: plot_grid(delta_name, 1, 1, figsize_1x1, self.cfg['delta_ylabel'], self.cfg['delta_title'], consolidated=True)
+                if n_P > 1: plot_grid('delta_CO', 1, n_C, figsize_cons, 'Order (CO)', 'CO Reaction Order', consolidated=True)
             else:
                 plot_grid('alpha', n_P, n_C, figsize_main, 'alpha', 'Transfer Coefficients')
-                plot_grid(delta_name, 1, n_P, figsize_OH, self.cfg['delta_ylabel'], self.cfg['delta_title'])
-                plot_grid('delta_CO', n_P - 1, n_C, figsize_CO, 'Order (CO)', 'CO Reaction Order')
+                if n_C > 1: plot_grid(delta_name, 1, n_P, figsize_OH, self.cfg['delta_ylabel'], self.cfg['delta_title'])
+                if n_P > 1: plot_grid('delta_CO', n_P - 1, n_C, figsize_CO, 'Order (CO)', 'CO Reaction Order')
 
     def plot_coverages(self, trace):
         conc_list = self.state[self.cfg['concentration_list_name']]
@@ -261,9 +261,9 @@ class PlottingMixin:
                     index_map[(C, P)] = (_idx, _idx + L)
                     _idx += L
 
-            cov_vars = ['theta_CO', 'theta_OH', 'theta_COOH', 'theta_empty', 'theta_OH_star', 'theta_OH_pound']
-            cov_colors = ['tab:red', 'tab:blue', 'tab:green', 'tab:gray', 'tab:blue', 'tab:pink']
-            cov_labels = [r'$\theta_{CO}$', r'$\theta_{OH}$', r'$\theta_{COOH}$', r'$\theta_{*}$', r'$\theta^*_{OH}$', r'$\theta^\#_{OH}$']
+            cov_vars = ['theta_CO', 'theta_OH', 'theta_COOH', 'theta_empty', 'theta_OH_star', 'theta_OH_pound', 'theta_O_star']
+            cov_colors = ['tab:red', 'tab:blue', 'tab:green', 'tab:gray', 'tab:blue', 'tab:pink', 'tab:gray']
+            cov_labels = [r'$\theta_{CO}$', r'$\theta_{OH}$', r'$\theta_{COOH}$', r'$\theta_{*}$', r'$\theta^*_{OH}$', r'$\theta^\#_{OH}$', r'$\theta^*_{O}$']
 
             for i, C_val in enumerate(conc_list):
                 for j, P_val in enumerate(p_list):
