@@ -77,11 +77,7 @@ Standard deviation of log experimental rate across replicates.
 #### `truncated_rate_matrix`
 Individual replicate rates used as the PyMC observed variable.
 
-Expected conceptual shape:
-
-`(n_trials, n_E)`
-
-The exact stored orientation must be verified and preserved by automated tests before refactoring.
+- shape: `(n_trials, n_E)`
 
 ---
 
