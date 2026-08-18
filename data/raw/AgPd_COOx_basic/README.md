@@ -3,6 +3,13 @@
 ## Contents
 This directory contains the raw electrochemical CO oxidation data for the AgPd catalyst series measured in KOH.
 There are 6 Excel workbooks with the naming convention: `{material}_current_densities.xlsx` where `{material}` identifies the AgPd composition.
+AgPd compositions are: 
+- `Pd100`
+- `Ag10Pd90`
+- `Ag25Pd75`
+- `Ag50Pd50`
+- `Ag75Pd25`
+- `Ag90Pd10`
 
 ## Experimental Conditions
 
@@ -24,7 +31,7 @@ Percentages refer to mole fractions of CO in the cell headspace. Total pressure 
 
 ### Potential
 Potential is reported versus SHE.
-Potential range: -0.25 to +0.15.
+Potential range: -0.25 to +0.15 V_SHE.
 Each potential sweep contains 1000 points over this interval.
 
 ## Replicates

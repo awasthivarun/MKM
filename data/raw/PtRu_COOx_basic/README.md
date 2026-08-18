@@ -40,6 +40,7 @@ Four trials are present for each KOH concentration:
 
 Each trial is stored in a separate worksheet. There are therefore 16 current-density worksheets: `4 KOH concentrations × 4 trials`
 Each worksheet contains all four CO compositions. The potential grids and number of measurements vary between trials and experimental conditions.
+Worksheets are labeled: `{KOH_conc} mM KOH - Trial {number}`. For example: `250 mM KOH - Trial 4`. 
 
 ### Excel File Structure
 Within each current-density worksheet, each CO condition is stored as a pair of adjacent columns:
