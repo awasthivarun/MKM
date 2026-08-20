@@ -17,6 +17,7 @@ htmlcov/
 venv/
 env/
 .conda/
+*.egg-info/
 
 # IDE / editor
 .vscode/
