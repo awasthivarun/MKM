@@ -12,12 +12,15 @@ __pycache__/
 .coverage
 htmlcov/
 
-# Python environments
+# Python environments and packaging
 .venv/
 venv/
 env/
 .conda/
 *.egg-info/
+*.egg
+build/
+dist/
 
 # IDE / editor
 .vscode/

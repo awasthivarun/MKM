@@ -2,8 +2,10 @@ import numpy as np
 import pandas as pd 
 
 
-R_J_mol_K = 8.31446261815324
-F_C_mol = 96485.33212
+from mkm.constants import (
+    F_C_mol,
+    R_J_mol_K,
+)
 
 
 def calculate_transfer_coefficient(
