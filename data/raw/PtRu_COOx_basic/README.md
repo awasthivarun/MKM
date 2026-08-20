@@ -144,4 +144,4 @@ For both `20% Pt_C 1mg Rep 1` and `20% Pt_C 1mg Rep 3`, current density is blank
 These missing values occur consistently across the seven CO compositions within the corresponding worksheets. The missing cells should remain unchanged in the raw workbook and should be handled explicitly during data processing.
 
 ## Notes
-The two workbooks use potential versus RHE. Any conversion to another reference scale should likewise be performed and documented during data processing. Percentages refer to mole fractions of CO in the cell headspace. Total pressure is ambient pressure. 
+The three workbooks use potential versus RHE. Any conversion to another reference scale should likewise be performed and documented during data processing. Percentages refer to mole fractions of CO in the cell headspace. Total pressure is ambient pressure. 

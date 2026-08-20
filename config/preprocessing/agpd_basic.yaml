@@ -1,0 +1,54 @@
+dataset_name: AgPd_COOx_basic
+
+temperature_K: 293.15
+
+materials:
+  - Pd100
+  - Ag10Pd90
+  - Ag25Pd75
+  - Ag50Pd50
+  - Ag75Pd25
+  - Ag90Pd10
+
+KOH_concentrations_M:
+  - 0.25
+  - 0.50
+  - 1.00
+
+CO_mole_fractions:
+  - 0.001
+  - 0.01
+  - 0.10
+  - 1.00
+
+replicates:
+  - A
+  - B
+  - C
+
+potential:
+  reference: SHE
+  unit: V
+  expected_points: 1000
+
+raw_current:
+  representation: ln_j
+  underlying_quantity: current_density
+  underlying_unit: uA/cm2
+
+analysis_grid:
+  spacing_V: 0.010
+  origin_V: 0.0
+
+rate_normalization:
+  current_area_basis: Pd_ECSA
+  electrons_per_CO_oxidation: 2
+  site_charge_density_uC_cm2_Pd: 210.0
+
+truncation:
+  low_potential:
+    method: rate_threshold
+    threshold_s_inv: 1.0e-3
+    require_all_replicates: true
+  high_potential:
+    method: none
