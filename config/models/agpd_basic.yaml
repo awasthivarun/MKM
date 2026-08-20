@@ -1,0 +1,162 @@
+dataset_name: AgPd_COOx_basic
+temperature_K: 293.15
+
+gas:
+  standard_state_pressure_bar: 1.0
+  total_pressure_bar: 1.0
+
+electrolyte:
+  standard_state_concentration_M: 1.0
+  activity_model: ideal_molarity
+
+surface_composition:
+  Pd100:
+    Ag_fraction: 0.00
+    Pd_fraction: 1.00
+
+  Ag10Pd90:
+    Ag_fraction: 0.10
+    Pd_fraction: 0.90
+
+  Ag25Pd75:
+    Ag_fraction: 0.25
+    Pd_fraction: 0.75
+
+  Ag50Pd50:
+    Ag_fraction: 0.50
+    Pd_fraction: 0.50
+
+  Ag75Pd25:
+    Ag_fraction: 0.75
+    Pd_fraction: 0.25
+
+  Ag90Pd10:
+    Ag_fraction: 0.90
+    Pd_fraction: 0.10
+
+surface_assumptions:
+  surface_composition_equals_bulk: true
+  random_mixing: true
+
+likelihood:
+  sigma_prior_median: 0.20
+  sigma_prior_log_sd: 0.75
+
+prior_profiles:
+  Ag10Pd90:
+    BF:
+      provenance: legacy_tuned_for_multimodality
+      parameters:
+        deltaG1_0:
+          distribution: normal
+          mu: -0.4
+          sigma: 0.2
+        deltaG4_0:
+          distribution: normal
+          mu: 0.0
+          sigma: 0.2
+        deltaG5_0:
+          distribution: normal
+          mu: 0.0
+          sigma: 0.2
+        beta_2:
+          distribution: uniform
+          lower: 0.0
+          upper: 1.0
+        q:
+          distribution: uniform
+          lower: 0.0
+          upper: 1.0
+        Gact2_0:
+          distribution: truncated_normal
+          mu: 0.7
+          sigma: 0.2
+          lower: 0.0
+
+    BF_LH:
+      provenance: legacy_tuned_for_multimodality
+      parameters:
+        deltaG1_0:
+          distribution: normal
+          mu: -0.4
+          sigma: 0.2
+        deltaG4_0:
+          distribution: normal
+          mu: 0.0
+          sigma: 0.2
+        deltaG5_0:
+          distribution: normal
+          mu: 0.0
+          sigma: 0.2
+        beta_2:
+          distribution: uniform
+          lower: 0.0
+          upper: 1.0
+        q:
+          distribution: uniform
+          lower: 0.0
+          upper: 1.0
+        Gact2_BF_0:
+          distribution: truncated_normal
+          mu: 0.7
+          sigma: 0.2
+          lower: 0.0
+        Gact2_LH_0:
+          distribution: truncated_normal
+          mu: 0.7
+          sigma: 0.2
+          lower: 0.0
+
+    CO_BF_ER_LH:
+      provenance: legacy_tuned_for_multimodality
+      parameters:
+        deltaG1_0:
+          distribution: truncated_normal
+          mu: -0.4
+          sigma: 0.2
+          lower: -0.4
+          upper: 0.0
+        deltaG4_0:
+          distribution: normal
+          mu: 0.0
+          sigma: 0.2
+        deltaG5_0:
+          distribution: normal
+          mu: 0.0
+          sigma: 0.2
+        beta_2_BF:
+          distribution: uniform
+          lower: 0.0
+          upper: 1.0
+        beta_2_ER:
+          distribution: uniform
+          lower: 0.0
+          upper: 1.0
+        q:
+          distribution: uniform
+          lower: 0.0
+          upper: 1.0
+        Gact1_0:
+          distribution: truncated_normal
+          mu: 0.7
+          sigma: 0.2
+          lower: 0.0
+          upper: 1.0
+        Gact2_BF_0:
+          distribution: truncated_normal
+          mu: 0.7
+          sigma: 0.2
+          lower: 0.5
+          upper: 1.0
+        Gact2_ER_0:
+          distribution: truncated_normal
+          mu: 0.7
+          sigma: 0.2
+          lower: 0.5
+          upper: 1.0
+        Gact2_LH_0:
+          distribution: truncated_normal
+          mu: 0.7
+          sigma: 0.2
+          lower: 0.5
+          upper: 1.0

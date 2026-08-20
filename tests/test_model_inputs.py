@@ -6,6 +6,7 @@ from mkm.model_data import (
 )
 from mkm.model_inputs import (
     build_model_input_arrays,
+    build_model_point_inputs,
 )
 
 
@@ -207,5 +208,91 @@ def test_shared_replicates_share_prediction_index():
             point["model_point_id"],
         ),
     )
+
+
+def test_model_point_inputs_expand_condition_variables():
+    model_data, inputs = _build_inputs()
+
+    point_inputs = build_model_point_inputs(
+        inputs
+    )
+
+    assert (
+        len(point_inputs.E_V_SHE)
+        == len(model_data.model_points)
+    )
+
+    for point in (
+        model_data.model_points
+        .itertuples(index=False)
+    ):
+        condition = (
+            model_data.conditions[
+                model_data.conditions[
+                    "condition_id"
+                ]
+                == point.condition_id
+            ]
+            .iloc[0]
+        )
+
+        np.testing.assert_allclose(
+            point_inputs.E_V_SHE[
+                point.model_point_id
+            ],
+            point.E_V_SHE,
+        )
+
+        np.testing.assert_allclose(
+            point_inputs.ln_electrolyte_concentration[
+                point.model_point_id
+            ],
+            np.log(
+                condition[
+                    "electrolyte_concentration_M"
+                ]
+            ),
+        )
+
+        np.testing.assert_allclose(
+            point_inputs.ln_CO_mole_fraction[
+                point.model_point_id
+            ],
+            np.log(
+                condition[
+                    "CO_mole_fraction"
+                ]
+            ),
+        )
+
+
+def test_model_point_material_mapping():
+    model_data, inputs = _build_inputs()
+
+    point_inputs = build_model_point_inputs(
+        inputs
+    )
+
+    material_to_index = {
+        material: index
+        for index, material in enumerate(
+            point_inputs.materials
+        )
+    }
+
+    for point in (
+        model_data.model_points
+        .itertuples(index=False)
+    ):
+        expected = material_to_index[
+            point.material
+        ]
+
+        assert (
+            point_inputs.material_index[
+                point.model_point_id
+            ]
+            == expected
+        )
 
 

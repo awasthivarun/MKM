@@ -20,6 +20,15 @@ class ModelInputArrays:
     observation_ln_rate: np.ndarray
     observation_replicate: np.ndarray
 
+@dataclass(frozen=True)
+class ModelPointInputs:
+    materials: tuple[str, ...]
+
+    material_index: np.ndarray
+    E_V_SHE: np.ndarray
+
+    ln_electrolyte_concentration: np.ndarray
+    ln_CO_mole_fraction: np.ndarray
 
 def _validate_contiguous_ids(
     data,
@@ -285,3 +294,122 @@ def build_model_input_arrays(
             observation_replicate
         ),
     )
+
+def build_model_point_inputs(
+    inputs: ModelInputArrays,
+):
+    condition_index = np.asarray(
+        inputs.model_point_condition_index,
+        dtype=np.int64,
+    )
+
+    material_index = (
+        inputs.condition_material_index[
+            condition_index
+        ]
+    )
+
+    ln_electrolyte_concentration = (
+        inputs.condition_ln_electrolyte_concentration[
+            condition_index
+        ]
+    )
+
+    ln_CO_mole_fraction = (
+        inputs.condition_ln_CO_mole_fraction[
+            condition_index
+        ]
+    )
+
+    E_V_SHE = np.asarray(
+        inputs.model_point_E_V_SHE,
+        dtype=float,
+    )
+
+    n_points = len(E_V_SHE)
+
+    arrays = {
+        "material_index": material_index,
+        "ln_electrolyte_concentration": (
+            ln_electrolyte_concentration
+        ),
+        "ln_CO_mole_fraction": (
+            ln_CO_mole_fraction
+        ),
+    }
+
+    for name, values in arrays.items():
+        if len(values) != n_points:
+            raise ValueError(
+                f"'{name}' does not have one value "
+                "per model point."
+            )
+
+    if not np.all(
+        np.isfinite(E_V_SHE)
+    ):
+        raise ValueError(
+            "Model-point potentials contain "
+            "non-finite values."
+        )
+
+    if not np.all(
+        np.isfinite(
+            ln_electrolyte_concentration
+        )
+    ):
+        raise ValueError(
+            "Model-point log electrolyte "
+            "concentrations contain non-finite values."
+        )
+
+    if not np.all(
+        np.isfinite(
+            ln_CO_mole_fraction
+        )
+    ):
+        raise ValueError(
+            "Model-point log CO mole fractions "
+            "contain non-finite values."
+        )
+
+    return ModelPointInputs(
+        materials=inputs.materials,
+        material_index=np.asarray(
+            material_index,
+            dtype=np.int64,
+        ),
+        E_V_SHE=E_V_SHE,
+        ln_electrolyte_concentration=np.asarray(
+            ln_electrolyte_concentration,
+            dtype=float,
+        ),
+        ln_CO_mole_fraction=np.asarray(
+            ln_CO_mole_fraction,
+            dtype=float,
+        ),
+    )
+
+def build_model_coords(
+    inputs: ModelInputArrays,
+):
+    return {
+        "material": list(
+            inputs.materials
+        ),
+        "condition": np.arange(
+            len(
+                inputs.condition_material_index
+            )
+        ),
+        "model_point": np.arange(
+            len(
+                inputs.model_point_E_V_SHE
+            )
+        ),
+        "observation": np.arange(
+            len(
+                inputs.observation_ln_rate
+            )
+        ),
+    }
