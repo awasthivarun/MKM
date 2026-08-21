@@ -1,9 +1,7 @@
 from dataclasses import dataclass
 from typing import Callable
 
-from mkm.inference.priors import (
-    build_named_priors,
-)
+from mkm.inference.priors import build_named_priors
 from mkm.mechanisms.agpd_basic import (
     AgPdBFParameters,
     AgPdBFLHParameters,
@@ -22,163 +20,61 @@ class AgPdModelDefinition:
 
 
 _AGPD_MODEL_REGISTRY = {
-    "BF": AgPdModelDefinition(
-        parameter_class=(
-            AgPdBFParameters
-        ),
-        evaluator=evaluate_agpd_bf,
-    ),
-    "BF_LH": AgPdModelDefinition(
-        parameter_class=(
-            AgPdBFLHParameters
-        ),
-        evaluator=evaluate_agpd_bf_lh,
-    ),
+    "BF": AgPdModelDefinition(parameter_class=AgPdBFParameters, evaluator=evaluate_agpd_bf),
+    "BF_LH": AgPdModelDefinition(parameter_class=AgPdBFLHParameters, evaluator=evaluate_agpd_bf_lh),
     "CO_BF_ER_LH": AgPdModelDefinition(
-        parameter_class=(
-            AgPdCOBFERRLHParameters
-        ),
-        evaluator=(
-            evaluate_agpd_co_bf_er_lh
-        ),
+        parameter_class=AgPdCOBFERRLHParameters,
+        evaluator=evaluate_agpd_co_bf_er_lh,
     ),
 }
 
 
 def available_agpd_models():
-    return tuple(
-        _AGPD_MODEL_REGISTRY
-    )
+    return tuple(_AGPD_MODEL_REGISTRY)
 
 
-def get_agpd_model_definition(
-    model_name,
-):
+def get_agpd_model_definition(model_name):
     try:
-        return _AGPD_MODEL_REGISTRY[
-            model_name
-        ]
+        return _AGPD_MODEL_REGISTRY[model_name]
     except KeyError as error:
-        raise ValueError(
-            f"Unknown AgPd model "
-            f"'{model_name}'. Available models: "
-            f"{available_agpd_models()}."
-        ) from error
+        raise ValueError(f"Unknown AgPd model '{model_name}'. Available models: {available_agpd_models()}.") from error
 
 
-def build_agpd_mechanism(
-    model_name,
-    material,
-    config,
-):
-    definition = (
-        get_agpd_model_definition(
-            model_name
-        )
-    )
+def build_agpd_mechanism(model_name, material, config):
+    definition = get_agpd_model_definition(model_name)
 
-    if material not in config[
-        "surface_composition"
-    ]:
-        raise ValueError(
-            f"Material '{material}' has no "
-            "surface-composition configuration."
-        )
+    if material not in config["surface_composition"]:
+        raise ValueError(f"Material '{material}' has no surface-composition configuration.")
 
     try:
-        profile = config[
-            "prior_profiles"
-        ][material][model_name]
+        profile = config["prior_profiles"][material][model_name]
     except KeyError as error:
-        raise ValueError(
-            f"No prior profile is defined for "
-            f"material '{material}' and model "
-            f"'{model_name}'."
-        ) from error
+        raise ValueError(f"No prior profile is defined for material '{material}' and model '{model_name}'.") from error
 
-    parameter_specs = profile[
-        "parameters"
-    ]
+    parameter_specs = profile["parameters"]
 
-    expected_parameters = {
-        field.name
-        for field in (
-            definition
-            .parameter_class
-            .__dataclass_fields__
-            .values()
-        )
-    }
+    expected_parameters = {field.name for field in definition.parameter_class.__dataclass_fields__.values()}
+    configured_parameters = set(parameter_specs)
 
-    configured_parameters = set(
-        parameter_specs
-    )
-
-    if (
-        configured_parameters
-        != expected_parameters
-    ):
-        missing = (
-            expected_parameters
-            - configured_parameters
-        )
-
-        extra = (
-            configured_parameters
-            - expected_parameters
-        )
+    if configured_parameters != expected_parameters:
+        missing = expected_parameters - configured_parameters
+        extra = configured_parameters - expected_parameters
 
         raise ValueError(
-            f"Prior profile for {material}/"
-            f"{model_name} does not match the "
-            f"mechanism parameters. "
-            f"Missing: {sorted(missing)}; "
-            f"extra: {sorted(extra)}."
+            f"Prior profile for {material}/{model_name} does not match the mechanism parameters. "
+            f"Missing: {sorted(missing)}; extra: {sorted(extra)}."
         )
 
-    def mechanism(
-        point_inputs,
-    ):
-        if tuple(
-            point_inputs.materials
-        ) != (
-            material,
-        ):
-            raise ValueError(
-                f"AgPd legacy-style model "
-                f"'{model_name}' for '{material}' "
-                "must be fit to exactly that one "
-                "material."
-            )
+    def mechanism(point_inputs):
+        if tuple(point_inputs.materials) != (material,):
+            raise ValueError(f"AgPd legacy-style model '{model_name}' for '{material}' must be fit to exactly that one material.")
 
-        prior_values = (
-            build_named_priors(
-                parameter_specs
-            )
-        )
+        prior_values = build_named_priors(parameter_specs)
+        parameters = definition.parameter_class(**prior_values)
+        state = build_agpd_point_state(inputs=point_inputs, config=config)
 
-        parameters = (
-            definition.parameter_class(
-                **prior_values
-            )
-        )
+        evaluated = definition.evaluator(state=state, parameters=parameters, temperature_K=config["temperature_K"])
 
-        state = build_agpd_point_state(
-            inputs=point_inputs,
-            config=config,
-        )
-
-        evaluated = definition.evaluator(
-            state=state,
-            parameters=parameters,
-            temperature_K=config[
-                "temperature_K"
-            ],
-        )
-
-        return (
-            evaluated
-            .mechanism_result
-        )
+        return evaluated.mechanism_result
 
     return mechanism

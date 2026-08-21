@@ -3,19 +3,9 @@ from dataclasses import dataclass
 import pymc as pm
 import pytensor.tensor as pt
 
-from mkm.inference.likelihoods import (
-    LogRateLikelihood,
-    add_material_log_rate_likelihood,
-)
-from mkm.mechanisms.base import (
-    MechanismResult,
-    validate_mechanism_result,
-)
-from mkm.model_inputs import (
-    ModelInputArrays,
-    build_model_coords,
-    build_model_point_inputs,
-)
+from mkm.inference.likelihoods import LogRateLikelihood, add_material_log_rate_likelihood
+from mkm.mechanisms.base import MechanismResult, validate_mechanism_result
+from mkm.model_inputs import ModelInputArrays, build_model_coords, build_model_point_inputs
 
 
 @dataclass(frozen=True)
@@ -25,144 +15,52 @@ class BuiltModel:
     likelihood: LogRateLikelihood
 
 
-def _specify_model_point_vector(
-    value,
-    n_model_points,
-    name,
-):
-    tensor = pt.as_tensor_variable(
-        value
-    )
+def _specify_model_point_vector(value, n_model_points, name):
+    tensor = pt.as_tensor_variable(value)
 
     if tensor.ndim != 1:
-        raise ValueError(
-            f"'{name}' must be one-dimensional."
-        )
+        raise ValueError(f"'{name}' must be one-dimensional.")
 
     static_length = tensor.type.shape[0]
 
-    if (
-        static_length is not None
-        and static_length != n_model_points
-    ):
-        raise ValueError(
-            f"'{name}' has length "
-            f"{static_length}, but there are "
-            f"{n_model_points} model points."
-        )
+    if static_length is not None and static_length != n_model_points:
+        raise ValueError(f"'{name}' has length {static_length}, but there are {n_model_points} model points.")
 
-    return pt.specify_shape(
-        tensor,
-        (n_model_points,),
-    )
+    return pt.specify_shape(tensor, (n_model_points,))
 
 
-def build_pymc_model(
-    inputs: ModelInputArrays,
-    mechanism,
-    sigma_prior_median=0.20,
-    sigma_prior_log_sd=0.75,
-):
-    coords = build_model_coords(
-        inputs
-    )
+def build_pymc_model(inputs: ModelInputArrays, mechanism, sigma_prior_median=0.20, sigma_prior_log_sd=0.75):
+    coords = build_model_coords(inputs)
+    point_inputs = build_model_point_inputs(inputs)
+    n_model_points = len(point_inputs.E_V_SHE)
 
-    point_inputs = build_model_point_inputs(
-        inputs
-    )
+    with pm.Model(coords=coords) as model:
+        result = mechanism(point_inputs)
 
-    n_model_points = len(
-        point_inputs.E_V_SHE
-    )
+        if not isinstance(result, MechanismResult):
+            raise TypeError("Mechanism must return a MechanismResult.")
 
-    with pm.Model(
-        coords=coords
-    ) as model:
-        result = mechanism(
-            point_inputs
-        )
+        validate_mechanism_result(result)
 
-        if not isinstance(
-            result,
-            MechanismResult,
-        ):
-            raise TypeError(
-                "Mechanism must return a "
-                "MechanismResult."
-            )
-
-        validate_mechanism_result(
-            result
-        )
-
-        ln_rate = _specify_model_point_vector(
-            value=result.ln_rate,
-            n_model_points=n_model_points,
-            name="ln_rate",
-        )
-
-        ln_rate_model = pm.Deterministic(
-            "ln_rate_model",
-            ln_rate,
-            dims="model_point",
-        )
+        ln_rate = _specify_model_point_vector(value=result.ln_rate, n_model_points=n_model_points, name="ln_rate")
+        ln_rate_model = pm.Deterministic("ln_rate_model", ln_rate, dims="model_point")
 
         registered_pointwise = {}
 
-        for name, value in (
-            result.pointwise.items()
-        ):
+        for name, value in result.pointwise.items():
             if name in model.named_vars:
-                raise ValueError(
-                    f"Mechanism pointwise output "
-                    f"'{name}' conflicts with an "
-                    "existing PyMC variable."
-                )
+                raise ValueError(f"Mechanism pointwise output '{name}' conflicts with an existing PyMC variable.")
 
-            pointwise_value = (
-                _specify_model_point_vector(
-                    value=value,
-                    n_model_points=(
-                        n_model_points
-                    ),
-                    name=name,
-                )
-            )
+            pointwise_value = _specify_model_point_vector(value=value, n_model_points=n_model_points, name=name)
+            registered_pointwise[name] = pm.Deterministic(name, pointwise_value, dims="model_point")
 
-            registered_pointwise[
-                name
-            ] = pm.Deterministic(
-                name,
-                pointwise_value,
-                dims="model_point",
-            )
+        registered_result = MechanismResult(ln_rate=ln_rate_model, pointwise=registered_pointwise)
 
-        registered_result = (
-            MechanismResult(
-                ln_rate=ln_rate_model,
-                pointwise=(
-                    registered_pointwise
-                ),
-            )
+        likelihood = add_material_log_rate_likelihood(
+            ln_rate_model=ln_rate_model,
+            inputs=inputs,
+            sigma_prior_median=sigma_prior_median,
+            sigma_prior_log_sd=sigma_prior_log_sd,
         )
 
-        likelihood = (
-            add_material_log_rate_likelihood(
-                ln_rate_model=ln_rate_model,
-                inputs=inputs,
-                sigma_prior_median=(
-                    sigma_prior_median
-                ),
-                sigma_prior_log_sd=(
-                    sigma_prior_log_sd
-                ),
-            )
-        )
-
-    return BuiltModel(
-        model=model,
-        mechanism_result=(
-            registered_result
-        ),
-        likelihood=likelihood,
-    )
+    return BuiltModel(model=model, mechanism_result=registered_result, likelihood=likelihood)
