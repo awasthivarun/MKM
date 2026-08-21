@@ -246,3 +246,60 @@ def evaluate_linear_observable_map(log_rate, observable_map):
         result[row.observable_id] += row.coefficient * log_rate[row.model_point_id]
 
     return result
+
+def evaluate_linear_observable_map_draws(log_rate, observable_map):
+
+    log_rate = np.asarray(log_rate, dtype=float)
+
+    if log_rate.ndim < 1:
+        raise ValueError("Log-rate draws must have at least one dimension.")
+
+    required_output_columns = {"observable_id"}
+    required_term_columns = {"observable_id", "model_point_id", "coefficient"}
+
+    if not required_output_columns.issubset(observable_map.outputs.columns):
+        raise ValueError("Observable-map outputs are missing 'observable_id'.")
+
+    if not required_term_columns.issubset(observable_map.terms.columns):
+        raise ValueError("Observable-map terms are missing required columns.")
+
+    n_outputs = len(observable_map.outputs)
+
+    if n_outputs == 0:
+        return np.empty((*log_rate.shape[:-1], 0), dtype=float)
+
+    output_ids = observable_map.outputs["observable_id"].to_numpy(dtype=np.int64)
+
+    if not np.array_equal(output_ids, np.arange(n_outputs)):
+        raise ValueError("Observable IDs must be contiguous and ordered from zero.")
+
+    term_output_ids = observable_map.terms["observable_id"].to_numpy(dtype=np.int64)
+    model_point_ids = observable_map.terms["model_point_id"].to_numpy(dtype=np.int64)
+    coefficients = observable_map.terms["coefficient"].to_numpy(dtype=float)
+
+    if np.any(term_output_ids < 0) or np.any(term_output_ids >= n_outputs):
+        raise ValueError("Observable-map term contains an invalid observable ID.")
+
+    if np.any(model_point_ids < 0) or np.any(model_point_ids >= log_rate.shape[-1]):
+        raise ValueError("Observable-map term contains an invalid model-point ID.")
+
+    if not np.all(np.isfinite(coefficients)):
+        raise ValueError("Observable-map coefficients must be finite.")
+
+    term_counts = np.bincount(term_output_ids, minlength=n_outputs)
+
+    if np.any(term_counts == 0):
+        raise ValueError("Every observable must contain at least one map term.")
+
+    max_terms = int(term_counts.max())
+    source_indices = np.zeros((n_outputs, max_terms), dtype=np.int64)
+    coefficient_matrix = np.zeros((n_outputs, max_terms), dtype=float)
+    positions = np.zeros(n_outputs, dtype=np.int64)
+
+    for observable_id, model_point_id, coefficient in zip(term_output_ids, model_point_ids, coefficients):
+        position = positions[observable_id]
+        source_indices[observable_id, position] = model_point_id
+        coefficient_matrix[observable_id, position] = coefficient
+        positions[observable_id] += 1
+
+    return np.sum(log_rate[..., source_indices] * coefficient_matrix, axis=-1)

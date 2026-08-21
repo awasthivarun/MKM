@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pymc as pm
 
+from mkm.observable_maps import evaluate_linear_observable_map_draws
 
 @dataclass(frozen=True)
 class PriorPredictiveSummary:
@@ -145,3 +146,26 @@ def summarize_prior_predictive(prior_predictive, model_data):
         model_point_summary=summarize_prior_model_points(prior_predictive, model_data.model_points),
         observation_summary=summarize_prior_observations(prior_predictive, model_data.observations),
     )
+
+def summarize_prior_linear_observable(prior_predictive, observable_map):
+
+    prior = _get_group(prior_predictive, "prior")
+
+    if "ln_rate_model" not in prior:
+        raise ValueError("Prior group does not contain 'ln_rate_model'.")
+
+    observable_draws = evaluate_linear_observable_map_draws(
+        np.asarray(prior["ln_rate_model"]),
+        observable_map,
+    )
+
+    summary = _summarize_draws(observable_draws)
+    result = observable_map.outputs.copy()
+
+    if summary["mean"].ndim != 1 or len(summary["mean"]) != len(result):
+        raise ValueError("Derived-observable draws do not align with observable-map outputs.")
+
+    for statistic in ["mean", "sd", "q025", "q50", "q975"]:
+        result[statistic] = summary[statistic]
+
+    return result

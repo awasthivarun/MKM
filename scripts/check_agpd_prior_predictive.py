@@ -4,7 +4,16 @@ import pandas as pd
 import yaml
 
 from mkm.inference.model import build_pymc_model
-from mkm.inference.prior_predictive import sample_prior_predictive, summarize_prior_predictive
+from mkm.inference.prior_predictive import (
+    sample_prior_predictive,
+    summarize_prior_linear_observable,
+    summarize_prior_predictive,
+)
+from mkm.observable_maps import (
+    build_adjacent_log_order_map,
+    build_alpha_map,
+    build_log_slope_order_map,
+)
 from mkm.model_data import build_model_data
 from mkm.model_inputs import build_model_input_arrays
 from mkm.models.agpd_basic import build_agpd_mechanism
@@ -15,6 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = ROOT / "data" / "processed" / "AgPd_COOx_basic" / "analysis" / "AgPd_COOx_basic_selected.parquet"
 CONFIG_PATH = ROOT / "config" / "models" / "agpd_basic.yaml"
 OUTPUT_ROOT = ROOT / "results" / "AgPd_COOx_basic" / "prior_predictive"
+PREPROCESSING_CONFIG_PATH = ROOT / "config" / "preprocessing" / "agpd_basic.yaml"
 
 MATERIAL = "Ag10Pd90"
 MODELS = ["BF", "BF_LH", "CO_BF_ER_LH"]
@@ -27,6 +37,9 @@ def main():
     with open(CONFIG_PATH, "r") as file:
         config = yaml.safe_load(file)
 
+    with open(PREPROCESSING_CONFIG_PATH, "r") as file:
+        preprocessing_config = yaml.safe_load(file)
+
     selected = pd.read_parquet(DATA_PATH)
     selected = selected.loc[selected["material"] == MATERIAL].copy()
 
@@ -35,6 +48,27 @@ def main():
         electrolyte_concentration_column="C_KOH_M",
     )
     inputs = build_model_input_arrays(model_data)
+
+    alpha_map = build_alpha_map(
+        model_points=model_data.model_points,
+        temperature_K=config["temperature_K"],
+    )
+
+    delta_oh_map = build_log_slope_order_map(
+        model_points=model_data.model_points,
+        varying_column="electrolyte_concentration_M",
+        varying_values=preprocessing_config["KOH_concentrations_M"],
+        group_columns=["material", "CO_mole_fraction"],
+    )
+
+    delta_co_map = build_adjacent_log_order_map(
+        model_points=model_data.model_points,
+        varying_column="CO_mole_fraction",
+        varying_values=preprocessing_config["CO_mole_fractions"],
+        group_columns=["material", "electrolyte_concentration_M"],
+        lower_value_column="lower_CO_mole_fraction",
+        upper_value_column="upper_CO_mole_fraction",
+    )
 
     for model_name in MODELS:
         print(f"\n{MATERIAL}: {model_name}")
@@ -50,6 +84,9 @@ def main():
 
         prior = sample_prior_predictive(built_model=built, draws=DRAWS, random_seed=RANDOM_SEED)
         summary = summarize_prior_predictive(prior_predictive=prior, model_data=model_data)
+        alpha_summary = summarize_prior_linear_observable(prior, alpha_map)
+        delta_oh_summary = summarize_prior_linear_observable(prior, delta_oh_map)
+        delta_co_summary = summarize_prior_linear_observable(prior, delta_co_map)
 
         output_dir = OUTPUT_ROOT / MATERIAL / model_name
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -57,9 +94,15 @@ def main():
         summary.parameter_summary.to_csv(output_dir / "parameters.csv", index=False)
         summary.model_point_summary.to_parquet(output_dir / "model_points.parquet", index=False)
         summary.observation_summary.to_parquet(output_dir / "observations.parquet", index=False)
+        alpha_summary.to_parquet(output_dir / "alpha.parquet", index=False)
+        delta_oh_summary.to_parquet(output_dir / "delta_OH.parquet", index=False)
+        delta_co_summary.to_parquet(output_dir / "delta_CO.parquet", index=False)
 
         print(summary.parameter_summary.to_string(index=False))
         print_model_point_diagnostics(summary.model_point_summary)
+        print_observable_diagnostics("alpha", alpha_summary)
+        print_observable_diagnostics("delta_OH", delta_oh_summary)
+        print_observable_diagnostics("delta_CO", delta_co_summary)
 
         prior.to_netcdf(output_dir / "prior_predictive.nc", engine="h5netcdf")
 
@@ -125,6 +168,17 @@ def print_model_point_diagnostics(model_point_summary):
                 f" {q025.min():.3g}"
                 f" to {q975.max():.3g}"
             )
+
+
+def print_observable_diagnostics(name, summary):
+
+    print(f"\n{name} prior ranges:")
+    print(
+        f"  median: {summary['q50'].min():.3f} to {summary['q50'].max():.3f}"
+    )
+    print(
+        f"  overall 95% envelope: {summary['q025'].min():.3f} to {summary['q975'].max():.3f}"
+    )
 
 
 if __name__ == "__main__":

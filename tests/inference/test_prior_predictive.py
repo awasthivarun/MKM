@@ -7,8 +7,10 @@ from mkm.inference.prior_predictive import (
     _summarize_draws,
     sample_prior_predictive,
     summarize_prior_model_points,
+    summarize_prior_linear_observable
 )
 
+from mkm.observable_maps import LinearObservableMap
 
 def test_flatten_draw_dimensions():
     values = np.arange(2 * 3 * 4).reshape(2, 3, 4)
@@ -67,3 +69,29 @@ def test_parameter_summary_includes_length_one_vector():
     summary = summarize_prior_parameters(prior)
 
     assert "sigma_ln_rate_material" in set(summary["parameter"])
+
+
+def test_prior_linear_observable_summary_preserves_metadata():
+
+    with pm.Model(coords={"model_point": [0, 1, 2]}):
+        offset = pm.Normal("offset", mu=0.0, sigma=1.0)
+        pm.Deterministic("ln_rate_model", offset + np.array([0.0, 1.0, 2.0]), dims="model_point")
+        prior = pm.sample_prior_predictive(draws=20, random_seed=123, return_inferencedata=True)
+
+    observable_map = LinearObservableMap(
+        outputs=pd.DataFrame({"observable_id": [0], "E_V_SHE": [0.1]}),
+        terms=pd.DataFrame(
+            {
+                "observable_id": [0, 0],
+                "model_point_id": [0, 2],
+                "coefficient": [-0.5, 0.5],
+            }
+        ),
+    )
+
+    summary = summarize_prior_linear_observable(prior, observable_map)
+
+    assert len(summary) == 1
+    assert summary.loc[0, "E_V_SHE"] == 0.1
+    np.testing.assert_allclose(summary.loc[0, "mean"], 1.0, atol=1e-12)
+    np.testing.assert_allclose(summary.loc[0, "sd"], 0.0, atol=1e-12)
