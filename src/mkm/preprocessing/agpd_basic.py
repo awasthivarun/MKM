@@ -13,7 +13,7 @@ from .validation import (
     validate_replicate,
     validate_standardized_dataframe,
 )
-from .observables import add_transfer_coefficients, calculate_adjacent_log_orders, calculate_log_slope_order
+from .observables import add_transfer_coefficients, calculate_log_slope_order, calculate_paired_adjacent_log_orders
 
 
 def _parse_co_mole_fraction(sheet_name, expected_values):
@@ -620,18 +620,60 @@ def calculate_agpd_oh_order(summary, config):
     )
 
 
-def calculate_agpd_co_order(summary, config):
-    return calculate_adjacent_log_orders(
-        data=summary,
+def calculate_agpd_co_order_replicates(analysis_rates, config):
+    return calculate_paired_adjacent_log_orders(
+        data=analysis_rates,
         varying_column="CO_mole_fraction",
         varying_values=config["CO_mole_fractions"],
         group_columns=["material", "C_KOH_M"],
+        replicate_column="replicate",
         output_column="delta_CO",
-        output_sd_column="delta_CO_sd",
         lower_value_column="CO_lower_mole_fraction",
         upper_value_column="CO_upper_mole_fraction",
-        mean_log_rate_column="ln_rate_mean",
-        sd_log_rate_column="ln_rate_sd",
+        log_rate_column="ln_rate",
         grid_column="analysis_grid_index",
         potential_column="E_V_SHE",
     )
+
+
+def summarize_agpd_co_order_replicates(delta_CO_replicates, config):
+    group_columns = [
+        "material",
+        "C_KOH_M",
+        "CO_lower_mole_fraction",
+        "CO_upper_mole_fraction",
+        "analysis_grid_index",
+        "E_V_SHE",
+    ]
+
+    expected_replicates = len(config["replicates"])
+
+    replicate_counts = delta_CO_replicates.groupby(group_columns, sort=False)["replicate"].nunique()
+    invalid_counts = replicate_counts[replicate_counts != expected_replicates]
+
+    if not invalid_counts.empty:
+        raise DataValidationError(
+            f"Expected {expected_replicates} paired CO-order replicates at every point, "
+            f"but found {len(invalid_counts)} point(s) with a different count."
+        )
+
+    summary = (
+        delta_CO_replicates.groupby(group_columns, sort=False)
+        .agg(
+            n_replicates=("replicate", "nunique"),
+            delta_CO=("delta_CO", "mean"),
+            delta_CO_sd=("delta_CO", "std"),
+        )
+        .reset_index()
+    )
+
+    if not np.all(np.isfinite(summary[["delta_CO", "delta_CO_sd"]].to_numpy())):
+        raise DataValidationError("Paired CO-order summary contains non-finite values.")
+
+    return summary
+
+
+def calculate_agpd_co_order(analysis_rates, config):
+    delta_CO_replicates = calculate_agpd_co_order_replicates(analysis_rates, config)
+
+    return summarize_agpd_co_order_replicates(delta_CO_replicates, config)

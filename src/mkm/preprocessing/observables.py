@@ -310,3 +310,96 @@ def calculate_adjacent_log_orders(
                 records.append(record)
 
     return pd.DataFrame(records)
+
+
+def calculate_paired_adjacent_log_orders(
+    data,
+    varying_column,
+    varying_values,
+    group_columns,
+    replicate_column,
+    output_column,
+    lower_value_column,
+    upper_value_column,
+    log_rate_column="ln_rate",
+    grid_column="analysis_grid_index",
+    potential_column="E_V_SHE",
+):
+    varying_values = np.asarray(varying_values, dtype=float)
+
+    if varying_values.ndim != 1:
+        raise ValueError("Varying-condition values must be one-dimensional.")
+
+    if len(varying_values) < 2:
+        raise ValueError("At least two condition values are required.")
+
+    if not np.all(np.isfinite(varying_values)):
+        raise ValueError("Varying-condition values contain non-finite values.")
+
+    if not np.all(varying_values > 0):
+        raise ValueError("Reaction-order condition values must be positive.")
+
+    records = []
+    paired_group_columns = [*group_columns, replicate_column]
+
+    grouped = data.groupby(paired_group_columns, sort=False)
+
+    for group_values, group_data in grouped:
+        if not isinstance(group_values, tuple):
+            group_values = (group_values,)
+
+        for i in range(len(varying_values) - 1):
+            lower_value = varying_values[i]
+            upper_value = varying_values[i + 1]
+
+            lower_data = group_data[
+                np.isclose(group_data[varying_column].to_numpy(), lower_value, rtol=0, atol=1e-12)
+            ].sort_values(grid_column)
+
+            upper_data = group_data[
+                np.isclose(group_data[varying_column].to_numpy(), upper_value, rtol=0, atol=1e-12)
+            ].sort_values(grid_column)
+
+            if lower_data.empty:
+                raise ValueError(f"Missing {varying_column}={lower_value} for group {group_values}.")
+
+            if upper_data.empty:
+                raise ValueError(f"Missing {varying_column}={upper_value} for group {group_values}.")
+
+            common_indices = _get_common_grid_indices([lower_data, upper_data], grid_column)
+            log_ratio = np.log(upper_value / lower_value)
+
+            for grid_index in common_indices:
+                lower_log_rate = float(
+                    _get_value_at_grid_index(lower_data, grid_index, grid_column, log_rate_column)
+                )
+                upper_log_rate = float(
+                    _get_value_at_grid_index(upper_data, grid_index, grid_column, log_rate_column)
+                )
+
+                if not np.isfinite(lower_log_rate) or not np.isfinite(upper_log_rate):
+                    raise ValueError("Paired log rates contain non-finite values.")
+
+                reaction_order = (upper_log_rate - lower_log_rate) / log_ratio
+
+                lower_E = float(_get_value_at_grid_index(lower_data, grid_index, grid_column, potential_column))
+                upper_E = float(_get_value_at_grid_index(upper_data, grid_index, grid_column, potential_column))
+
+                if not np.isclose(lower_E, upper_E, rtol=0, atol=1e-12):
+                    raise ValueError(f"Common grid index {grid_index} maps to inconsistent potentials.")
+
+                record = {column: value for column, value in zip(paired_group_columns, group_values)}
+
+                record.update(
+                    {
+                        lower_value_column: float(lower_value),
+                        upper_value_column: float(upper_value),
+                        grid_column: grid_index,
+                        potential_column: lower_E,
+                        output_column: reaction_order,
+                    }
+                )
+
+                records.append(record)
+
+    return pd.DataFrame(records)

@@ -124,3 +124,74 @@ def test_model_point_material_mapping():
     for point in model_data.model_points.itertuples(index=False):
         expected = material_to_index[point.material]
         assert point_inputs.material_index[point.model_point_id] == expected
+
+
+def test_setup_index_pairs_co_conditions_within_koh_and_replicate():
+    records = [
+        {
+            "material": "M1",
+            "C_KOH_M": 0.25,
+            "CO_mole_fraction": 0.001,
+            "replicate": "A",
+            "analysis_grid_index": 0,
+            "E_V_SHE": 0.0,
+            "rate_s_inv": 1.0,
+            "ln_rate": 0.0,
+        },
+        {
+            "material": "M1",
+            "C_KOH_M": 0.25,
+            "CO_mole_fraction": 0.01,
+            "replicate": "A",
+            "analysis_grid_index": 0,
+            "E_V_SHE": 0.0,
+            "rate_s_inv": 2.0,
+            "ln_rate": np.log(2.0),
+        },
+        {
+            "material": "M1",
+            "C_KOH_M": 0.25,
+            "CO_mole_fraction": 0.001,
+            "replicate": "B",
+            "analysis_grid_index": 0,
+            "E_V_SHE": 0.0,
+            "rate_s_inv": 1.1,
+            "ln_rate": np.log(1.1),
+        },
+        {
+            "material": "M1",
+            "C_KOH_M": 0.50,
+            "CO_mole_fraction": 0.001,
+            "replicate": "A",
+            "analysis_grid_index": 0,
+            "E_V_SHE": 0.0,
+            "rate_s_inv": 1.2,
+            "ln_rate": np.log(1.2),
+        },
+    ]
+
+    model_data = build_model_data(
+        selected_replicates=pd.DataFrame(records),
+        electrolyte_concentration_column="C_KOH_M",
+    )
+
+    inputs = build_model_input_arrays(
+        model_data,
+        setup_group_columns=["material", "electrolyte_concentration_M", "replicate"],
+    )
+
+    observations = model_data.observations
+
+    def setup_index(C_KOH_M, CO_fraction, replicate):
+        row = observations[
+            (observations["electrolyte_concentration_M"] == C_KOH_M)
+            & (observations["CO_mole_fraction"] == CO_fraction)
+            & (observations["replicate"] == replicate)
+        ].iloc[0]
+
+        return inputs.observation_setup_index[row["observation_id"]]
+
+    assert setup_index(0.25, 0.001, "A") == setup_index(0.25, 0.01, "A")
+    assert setup_index(0.25, 0.001, "A") != setup_index(0.25, 0.001, "B")
+    assert setup_index(0.25, 0.001, "A") != setup_index(0.50, 0.001, "A")
+    assert len(inputs.setup_labels) == 3

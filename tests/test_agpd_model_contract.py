@@ -128,11 +128,11 @@ def test_oh_order_map_matches_preprocessing(agpd_contract_data):
 
 def test_co_order_map_matches_preprocessing(agpd_contract_data):
     config = agpd_contract_data["config"]
-    summary = agpd_contract_data["summary"]
+    selected = agpd_contract_data["selected"]
     model_data = agpd_contract_data["model_data"]
     mean_log_rate = agpd_contract_data["mean_log_rate"]
 
-    expected = calculate_agpd_co_order(summary, config)
+    expected = calculate_agpd_co_order(selected, config)
 
     order_map = build_adjacent_log_order_map(
         model_points=model_data.model_points,

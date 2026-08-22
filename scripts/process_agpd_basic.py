@@ -11,6 +11,7 @@ from mkm.preprocessing.agpd_basic import (
     truncate_agpd_analysis,
     calculate_agpd_co_order,
     calculate_agpd_oh_order,
+    calculate_agpd_co_order_replicates,
 )
 
 
@@ -31,6 +32,7 @@ SUMMARY_SELECTED_PATH = ANALYSIS_DIR / "AgPd_COOx_basic_summary.parquet"
 TRUNCATION_PATH = ANALYSIS_DIR / "AgPd_COOx_basic_truncation.parquet"
 DELTA_OH_PATH = ANALYSIS_DIR / "AgPd_COOx_basic_delta_OH.parquet"
 DELTA_CO_PATH = ANALYSIS_DIR / "AgPd_COOx_basic_delta_CO.parquet"
+DELTA_CO_REPLICATES_PATH = ANALYSIS_DIR / "AgPd_COOx_basic_delta_CO_replicates.parquet"
 
 
 def main():
@@ -46,13 +48,15 @@ def main():
     summary_selected = summarize_agpd_replicates(analysis_rates=analysis_selected, config=config)
 
     delta_OH = calculate_agpd_oh_order(summary=summary_selected, config=config)
-    delta_CO = calculate_agpd_co_order(summary=summary_selected, config=config)
-
-    delta_OH.to_parquet(DELTA_OH_PATH, index=False)
-    delta_CO.to_parquet(DELTA_CO_PATH, index=False)
+    delta_CO_replicates = calculate_agpd_co_order_replicates(analysis_rates=analysis_selected, config=config)
+    delta_CO = calculate_agpd_co_order(analysis_rates=analysis_selected, config=config)
 
     STANDARDIZED_DIR.mkdir(parents=True, exist_ok=True)
     ANALYSIS_DIR.mkdir(parents=True, exist_ok=True)
+
+    delta_OH.to_parquet(DELTA_OH_PATH, index=False)
+    delta_CO_replicates.to_parquet(DELTA_CO_REPLICATES_PATH, index=False)
+    delta_CO.to_parquet(DELTA_CO_PATH, index=False)
 
     standardized.to_parquet(STANDARDIZED_PATH, index=False)
     analysis_full.to_parquet(ANALYSIS_FULL_PATH, index=False)
@@ -66,7 +70,8 @@ def main():
     print(f"Selected summary data: {len(summary_selected)} rows")
     print(f"Conditions truncated: {(truncation['n_points_retained'] < truncation['n_points_original']).sum()}")
     print(f"OH-order data: {len(delta_OH)} rows")
-    print(f"CO-order data: {len(delta_CO)} rows")
+    print(f"CO-order replicate data: {len(delta_CO_replicates)} rows")
+    print(f"CO-order summary data: {len(delta_CO)} rows")
 
     print(f"Saved standardized data to: {STANDARDIZED_PATH}")
     print(f"Saved full analysis data to: {ANALYSIS_FULL_PATH}")
@@ -74,7 +79,8 @@ def main():
     print(f"Saved selected summary to: {SUMMARY_SELECTED_PATH}")
     print(f"Saved truncation metadata to: {TRUNCATION_PATH}")
     print(f"Saved OH-order data to: {DELTA_OH_PATH}")
-    print(f"Saved CO-order data to: {DELTA_CO_PATH}")
+    print(f"Saved CO-order replicate data to: {DELTA_CO_REPLICATES_PATH}")
+    print(f"Saved CO-order summary data to: {DELTA_CO_PATH}")
 
 
 if __name__ == "__main__":

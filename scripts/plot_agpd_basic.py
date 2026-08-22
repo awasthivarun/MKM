@@ -18,6 +18,7 @@ SUMMARY_PATH = ANALYSIS_DIR / "AgPd_COOx_basic_summary.parquet"
 TRUNCATION_PATH = ANALYSIS_DIR / "AgPd_COOx_basic_truncation.parquet"
 DELTA_OH_PATH = ANALYSIS_DIR / "AgPd_COOx_basic_delta_OH.parquet"
 DELTA_CO_PATH = ANALYSIS_DIR / "AgPd_COOx_basic_delta_CO.parquet"
+DELTA_CO_REPLICATES_PATH = ANALYSIS_DIR / "AgPd_COOx_basic_delta_CO_replicates.parquet"
 
 FIGURE_DIR = REPO_ROOT / "figures" / "preprocessing" / "AgPd_COOx_basic"
 
@@ -32,6 +33,7 @@ def main():
     truncation = pd.read_parquet(TRUNCATION_PATH)
     delta_OH = pd.read_parquet(DELTA_OH_PATH)
     delta_CO = pd.read_parquet(DELTA_CO_PATH)
+    delta_CO_replicates = pd.read_parquet(DELTA_CO_REPLICATES_PATH)
 
     FIGURE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -46,7 +48,12 @@ def main():
         )
 
         figures["delta_OH"] = plot_agpd_oh_order(delta_OH=delta_OH, material=material, config=config)
-        figures["delta_CO"] = plot_agpd_co_order(delta_CO=delta_CO, material=material, config=config)
+        figures["delta_CO"] = plot_agpd_co_order(
+            delta_CO_replicates=delta_CO_replicates,
+            delta_CO=delta_CO,
+            material=material,
+            config=config,
+        )
 
         for figure_name, figure in figures.items():
             output_path = FIGURE_DIR / f"{material}_{figure_name}.png"

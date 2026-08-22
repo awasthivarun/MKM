@@ -42,6 +42,19 @@ likelihood:
   sigma_prior_median: 0.20
   sigma_prior_log_sd: 0.75
 
+  setup_intercept:
+    group_columns:
+      - material
+      - electrolyte_concentration_M
+      - replicate
+
+    zero_sum_within:
+      - material
+      - electrolyte_concentration_M
+
+    prior_median: 0.10
+    prior_log_sd: 0.75
+
 prior_profiles:
   Ag10Pd90:
     BF:

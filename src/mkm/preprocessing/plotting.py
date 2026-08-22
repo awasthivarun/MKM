@@ -274,7 +274,7 @@ def plot_agpd_oh_order(delta_OH, material, config):
     return fig
 
 
-def plot_agpd_co_order(delta_CO, material, config):
+def plot_agpd_co_order(delta_CO_replicates, delta_CO, material, config):
     if material not in config["materials"]:
         raise ValueError(f"Unknown material '{material}'.")
 
@@ -296,6 +296,13 @@ def plot_agpd_co_order(delta_CO, material, config):
         for col, C_KOH_M in enumerate(KOH_values):
             ax = axes[row, col]
 
+            replicate_condition = delta_CO_replicates[
+                (delta_CO_replicates["material"] == material)
+                & (delta_CO_replicates["C_KOH_M"] == C_KOH_M)
+                & (delta_CO_replicates["CO_lower_mole_fraction"] == lower_CO)
+                & (delta_CO_replicates["CO_upper_mole_fraction"] == upper_CO)
+            ]
+            
             condition = delta_CO[
                 (delta_CO["material"] == material)
                 & (delta_CO["C_KOH_M"] == C_KOH_M)
@@ -312,6 +319,17 @@ def plot_agpd_co_order(delta_CO, material, config):
             potential = condition["E_V_SHE"].to_numpy()
             mean = condition["delta_CO"].to_numpy()
             sd = condition["delta_CO_sd"].to_numpy()
+
+            for replicate in config["replicates"]:
+                curve = replicate_condition[replicate_condition["replicate"] == replicate].sort_values("E_V_SHE")
+
+                if curve.empty:
+                    raise ValueError(
+                        f"No paired CO-order data found for replicate {replicate}, {material}, "
+                        f"{C_KOH_M:g} M KOH, {100 * lower_CO:g}% to {100 * upper_CO:g}% CO."
+                    )
+
+                ax.plot(curve["E_V_SHE"], curve["delta_CO"], linewidth=1.0, alpha=0.35)
 
             ax.fill_between(potential, mean - sd, mean + sd, alpha=0.20, linewidth=0)
             ax.plot(potential, mean, linewidth=2.0)

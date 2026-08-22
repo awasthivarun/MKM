@@ -29,7 +29,15 @@ def _specify_model_point_vector(value, n_model_points, name):
     return pt.specify_shape(tensor, (n_model_points,))
 
 
-def build_pymc_model(inputs: ModelInputArrays, mechanism, sigma_prior_median=0.20, sigma_prior_log_sd=0.75):
+def build_pymc_model(
+    inputs: ModelInputArrays,
+    mechanism,
+    sigma_prior_median=0.20,
+    sigma_prior_log_sd=0.75,
+    setup_intercept=False,
+    setup_prior_median=0.10,
+    setup_prior_log_sd=0.75,
+):
     coords = build_model_coords(inputs)
     point_inputs = build_model_point_inputs(inputs)
     n_model_points = len(point_inputs.E_V_SHE)
@@ -61,6 +69,9 @@ def build_pymc_model(inputs: ModelInputArrays, mechanism, sigma_prior_median=0.2
             inputs=inputs,
             sigma_prior_median=sigma_prior_median,
             sigma_prior_log_sd=sigma_prior_log_sd,
+            setup_intercept=setup_intercept,
+            setup_prior_median=setup_prior_median,
+            setup_prior_log_sd=setup_prior_log_sd,
         )
-
+        
     return BuiltModel(model=model, mechanism_result=registered_result, likelihood=likelihood)

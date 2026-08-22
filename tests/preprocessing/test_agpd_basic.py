@@ -11,6 +11,7 @@ from mkm.preprocessing.agpd_basic import (
     build_agpd_analysis_grid,
     calculate_agpd_co_order,
     calculate_agpd_oh_order,
+    calculate_agpd_co_order_replicates,
     load_agpd_workbook,
     summarize_agpd_replicates,
     truncate_agpd_analysis,
@@ -584,6 +585,15 @@ def _build_selected_agpd_summary(path, config):
     return summarize_agpd_replicates(selected, config)
 
 
+def _build_selected_agpd_replicates(path, config):
+    standardized = load_agpd_workbook(path, config)
+    analysis = build_agpd_analysis_grid(standardized, config)
+    analysis = add_agpd_rates(analysis, config)
+    selected, _ = truncate_agpd_analysis(analysis, config)
+
+    return selected
+
+
 def test_agpd_oh_order_structure(config):
     path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
 
@@ -624,8 +634,8 @@ def test_agpd_oh_order_uses_common_selected_grid(config):
 def test_agpd_co_order_structure(config):
     path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
 
-    summary = _build_selected_agpd_summary(path, config)
-    delta_CO = calculate_agpd_co_order(summary, config)
+    selected = _build_selected_agpd_replicates(path, config)
+    delta_CO = calculate_agpd_co_order(selected, config)
 
     assert not delta_CO.empty
 
@@ -640,13 +650,13 @@ def test_agpd_co_order_structure(config):
 def test_agpd_co_order_uses_pair_specific_selected_grid(config):
     path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
 
-    summary = _build_selected_agpd_summary(path, config)
-    delta_CO = calculate_agpd_co_order(summary, config)
+    selected = _build_selected_agpd_replicates(path, config)
+    delta_CO = calculate_agpd_co_order(selected, config)
 
     CO_values = config["CO_mole_fractions"]
 
     for C_KOH_M in config["KOH_concentrations_M"]:
-        concentration_data = summary[summary["C_KOH_M"] == C_KOH_M]
+        concentration_data = selected[selected["C_KOH_M"] == C_KOH_M]
 
         for i in range(len(CO_values) - 1):
             lower = CO_values[i]
@@ -670,3 +680,81 @@ def test_agpd_co_order_uses_pair_specific_selected_grid(config):
             )
 
             assert observed_indices == expected_indices
+
+
+def test_agpd_co_order_replicates_preserve_pairing(config):
+    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
+
+    selected = _build_selected_agpd_replicates(path, config)
+    delta_CO_replicates = calculate_agpd_co_order_replicates(selected, config)
+
+    assert set(delta_CO_replicates["replicate"]) == set(config["replicates"])
+
+    key_columns = [
+        "material",
+        "C_KOH_M",
+        "CO_lower_mole_fraction",
+        "CO_upper_mole_fraction",
+        "analysis_grid_index",
+    ]
+
+    counts = delta_CO_replicates.groupby(key_columns)["replicate"].nunique()
+
+    assert np.all(counts.to_numpy() == len(config["replicates"]))
+
+
+def test_agpd_co_order_replicate_matches_direct_log_rate_difference(config):
+    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
+
+    selected = _build_selected_agpd_replicates(path, config)
+    delta_CO_replicates = calculate_agpd_co_order_replicates(selected, config)
+
+    row = delta_CO_replicates.iloc[0]
+
+    lower = selected[
+        (selected["material"] == row["material"])
+        & (selected["C_KOH_M"] == row["C_KOH_M"])
+        & (selected["replicate"] == row["replicate"])
+        & (selected["CO_mole_fraction"] == row["CO_lower_mole_fraction"])
+        & (selected["analysis_grid_index"] == row["analysis_grid_index"])
+    ].iloc[0]
+
+    upper = selected[
+        (selected["material"] == row["material"])
+        & (selected["C_KOH_M"] == row["C_KOH_M"])
+        & (selected["replicate"] == row["replicate"])
+        & (selected["CO_mole_fraction"] == row["CO_upper_mole_fraction"])
+        & (selected["analysis_grid_index"] == row["analysis_grid_index"])
+    ].iloc[0]
+
+    expected = (upper["ln_rate"] - lower["ln_rate"]) / np.log(
+        row["CO_upper_mole_fraction"] / row["CO_lower_mole_fraction"]
+    )
+
+    np.testing.assert_allclose(row["delta_CO"], expected, rtol=1e-12, atol=1e-12)
+
+
+def test_agpd_co_order_summary_matches_paired_replicates(config):
+    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
+
+    selected = _build_selected_agpd_replicates(path, config)
+    delta_CO_replicates = calculate_agpd_co_order_replicates(selected, config)
+    delta_CO = calculate_agpd_co_order(selected, config)
+
+    group_columns = [
+        "material",
+        "C_KOH_M",
+        "CO_lower_mole_fraction",
+        "CO_upper_mole_fraction",
+        "analysis_grid_index",
+        "E_V_SHE",
+    ]
+
+    expected = (
+        delta_CO_replicates.groupby(group_columns, sort=False)
+        .agg(delta_CO_expected=("delta_CO", "mean"), delta_CO_sd_expected=("delta_CO", "std"))
+        .reset_index()
+    )
+
+    np.testing.assert_allclose(delta_CO["delta_CO"], expected["delta_CO_expected"])
+    np.testing.assert_allclose(delta_CO["delta_CO_sd"], expected["delta_CO_sd_expected"])

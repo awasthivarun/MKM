@@ -25,6 +25,15 @@ replicates:
   - B
   - C
 
+experimental_design:
+  CO_series:
+    paired_variable: CO_mole_fraction
+    paired_within:
+      - material
+      - C_KOH_M
+      - replicate
+    KOH_concentrations_are_independent_setups: true
+
 potential:
   reference: SHE
   unit: V
