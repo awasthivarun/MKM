@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import pymc as pm
 import pytensor.tensor as pt
 
-from mkm.inference.likelihoods import LogRateLikelihood, add_material_log_rate_likelihood
+from mkm.inference.likelihoods import LogRateLikelihood, add_log_rate_likelihood
 from mkm.mechanisms.base import MechanismResult, validate_mechanism_result
 from mkm.model_inputs import ModelInputArrays, build_model_coords, build_model_point_inputs
 
@@ -64,7 +64,7 @@ def build_pymc_model(
 
         registered_result = MechanismResult(ln_rate=ln_rate_model, pointwise=registered_pointwise)
 
-        likelihood = add_material_log_rate_likelihood(
+        likelihood = add_log_rate_likelihood(
             ln_rate_model=ln_rate_model,
             inputs=inputs,
             sigma_prior_median=sigma_prior_median,
@@ -73,5 +73,5 @@ def build_pymc_model(
             setup_prior_median=setup_prior_median,
             setup_prior_log_sd=setup_prior_log_sd,
         )
-        
+
     return BuiltModel(model=model, mechanism_result=registered_result, likelihood=likelihood)

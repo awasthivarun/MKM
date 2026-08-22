@@ -29,7 +29,7 @@ def get_observation_material_index(inputs: ModelInputArrays):
     return np.asarray(observation_material_index, dtype=np.int64)
 
 
-def add_material_log_rate_likelihood(
+def add_log_rate_likelihood(
     ln_rate_model,
     inputs: ModelInputArrays,
     sigma_prior_median=0.20,
@@ -183,3 +183,7 @@ def add_material_log_rate_likelihood(
         sigma_observation=sigma_observation,
         observed=observed,
     )
+
+
+def add_material_log_rate_likelihood(*args, **kwargs):
+    return add_log_rate_likelihood(*args, **kwargs)

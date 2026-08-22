@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from typing import Callable
 
 from mkm.inference.priors import build_named_priors
@@ -53,7 +53,7 @@ def build_agpd_mechanism(model_name, material, config):
 
     parameter_specs = profile["parameters"]
 
-    expected_parameters = {field.name for field in definition.parameter_class.__dataclass_fields__.values()}
+    expected_parameters = {field.name for field in fields(definition.parameter_class)}
     configured_parameters = set(parameter_specs)
 
     if configured_parameters != expected_parameters:

@@ -3,6 +3,7 @@
 The AgPd basic rebuild has progressed through preprocessing, model construction, prior predictive checks, posterior inference, likelihood refinement, posterior observable diagnostics, residual diagnostics, and an initial PSIS-LOO comparison for Ag10Pd90.
 **Current checkpoint:** 160 tests passing.
 **Current focus:** make Ag10Pd90 post-processing permanent and reproducible before moving to other AgPd compositions.
+**Development branch context:** active rebuild work is on `rebuild/from-scratch`, with Ag10Pd90 currently the most developed posterior-analysis case.
 The current repository contains:
 - AgPd basic-data preprocessing and processed-data contracts
 - nonrectangular model-data indexing

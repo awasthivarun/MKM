@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from mkm.model_data import build_model_data
 
@@ -95,3 +96,11 @@ def test_model_data_ids_are_contiguous():
     np.testing.assert_array_equal(result.conditions["condition_id"].to_numpy(), np.arange(len(result.conditions)))
     np.testing.assert_array_equal(result.model_points["model_point_id"].to_numpy(), np.arange(len(result.model_points)))
     np.testing.assert_array_equal(result.observations["observation_id"].to_numpy(), np.arange(len(result.observations)))
+
+
+def test_model_data_rejects_inconsistent_log_rate():
+    data = _make_incomplete_test_data()
+    data.loc[0, "ln_rate"] = data.loc[0, "ln_rate"] + 1e-3
+
+    with pytest.raises(ValueError, match="ln_rate is inconsistent with rate_s_inv"):
+        build_model_data(selected_replicates=data, electrolyte_concentration_column="C_KOH_M")

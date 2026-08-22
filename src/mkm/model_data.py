@@ -63,13 +63,13 @@ def build_model_data(selected_replicates, electrolyte_concentration_column):
     if np.any(data["rate_s_inv"].to_numpy() <= 0):
         raise ValueError("Rates must be positive.")
 
-    np.testing.assert_allclose(
+    if not np.allclose(
         data["ln_rate"].to_numpy(),
         np.log(data["rate_s_inv"].to_numpy()),
         rtol=1e-10,
         atol=1e-12,
-        err_msg="ln_rate is inconsistent with rate_s_inv.",
-    )
+    ):
+        raise ValueError("ln_rate is inconsistent with rate_s_inv.")
 
     duplicate_observations = data.duplicated(
         subset=["material", "electrolyte_concentration_M", "CO_mole_fraction", "replicate", "analysis_grid_index"]

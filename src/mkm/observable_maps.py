@@ -247,8 +247,8 @@ def evaluate_linear_observable_map(log_rate, observable_map):
 
     return result
 
-def evaluate_linear_observable_map_draws(log_rate, observable_map):
 
+def evaluate_linear_observable_map_draws(log_rate, observable_map):
     log_rate = np.asarray(log_rate, dtype=float)
 
     if log_rate.ndim < 1:

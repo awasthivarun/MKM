@@ -3,7 +3,11 @@ import pandas as pd
 import pymc as pm
 import pytest
 
-from mkm.inference.likelihoods import add_material_log_rate_likelihood, get_observation_material_index
+from mkm.inference.likelihoods import (
+    add_log_rate_likelihood,
+    add_material_log_rate_likelihood,
+    get_observation_material_index,
+)
 from mkm.model_data import build_model_data
 from mkm.model_inputs import build_model_coords, build_model_input_arrays
 
@@ -72,7 +76,7 @@ def test_likelihood_prediction_mapping():
 
     with pm.Model(coords=coords) as model:
         ln_rate_model = pm.Data("ln_rate_model", ln_rate_model_values, dims="model_point")
-        likelihood = add_material_log_rate_likelihood(ln_rate_model=ln_rate_model, inputs=inputs)
+        likelihood = add_log_rate_likelihood(ln_rate_model=ln_rate_model, inputs=inputs)
 
     assert likelihood.mu_observation.ndim == 1
     assert likelihood.sigma_observation.ndim == 1
@@ -87,7 +91,7 @@ def test_likelihood_initial_logp_is_finite():
 
     with pm.Model(coords=coords) as model:
         ln_rate_model = pm.Data("ln_rate_model", ln_rate_model_values, dims="model_point")
-        add_material_log_rate_likelihood(ln_rate_model=ln_rate_model, inputs=inputs)
+        add_log_rate_likelihood(ln_rate_model=ln_rate_model, inputs=inputs)
 
     initial_point = model.initial_point()
     logp = model.compile_logp()(initial_point)
@@ -102,7 +106,7 @@ def test_material_sigma_has_one_value_per_material():
 
     with pm.Model(coords=coords) as model:
         ln_rate_model = pm.Data("ln_rate_model", np.array([1.0, 1.2, 2.0]), dims="model_point")
-        add_material_log_rate_likelihood(ln_rate_model=ln_rate_model, inputs=inputs)
+        add_log_rate_likelihood(ln_rate_model=ln_rate_model, inputs=inputs)
         prior = pm.sample_prior_predictive(draws=20, random_seed=123)
 
     assert prior.prior["sigma_ln_rate_material"].sizes["material"] == 2
@@ -120,7 +124,7 @@ def test_setup_intercept_likelihood_structure():
     with pm.Model(coords=coords) as model:
         ln_rate_model = pm.Data("ln_rate_model", ln_rate_model_values, dims="model_point")
 
-        likelihood = add_material_log_rate_likelihood(
+        likelihood = add_log_rate_likelihood(
             ln_rate_model=ln_rate_model,
             inputs=inputs,
             setup_intercept=True,
@@ -150,7 +154,7 @@ def test_setup_intercept_requires_setup_indexed_inputs():
         )
 
         with pytest.raises(ValueError, match="setup-indexed"):
-            add_material_log_rate_likelihood(
+            add_log_rate_likelihood(
                 ln_rate_model=ln_rate_model,
                 inputs=inputs,
                 setup_intercept=True,
@@ -172,7 +176,7 @@ def test_setup_offsets_sum_to_zero_within_experiment():
             dims="model_point",
         )
 
-        add_material_log_rate_likelihood(
+        add_log_rate_likelihood(
             ln_rate_model=ln_rate_model,
             inputs=inputs,
             setup_intercept=True,
@@ -198,3 +202,17 @@ def test_setup_offsets_sum_to_zero_within_experiment():
             rtol=0,
             atol=1e-12,
         )
+
+
+def test_likelihood_backward_compatible_alias_returns_same_types():
+    inputs = _build_test_inputs()
+    coords = build_model_coords(inputs)
+    ln_rate_model_values = np.array([1.0, 1.2, 2.0])
+
+    with pm.Model(coords=coords):
+        ln_rate_model = pm.Data("ln_rate_model", ln_rate_model_values, dims="model_point")
+        canonical = add_log_rate_likelihood(ln_rate_model=ln_rate_model, inputs=inputs)
+        alias = add_material_log_rate_likelihood(ln_rate_model=ln_rate_model, inputs=inputs)
+
+    assert type(alias) is type(canonical)
+    assert alias.observed.name == canonical.observed.name

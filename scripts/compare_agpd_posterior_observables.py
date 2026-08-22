@@ -1,3 +1,10 @@
+"""Compare posterior observables to experimental summaries for AgPd models.
+
+This script currently combines numerical diagnostics and plotting in one place.
+It is functional and retained as-is for reproducibility, with extraction to reusable
+post-processing modules planned in a future refactor that must preserve scientific behavior.
+"""
+
 from argparse import ArgumentParser
 from pathlib import Path
 

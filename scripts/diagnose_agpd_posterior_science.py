@@ -1,3 +1,10 @@
+"""Generate broad posterior science diagnostics for AgPd model fits.
+
+This script currently contains both reusable calculations and plotting/report assembly.
+It is functional and intentionally preserved during housekeeping, with future extraction
+to dedicated post-processing modules planned without changing scientific behavior here.
+"""
+
 from argparse import ArgumentParser
 from pathlib import Path
 

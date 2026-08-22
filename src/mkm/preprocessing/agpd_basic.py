@@ -225,9 +225,6 @@ def _as_increasing_curve(potential, values, label):
     return potential, values
 
 
-_CONDITION_COLUMNS = ["material", "C_KOH_M", "CO_mole_fraction"]
-
-
 def _build_analysis_grid(overlap_min, overlap_max, spacing, origin):
     if spacing <= 0:
         raise DataValidationError("Analysis-grid spacing must be greater than zero.")
