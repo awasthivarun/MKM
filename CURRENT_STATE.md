@@ -24,7 +24,7 @@ Completed:
 - Pytest from repository root.
 - Separation of preprocessing configuration, model configuration, priors, and mechanism registry.
 - Actual observed condition combinations are represented rather than forcing rectangular concentration × pressure grids.
-- Current tests: **174 passed**.
+- Current tests: **176 passed**.
 Current warnings:
 - Existing `threadpoolctl` Intel/LLVM OpenMP warnings from the Windows environment.
 - One `NumbaPerformanceWarning` from the tiny setup-centering matrix dot product during prior predictive testing. This is currently treated as performance-only and is not being changed unless it affects real fits.

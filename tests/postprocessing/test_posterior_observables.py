@@ -5,9 +5,10 @@ import xarray as xr
 from mkm.postprocessing.observables import (
     summarize_posterior_linear_observable,
     summarize_posterior_model_variable,
+    summarize_pointwise_posterior_variable,
 )
 from mkm.observable_maps import LinearObservableMap
-
+from types import SimpleNamespace
 
 def _make_idata():
     ln_rate = np.array(
@@ -73,3 +74,78 @@ def test_inference_posterior_diagnostics_remains_compatible():
     )
 
     assert old_import is new_import
+
+def test_pointwise_summary_uses_generic_statistic_columns():
+    posterior = xr.Dataset(
+        {
+            "theta_CO": (
+                ("chain", "draw", "model_point"),
+                np.array(
+                    [
+                        [[0.1, 0.2], [0.3, 0.4]],
+                        [[0.2, 0.3], [0.4, 0.5]],
+                    ]
+                ),
+            ),
+        }
+    )
+
+    inference_data = SimpleNamespace(
+        posterior=posterior
+    )
+
+    model_points = pd.DataFrame(
+        {
+            "model_point_id": [0, 1],
+        }
+    )
+
+    result = summarize_pointwise_posterior_variable(
+        inference_data=inference_data,
+        model_points=model_points,
+        variable_name="theta_CO",
+    )
+
+    assert {
+        "mean",
+        "sd",
+        "q025",
+        "q50",
+        "q975",
+    }.issubset(result.columns)
+
+    assert "theta_CO_q50" not in result.columns
+
+def test_model_variable_summary_retains_prefixed_columns():
+    posterior = xr.Dataset(
+        {
+            "theta_CO": (
+                ("chain", "draw", "model_point"),
+                np.array(
+                    [
+                        [[0.1], [0.2]],
+                        [[0.3], [0.4]],
+                    ]
+                ),
+            ),
+        }
+    )
+
+    inference_data = SimpleNamespace(
+        posterior=posterior
+    )
+
+    model_points = pd.DataFrame(
+        {
+            "model_point_id": [0],
+        }
+    )
+
+    result = summarize_posterior_model_variable(
+        inference_data=inference_data,
+        model_points=model_points,
+        variable_name="theta_CO",
+    )
+
+    assert "theta_CO_q50" in result.columns
+    assert "q50" not in result.columns

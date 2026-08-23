@@ -34,13 +34,22 @@ def _summarize(values, axis):
     }
 
 
-def summarize_posterior_model_variable(inference_data, model_points, variable_name):
+def summarize_pointwise_posterior_variable(
+    inference_data,
+    model_points,
+    variable_name,
+):
     posterior = _get_posterior(inference_data)
 
     if variable_name not in posterior:
-        raise ValueError(f"Posterior does not contain '{variable_name}'.")
+        raise ValueError(
+            f"Posterior does not contain '{variable_name}'."
+        )
 
-    values = np.asarray(posterior[variable_name], dtype=float)
+    values = np.asarray(
+        posterior[variable_name],
+        dtype=float,
+    )
 
     if values.ndim != 3:
         raise ValueError(
@@ -50,18 +59,52 @@ def summarize_posterior_model_variable(inference_data, model_points, variable_na
 
     if values.shape[-1] != len(model_points):
         raise ValueError(
-            f"Posterior variable '{variable_name}' does not align with model points."
+            f"Posterior variable '{variable_name}' does not align "
+            "with model points."
         )
 
-    flattened = values.reshape((-1, values.shape[-1]))
-    summary = _summarize(flattened, axis=0)
+    flattened = values.reshape(
+        (-1, values.shape[-1])
+    )
+
+    summary = _summarize(
+        flattened,
+        axis=0,
+    )
 
     result = model_points.copy()
 
     for statistic, statistic_values in summary.items():
-        result[f"{variable_name}_{statistic}"] = statistic_values
+        result[statistic] = statistic_values
 
     return result
+
+
+def summarize_posterior_model_variable(
+    inference_data,
+    model_points,
+    variable_name,
+):
+    result = summarize_pointwise_posterior_variable(
+        inference_data=inference_data,
+        model_points=model_points,
+        variable_name=variable_name,
+    )
+
+    statistics = (
+        "mean",
+        "sd",
+        "q025",
+        "q50",
+        "q975",
+    )
+
+    return result.rename(
+        columns={
+            statistic: f"{variable_name}_{statistic}"
+            for statistic in statistics
+        }
+    )
 
 
 def summarize_posterior_linear_observable(inference_data, observable_map):

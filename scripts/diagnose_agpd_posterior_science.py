@@ -28,6 +28,9 @@ from mkm.postprocessing.residuals import (
     summarize_residual_curves,
     summarize_shared_replicate_residuals,
 )
+from mkm.postprocessing.observables import (
+    summarize_pointwise_posterior_variable,
+)
 
 from mkm.model_data import build_model_data
 from mkm.model_inputs import build_model_input_arrays
@@ -76,29 +79,6 @@ def _get_posterior_dir(model_name, likelihood_name):
         raise FileNotFoundError(f"Posterior not found: {posterior_path}")
 
     return path
-
-
-def _summarize_pointwise_variable(posterior, model_points, name):
-    values = flatten_posterior_samples(posterior[name])
-
-    if values.ndim != 2:
-        raise ValueError(
-            f"Pointwise posterior variable '{name}' must have one model-point dimension."
-        )
-
-    if values.shape[1] != len(model_points):
-        raise ValueError(
-            f"Posterior variable '{name}' does not align with model points."
-        )
-
-    summary = summarize_samples(values)
-
-    result = model_points.copy()
-
-    for statistic in ["mean", "sd", "q025", "q50", "q975"]:
-        result[statistic] = summary[statistic]
-
-    return result
 
 
 def _plot_observation_grid(observations, output_path, residual=False):
@@ -389,10 +369,10 @@ def main():
         if name not in posterior:
             continue
 
-        summary = _summarize_pointwise_variable(
-            posterior=posterior,
+        summary = summarize_pointwise_posterior_variable(
+            inference_data=idata,
             model_points=model_data.model_points,
-            name=name,
+            variable_name=name,
         )
 
         summary.to_parquet(

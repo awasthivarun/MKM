@@ -5,6 +5,7 @@ from mkm.postprocessing.observables import (
     summarize_pointwise_pathway_fractions,
     summarize_posterior_linear_observable,
     summarize_posterior_model_variable,
+    summarize_pointwise_posterior_variable,
 )
 
 from mkm.postprocessing.diagnostics import (
@@ -48,4 +49,5 @@ __all__ = [
     "build_observation_diagnostics",
     "summarize_residual_curves",
     "summarize_shared_replicate_residuals",
+    "summarize_pointwise_posterior_variable",
 ]

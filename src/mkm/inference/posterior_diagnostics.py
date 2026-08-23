@@ -8,6 +8,7 @@ from mkm.postprocessing.observables import (
     summarize_pointwise_pathway_fractions,
     summarize_posterior_linear_observable,
     summarize_posterior_model_variable,
+    summarize_pointwise_posterior_variable
 )
 
 __all__ = [
@@ -15,4 +16,5 @@ __all__ = [
     "summarize_pointwise_pathway_fractions",
     "summarize_posterior_linear_observable",
     "summarize_posterior_model_variable",
+    "summarize_pointwise_posterior_variable", 
 ]
