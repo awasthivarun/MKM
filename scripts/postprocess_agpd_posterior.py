@@ -1,4 +1,4 @@
-"""Generate broad posterior science diagnostics for AgPd model fits.
+"""Generate persistent numerical and graphical post-processing products for an AgPd posterior fit.
 
 This script currently contains both reusable calculations and plotting/report assembly.
 It is functional and intentionally preserved during housekeeping, with future extraction
@@ -95,8 +95,13 @@ def main():
 
     posterior_dir = _get_posterior_dir(model_name=model_name, likelihood_name=likelihood_name)
 
-    output_dir = posterior_dir / "diagnostics" / "science"
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = posterior_dir / "postprocessing"
+    tables_dir = output_dir / "tables"
+    derived_dir = output_dir / "derived"
+    figures_dir = output_dir / "figures"
+
+    for path in (tables_dir, derived_dir, figures_dir):
+        path.mkdir(parents=True, exist_ok=True)
 
     idata = az.from_netcdf(posterior_dir / "posterior.nc")
     posterior = idata.posterior
@@ -123,18 +128,10 @@ def main():
         material=MATERIAL,
         model_name=model_name,
     )
-
-    parameter_contraction.to_csv(
-        output_dir / "parameter_contraction.csv",
-        index=False,
-    )
+    parameter_contraction.to_csv(tables_dir / "parameter_contraction.csv", index=False)
 
     noise_summary = build_noise_summary(posterior)
-
-    noise_summary.to_csv(
-        output_dir / "noise_summary.csv",
-        index=False,
-    )
+    noise_summary.to_csv(tables_dir / "noise_summary.csv", index=False)
 
     observation_diagnostics = build_observation_diagnostics(
         inference_data=idata,
@@ -142,60 +139,33 @@ def main():
         inputs=inputs,
         likelihood_name=likelihood_name,
     )
-
-    observation_diagnostics.to_parquet(
-        output_dir / "observation_diagnostics.parquet",
-        index=False,
-    )
+    observation_diagnostics.to_parquet(derived_dir / "observation_diagnostics.parquet", index=False)
 
     curve_residuals = summarize_residual_curves(
         observation_diagnostics
     )
-    
-
-    curve_residuals.to_csv(
-        output_dir / "residual_curve_summary.csv",
-        index=False,
-    )
+    curve_residuals.to_csv(tables_dir / "residual_curve_summary.csv", index=False)
 
     shared_residuals = summarize_shared_replicate_residuals(
         observation_diagnostics
     )
-
-    shared_residuals.to_csv(
-        output_dir / "shared_replicate_residual_summary.csv",
-        index=False,
-    )
+    shared_residuals.to_csv(tables_dir / "shared_replicate_residual_summary.csv", index=False)
 
     physical_summary = build_physical_summary(posterior)
-
-    physical_summary.to_csv(
-        output_dir / "physical_summary.csv",
-        index=False,
-    )
+    physical_summary.to_csv(tables_dir / "physical_summary.csv", index=False)
 
     balance_summary = build_balance_summary(posterior)
-
-    balance_summary.to_csv(
-        output_dir / "balance_summary.csv",
-        index=False,
-    )
+    balance_summary.to_csv(tables_dir / "balance_summary.csv", index=False)
 
     plot_observation_grid(
         observations=observation_diagnostics,
-        output_path=(
-            output_dir
-            / "posterior_predictive_log_rate.png"
-        ),
+        output_path=figures_dir / "posterior_predictive_log_rate.png",
         residual=False,
     )
 
     plot_observation_grid(
         observations=observation_diagnostics,
-        output_path=(
-            output_dir
-            / "conditional_log_rate_residuals.png"
-        ),
+        output_path=figures_dir / "conditional_log_rate_residuals.png",
         residual=True,
     )
 
@@ -220,16 +190,8 @@ def main():
             variable_name=name,
         )
 
-        summary.to_parquet(
-            output_dir / f"{name}.parquet",
-            index=False,
-        )
-
-        plot_pointwise_variable(
-            summary=summary,
-            variable_name=name,
-            output_path=output_dir / f"{name}.png",
-        )
+        summary.to_parquet(derived_dir / f"{name}.parquet", index=False)
+        plot_pointwise_variable(summary=summary, variable_name=name, output_path=figures_dir / f"{name}.png")
 
     print(f"\n{MATERIAL}: {model_name}")
     print(f"Likelihood: {likelihood_name}")
@@ -312,7 +274,7 @@ def main():
     else:
         print(balance_summary.to_string(index=False))
 
-    print(f"\nSaved diagnostics to: {output_dir}")
+    print(f"\nSaved post-processing to: {output_dir}")
 
 
 if __name__ == "__main__":

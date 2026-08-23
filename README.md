@@ -52,3 +52,11 @@ python scripts/process_agpd_basic.py
 python scripts/plot_agpd_basic.py
 python scripts/fit_agpd_posterior.py BF_LH --likelihood setup_intercept
 pytest tests -v
+
+postprocess_agpd_posterior.py
+    canonical
+    Generates persistent posterior tables, derived numerical products, and figures.
+
+diagnose_agpd_posterior_science.py
+    compatibility
+    Legacy command forwarding to postprocess_agpd_posterior.py.
