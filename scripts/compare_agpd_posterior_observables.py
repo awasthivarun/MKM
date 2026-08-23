@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import yaml
 
-from mkm.inference.posterior_diagnostics import summarize_posterior_linear_observable
+from mkm.postprocessing.observables import summarize_posterior_linear_observable
 from mkm.model_data import build_model_data
 from mkm.observable_maps import build_adjacent_log_order_map, build_alpha_map, build_log_slope_order_map
 from mkm.models.agpd_basic import available_agpd_models

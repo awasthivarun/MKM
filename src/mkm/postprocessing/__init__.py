@@ -1,7 +1,4 @@
-"""Backward-compatible imports for posterior post-processing utilities.
-
-New code should import these functions from ``mkm.postprocessing.observables``.
-"""
+"""Posterior-derived calculations, diagnostics, and model comparison."""
 
 from mkm.postprocessing.observables import (
     PosteriorObservableSummary,

@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from mkm.inference.posterior_diagnostics import (
+from mkm.postprocessing.observables import (
     summarize_posterior_linear_observable,
     summarize_posterior_model_variable,
 )
@@ -63,3 +63,13 @@ def test_posterior_linear_observable_preserves_chain_information():
     assert len(summary.pooled) == 1
     assert len(summary.by_chain) == 2
     np.testing.assert_allclose(summary.pooled.loc[0, "q50"], 3.0)
+
+def test_inference_posterior_diagnostics_remains_compatible():
+    from mkm.inference.posterior_diagnostics import (
+        summarize_posterior_linear_observable as old_import,
+    )
+    from mkm.postprocessing.observables import (
+        summarize_posterior_linear_observable as new_import,
+    )
+
+    assert old_import is new_import
