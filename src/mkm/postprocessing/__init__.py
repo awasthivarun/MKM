@@ -43,6 +43,17 @@ from mkm.postprocessing.sampling import (
     sampling_parameter_names,
 )
 
+from mkm.postprocessing.model_comparison import (
+    LOOModelComparison,
+    build_loo_model_comparison,
+    build_loo_summary,
+    build_pareto_k_table,
+    build_pointwise_elpd_differences,
+    build_pointwise_elpd_table,
+    compute_loo_results,
+    summarize_pointwise_elpd_differences,
+)
+
 __all__ = [
     "PosteriorObservableSummary",
     "summarize_pointwise_pathway_fractions",
@@ -70,4 +81,12 @@ __all__ = [
     "build_sampling_datatree",
     "build_sampling_diagnostics",
     "sampling_parameter_names",
+    "LOOModelComparison",
+    "build_loo_model_comparison",
+    "build_loo_summary",
+    "build_pareto_k_table",
+    "build_pointwise_elpd_differences",
+    "build_pointwise_elpd_table",
+    "compute_loo_results",
+    "summarize_pointwise_elpd_differences",
 ]

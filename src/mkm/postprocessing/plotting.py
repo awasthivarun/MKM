@@ -402,3 +402,98 @@ def plot_delta_co_comparison(comparison, output_dir: str | Path, material):
         fig.tight_layout()
         fig.savefig(Path(output_dir) / f"delta_CO_KOH_{c_koh:g}.png", dpi=220, bbox_inches="tight")
         plt.close(fig)
+
+def plot_loo_comparison(compare_table, output_path: str | Path):
+    frame = compare_table.set_index("model")
+
+    pc = azp.plot_compare(
+        frame,
+        relative_scale=True,
+        rotated=True,
+        backend="matplotlib",
+        visuals={"similar_line": True},
+    )
+    pc.add_title("PSIS-LOO model comparison")
+    pc.savefig(output_path, dpi=220, bbox_inches="tight")
+    plt.close("all")
+
+
+def plot_pareto_k(loo_result, model_name, output_path: str | Path):
+    pc = azp.plot_khat(
+        loo_result,
+        threshold=float(loo_result.good_k),
+        backend="matplotlib",
+        visuals={"hlines": True, "bin_text": True},
+    )
+    pc.add_title(f"Pareto-k diagnostics: {model_name}")
+    pc.savefig(output_path, dpi=220, bbox_inches="tight")
+    plt.close("all")
+
+
+def plot_pointwise_elpd_difference(frame, numerator_model, denominator_model, output_path: str | Path):
+    comparison = f"{numerator_model}_minus_{denominator_model}"
+    data = frame.loc[frame["comparison"] == comparison].copy()
+
+    if data.empty:
+        raise ValueError(f"No pointwise ELPD comparison found for '{comparison}'.")
+
+    koh_values = sorted(data["electrolyte_concentration_M"].unique())
+    co_values = sorted(data["CO_mole_fraction"].unique())
+
+    fig, axes = plt.subplots(
+        len(co_values),
+        len(koh_values),
+        figsize=(3.8 * len(koh_values), 2.7 * len(co_values)),
+        sharex=True,
+        sharey=True,
+        squeeze=False,
+    )
+
+    max_abs = float(np.max(np.abs(data["elpd_difference"])))
+    y_limit = 1.05 * max_abs if max_abs > 0 else 1.0
+
+    for row, co_fraction in enumerate(co_values):
+        for col, c_koh in enumerate(koh_values):
+            ax = axes[row, col]
+
+            condition = data[
+                (data["electrolyte_concentration_M"] == c_koh)
+                & (data["CO_mole_fraction"] == co_fraction)
+            ]
+
+            for replicate, curve in condition.groupby("replicate", sort=True):
+                curve = curve.sort_values("E_V_SHE")
+                ax.plot(
+                    curve["E_V_SHE"],
+                    curve["elpd_difference"],
+                    marker="o",
+                    markersize=2.5,
+                    linewidth=1.0,
+                    alpha=0.75,
+                    label=replicate,
+                )
+
+            ax.axhline(0.0, linestyle="--", linewidth=1.0, alpha=0.55)
+            ax.set_ylim(-y_limit, y_limit)
+            ax.grid(alpha=0.20)
+
+            if row == 0:
+                ax.set_title(f"{c_koh:g} M KOH")
+
+            if col == len(koh_values) - 1:
+                ax.text(
+                    1.04,
+                    0.5,
+                    f"{100 * co_fraction:g}% CO",
+                    transform=ax.transAxes,
+                    rotation=-90,
+                    va="center",
+                )
+
+    axes[0, 0].legend(title="replicate", fontsize=8)
+    fig.supxlabel("Potential (V vs SHE)")
+    fig.supylabel(f"Pointwise ELPD: {numerator_model} - {denominator_model}")
+    fig.suptitle(f"Pointwise PSIS-LOO difference: {numerator_model} vs {denominator_model}")
+    fig.tight_layout(rect=(0.04, 0.04, 0.96, 0.97))
+    fig.savefig(output_path, dpi=220, bbox_inches="tight")
+    plt.close(fig)
