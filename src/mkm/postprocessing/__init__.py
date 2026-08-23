@@ -36,6 +36,13 @@ from mkm.postprocessing.plotting import (
     plot_parameter_posteriors,
 )
 
+from mkm.postprocessing.sampling import (
+    SamplingDiagnostics,
+    build_sampling_datatree,
+    build_sampling_diagnostics,
+    sampling_parameter_names,
+)
+
 __all__ = [
     "PosteriorObservableSummary",
     "summarize_pointwise_pathway_fractions",
@@ -59,4 +66,8 @@ __all__ = [
     "plot_observation_grid", 
     "plot_pointwise_variable",
     "plot_parameter_posteriors,",
+    "SamplingDiagnostics",
+    "build_sampling_datatree",
+    "build_sampling_diagnostics",
+    "sampling_parameter_names",
 ]

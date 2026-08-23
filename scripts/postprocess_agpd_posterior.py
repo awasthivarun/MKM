@@ -27,13 +27,16 @@ from mkm.postprocessing.residuals import (
     summarize_residual_curves,
     summarize_shared_replicate_residuals,
 )
-from mkm.postprocessing.observables import (
-    summarize_pointwise_posterior_variable,
-)
+from mkm.postprocessing.observables import summarize_pointwise_posterior_variable
+from mkm.postprocessing.sampling import build_sampling_diagnostics, sampling_parameter_names
 from mkm.postprocessing.plotting import (
     plot_observation_grid,
-    plot_pointwise_variable,
     plot_parameter_posteriors,
+    plot_pointwise_variable,
+    plot_sampling_energy,
+    plot_sampling_pairs,
+    plot_sampling_rank,
+    plot_sampling_trace,
 )
 
 from mkm.model_data import build_model_data
@@ -201,8 +204,23 @@ def main():
         summary.to_parquet(derived_dir / f"{name}.parquet", index=False)
         plot_pointwise_variable(summary=summary, variable_name=name, output_path=figures_dir / f"{name}.png")
 
+    sampling_names = sampling_parameter_names(posterior, parameter_specs)
+    sampling = build_sampling_diagnostics(idata, sampling_names)
+
+    sampling.parameter_summary.to_csv(tables_dir / "sampler_parameter_diagnostics.csv", index=False)
+    sampling.run_summary.to_csv(tables_dir / "sampler_run_summary.csv", index=False)
+    sampling.bfmi_by_chain.to_csv(tables_dir / "sampler_bfmi_by_chain.csv", index=False)
+
+    plot_sampling_trace(idata, sampling_names, figures_dir / "sampler_trace.png")
+    plot_sampling_rank(idata, sampling_names, figures_dir / "sampler_rank.png")
+    plot_sampling_energy(idata, sampling_names, figures_dir / "sampler_energy.png")
+    plot_sampling_pairs(idata, sampling_names, figures_dir / "sampler_pairs.png")
+
     print(f"\n{MATERIAL}: {model_name}")
     print(f"Likelihood: {likelihood_name}")
+
+    print("\n=== SAMPLER ===")
+    print(sampling.run_summary.to_string(index=False))
 
     print("\n=== PARAMETER CONTRACTION ===")
     print(

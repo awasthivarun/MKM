@@ -1,6 +1,7 @@
 import math
 from pathlib import Path
 
+import arviz_base as azb
 import arviz_plots as azp
 import arviz_stats as azs
 import xarray as xr
@@ -8,6 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import norm, truncnorm
 
+from mkm.postprocessing.sampling import build_sampling_datatree
 
 def _prior_pdf(x, spec):
     distribution = spec["distribution"]
@@ -245,3 +247,83 @@ def plot_pointwise_variable(summary, variable_name, output_path: str | Path):
     fig.tight_layout(rect=(0.04, 0.04, 0.96, 0.97))
     fig.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close(fig)
+
+def plot_sampling_trace(inference_data, parameter_names, output_path: str | Path):
+    data = build_sampling_datatree(inference_data, parameter_names)
+    nrows = math.ceil(len(parameter_names) / 3)
+
+    pc = azp.plot_trace(
+        data,
+        var_names=parameter_names,
+        group="posterior",
+        backend="matplotlib",
+        visuals={"divergence": True},
+        col_wrap=3,
+        figure_kwargs={"figsize": (14, 3.8 * nrows), "layout": "none"},
+    )
+
+    fig = pc.get_target(parameter_names[0], {}).figure
+    fig.subplots_adjust(left=0.06, right=0.98, bottom=0.06, top=0.92, hspace=0.55, wspace=0.20)
+    fig.suptitle("MCMC sampling traces")
+
+    fig.savefig(output_path, dpi=220, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_sampling_rank(inference_data, parameter_names, output_path: str | Path):
+    data = build_sampling_datatree(inference_data, parameter_names)
+    nrows = math.ceil(len(parameter_names) / 3)
+
+    pc = azp.plot_rank(
+        data,
+        var_names=parameter_names,
+        group="posterior",
+        backend="matplotlib",
+        col_wrap=3,
+        figure_kwargs={"figsize": (14, 3.8 * nrows), "layout": "none"},
+    )
+
+    fig = pc.get_target(parameter_names[0], {}).figure
+    fig.subplots_adjust(left=0.06, right=0.98, bottom=0.06, top=0.92, hspace=0.55, wspace=0.20)
+    fig.suptitle("Chain rank diagnostics")
+
+    fig.savefig(output_path, dpi=220, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_sampling_energy(inference_data, parameter_names, output_path: str | Path):
+    data = build_sampling_datatree(inference_data, parameter_names)
+
+    pc = azp.plot_energy(data, backend="matplotlib", show_bfmi=True, threshold=0.3)
+    pc.add_title("Hamiltonian energy and BFMI")
+    pc.savefig(output_path, dpi=220, bbox_inches="tight")
+    plt.close("all")
+
+
+def plot_sampling_pairs(inference_data, parameter_names, output_path: str | Path):
+    data = build_sampling_datatree(inference_data, parameter_names)
+    n_parameters = len(parameter_names)
+    size = max(10.0, 2.1 * n_parameters)
+
+    # PlotMatrix allocates the full N x N matrix even when only the lower triangle is rendered.
+    with azb.rc_context({"plot.max_subplots": max(40, n_parameters**2)}):
+        pm = azp.plot_pair(
+            data,
+            var_names=parameter_names,
+            group="posterior",
+            marginal=True,
+            marginal_kind="kde",
+            triangle="lower",
+            levels=[0.5, 0.9],
+            backend="matplotlib",
+            visuals={
+                "scatter": {"alpha": 0.12, "s": 5},
+                "contour": True,
+                "divergence": {"alpha": 0.9, "s": 18},
+            },
+            figure_kwargs={"figsize": (size, size), "layout": "none"},
+        )
+
+    pm.add_title("Posterior parameter pair structure")
+    pm.savefig(output_path, dpi=220, bbox_inches="tight")
+    plt.close("all")
