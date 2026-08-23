@@ -497,3 +497,101 @@ def plot_pointwise_elpd_difference(frame, numerator_model, denominator_model, ou
     fig.tight_layout(rect=(0.04, 0.04, 0.96, 0.97))
     fig.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close(fig)
+
+
+def plot_loo_pit_ecdf(loo_pit, model_name, output_path: str | Path):
+    from mkm.postprocessing.calibration import build_loo_pit_datatree
+
+    data = build_loo_pit_datatree(loo_pit)
+
+    pc = azp.plot_ecdf_pit(
+        data,
+        var_names=["ln_rate_observed"],
+        group="loo_pit",
+        sample_dims=["observation"],
+        method="pot_c",
+        coverage=False,
+        backend="matplotlib",
+    )
+    pc.add_title(f"LOO-PIT calibration: {model_name}")
+    pc.savefig(output_path, dpi=220, bbox_inches="tight")
+    plt.close("all")
+
+
+def plot_loo_pit_coverage(loo_pit, model_name, output_path: str | Path):
+    from mkm.postprocessing.calibration import build_loo_pit_datatree
+
+    data = build_loo_pit_datatree(loo_pit)
+
+    pc = azp.plot_ecdf_pit(
+        data,
+        var_names=["ln_rate_observed"],
+        group="loo_pit",
+        sample_dims=["observation"],
+        method="pot_c",
+        coverage=True,
+        backend="matplotlib",
+    )
+    pc.add_title(f"LOO predictive coverage: {model_name}")
+    pc.savefig(output_path, dpi=220, bbox_inches="tight")
+    plt.close("all")
+
+def plot_loo_pit_conditions(pointwise, model_name, output_path: str | Path):
+    koh_values = sorted(pointwise["electrolyte_concentration_M"].unique())
+    co_values = sorted(pointwise["CO_mole_fraction"].unique())
+
+    fig, axes = plt.subplots(
+        len(co_values),
+        len(koh_values),
+        figsize=(3.8 * len(koh_values), 2.7 * len(co_values)),
+        sharex=True,
+        sharey=True,
+        squeeze=False,
+    )
+
+    for row, co_fraction in enumerate(co_values):
+        for col, c_koh in enumerate(koh_values):
+            ax = axes[row, col]
+            condition = pointwise[
+                (pointwise["electrolyte_concentration_M"] == c_koh)
+                & (pointwise["CO_mole_fraction"] == co_fraction)
+            ]
+
+            for replicate, curve in condition.groupby("replicate", sort=True):
+                curve = curve.sort_values("E_V_SHE")
+                ax.plot(
+                    curve["E_V_SHE"],
+                    curve["loo_pit"],
+                    marker="o",
+                    markersize=2.5,
+                    linewidth=1.0,
+                    alpha=0.75,
+                    label=replicate,
+                )
+
+            ax.axhline(0.50, linestyle="--", linewidth=1.0, alpha=0.60)
+            ax.axhline(0.05, linestyle=":", linewidth=0.8, alpha=0.40)
+            ax.axhline(0.95, linestyle=":", linewidth=0.8, alpha=0.40)
+            ax.set_ylim(-0.03, 1.03)
+            ax.grid(alpha=0.20)
+
+            if row == 0:
+                ax.set_title(f"{c_koh:g} M KOH")
+
+            if col == len(koh_values) - 1:
+                ax.text(
+                    1.04,
+                    0.5,
+                    f"{100 * co_fraction:g}% CO",
+                    transform=ax.transAxes,
+                    rotation=-90,
+                    va="center",
+                )
+
+    axes[0, 0].legend(title="replicate", fontsize=8)
+    fig.supxlabel("Potential (V vs SHE)")
+    fig.supylabel("LOO-PIT")
+    fig.suptitle(f"Condition-resolved LOO-PIT: {model_name}")
+    fig.tight_layout(rect=(0.04, 0.04, 0.96, 0.97))
+    fig.savefig(output_path, dpi=220, bbox_inches="tight")
+    plt.close(fig)
