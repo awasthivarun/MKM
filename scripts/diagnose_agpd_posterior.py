@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import yaml
 
-from mkm.inference.posterior_diagnostics import (
+from mkm.postprocessing.observables import (
     summarize_pointwise_pathway_fractions,
     summarize_posterior_linear_observable,
 )
