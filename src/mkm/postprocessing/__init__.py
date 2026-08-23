@@ -21,6 +21,14 @@ from mkm.postprocessing.diagnostics import (
     summarize_scalar_samples,
 )
 
+from mkm.postprocessing.predictions import (
+    build_observation_diagnostics,
+)
+from mkm.postprocessing.residuals import (
+    summarize_residual_curves,
+    summarize_shared_replicate_residuals,
+)
+
 __all__ = [
     "PosteriorObservableSummary",
     "summarize_pointwise_pathway_fractions",
@@ -37,4 +45,7 @@ __all__ = [
     "prior_statistics",
     "summarize_samples",
     "summarize_scalar_samples",
+    "build_observation_diagnostics",
+    "summarize_residual_curves",
+    "summarize_shared_replicate_residuals",
 ]

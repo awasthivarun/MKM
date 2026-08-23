@@ -21,8 +21,14 @@ from mkm.postprocessing.diagnostics import (
     flatten_posterior_samples,
     summarize_samples,
 )
+from mkm.postprocessing.predictions import (
+    build_observation_diagnostics,
+)
+from mkm.postprocessing.residuals import (
+    summarize_residual_curves,
+    summarize_shared_replicate_residuals,
+)
 
-from mkm.inference.likelihoods import get_observation_material_index
 from mkm.model_data import build_model_data
 from mkm.model_inputs import build_model_input_arrays
 from mkm.models.agpd_basic import available_agpd_models
@@ -43,7 +49,6 @@ CONFIG_PATH = ROOT / "config" / "models" / "agpd_basic.yaml"
 POSTERIOR_ROOT = ROOT / "results" / "AgPd_COOx_basic" / "posterior"
 
 MATERIAL = "Ag10Pd90"
-RANDOM_SEED = 20260821
 
 
 def parse_args():
@@ -71,153 +76,6 @@ def _get_posterior_dir(model_name, likelihood_name):
         raise FileNotFoundError(f"Posterior not found: {posterior_path}")
 
     return path
-
-
-def _build_observation_diagnostics(idata, model_data, inputs, likelihood_name):
-    posterior = idata.posterior
-
-    ln_rate_model = flatten_posterior_samples(posterior["ln_rate_model"])
-
-    observation_model_point_index = np.asarray(
-        inputs.observation_model_point_index,
-        dtype=np.int64,
-    )
-
-    mechanism_mu = ln_rate_model[:, observation_model_point_index]
-
-    if likelihood_name == "setup_intercept":
-        if "ln_rate_setup_offset" not in posterior:
-            raise ValueError(
-                "Setup-intercept posterior is missing 'ln_rate_setup_offset'."
-            )
-
-        if inputs.observation_setup_index is None:
-            raise ValueError("Observation setup index is missing.")
-
-        setup_offset = flatten_posterior_samples(posterior["ln_rate_setup_offset"])
-        observation_setup_index = np.asarray(
-            inputs.observation_setup_index,
-            dtype=np.int64,
-        )
-
-        conditional_mu = (
-            mechanism_mu
-            + setup_offset[:, observation_setup_index]
-        )
-    else:
-        conditional_mu = mechanism_mu
-
-    sigma_material = flatten_posterior_samples(
-        posterior["sigma_ln_rate_material"]
-    )
-
-    observation_material_index = get_observation_material_index(inputs)
-    sigma_observation = sigma_material[:, observation_material_index]
-
-    rng = np.random.default_rng(RANDOM_SEED)
-
-    posterior_predictive = (
-        conditional_mu
-        + sigma_observation
-        * rng.standard_normal(conditional_mu.shape)
-    )
-
-    mechanism_summary = summarize_samples(mechanism_mu)
-    conditional_summary = summarize_samples(conditional_mu)
-    predictive_summary = summarize_samples(posterior_predictive)
-    sigma_summary = summarize_samples(sigma_observation)
-
-    observations = model_data.observations.copy()
-
-    if len(observations) != mechanism_mu.shape[1]:
-        raise ValueError("Posterior observation mapping is inconsistent.")
-
-    observations["ln_rate_mechanism_q025"] = mechanism_summary["q025"]
-    observations["ln_rate_mechanism_q50"] = mechanism_summary["q50"]
-    observations["ln_rate_mechanism_q975"] = mechanism_summary["q975"]
-
-    observations["ln_rate_conditional_q025"] = conditional_summary["q025"]
-    observations["ln_rate_conditional_q50"] = conditional_summary["q50"]
-    observations["ln_rate_conditional_q975"] = conditional_summary["q975"]
-
-    observations["ln_rate_predictive_q025"] = predictive_summary["q025"]
-    observations["ln_rate_predictive_q50"] = predictive_summary["q50"]
-    observations["ln_rate_predictive_q975"] = predictive_summary["q975"]
-
-    observations["sigma_ln_rate_q50"] = sigma_summary["q50"]
-
-    observations["residual_mechanism"] = (
-        observations["ln_rate"]
-        - observations["ln_rate_mechanism_q50"]
-    )
-
-    observations["residual_conditional"] = (
-        observations["ln_rate"]
-        - observations["ln_rate_conditional_q50"]
-    )
-
-    observations["standardized_residual_conditional"] = (
-        observations["residual_conditional"]
-        / observations["sigma_ln_rate_q50"]
-    )
-
-    observations["observed_inside_predictive_95"] = (
-        (observations["ln_rate"] >= observations["ln_rate_predictive_q025"])
-        & (observations["ln_rate"] <= observations["ln_rate_predictive_q975"])
-    )
-
-    return observations
-
-
-def _curve_residual_summary(observation_diagnostics):
-    group_columns = [
-        "material",
-        "electrolyte_concentration_M",
-        "CO_mole_fraction",
-        "replicate",
-    ]
-
-    records = []
-
-    for group_values, curve in observation_diagnostics.groupby(
-        group_columns,
-        sort=False,
-    ):
-        curve = curve.sort_values("E_V_SHE")
-
-        potential = curve["E_V_SHE"].to_numpy(dtype=float)
-        residual = curve["residual_conditional"].to_numpy(dtype=float)
-
-        if len(residual) >= 3 and np.std(residual[:-1]) > 0 and np.std(residual[1:]) > 0:
-            lag1 = np.corrcoef(residual[:-1], residual[1:])[0, 1]
-        else:
-            lag1 = np.nan
-
-        if len(residual) >= 2:
-            potential_slope = np.polyfit(
-                potential,
-                residual,
-                1,
-            )[0]
-        else:
-            potential_slope = np.nan
-
-        records.append(
-            {
-                **{
-                    column: value
-                    for column, value in zip(group_columns, group_values)
-                },
-                "n_points": len(curve),
-                "mean_residual": np.mean(residual),
-                "mean_abs_residual": np.mean(np.abs(residual)),
-                "rms_residual": np.sqrt(np.mean(residual**2)),
-                "lag1_residual_correlation": lag1,
-                "residual_slope_per_V": potential_slope,
-            }
-        )
-
-    return pd.DataFrame(records)
 
 
 def _summarize_pointwise_variable(posterior, model_points, name):
@@ -459,8 +317,8 @@ def main():
         index=False,
     )
 
-    observation_diagnostics = _build_observation_diagnostics(
-        idata=idata,
+    observation_diagnostics = build_observation_diagnostics(
+        inference_data=idata,
         model_data=model_data,
         inputs=inputs,
         likelihood_name=likelihood_name,
@@ -471,12 +329,22 @@ def main():
         index=False,
     )
 
-    curve_residuals = _curve_residual_summary(
+    curve_residuals = summarize_residual_curves(
         observation_diagnostics
     )
+    
 
     curve_residuals.to_csv(
         output_dir / "residual_curve_summary.csv",
+        index=False,
+    )
+
+    shared_residuals = summarize_shared_replicate_residuals(
+        observation_diagnostics
+    )
+
+    shared_residuals.to_csv(
+        output_dir / "shared_replicate_residual_summary.csv",
         index=False,
     )
 
@@ -596,6 +464,14 @@ def main():
         f"median |residual slope| per V: "
         f"{curve_residuals['residual_slope_per_V'].abs().median():.3f}"
     )
+
+    if not shared_residuals.empty:
+        print(
+            "median shared squared-residual fraction: "
+            f"{shared_residuals[
+                'shared_fraction_squared_residual'
+            ].median():.3f}"
+        )
 
     print("\n=== PHYSICAL VARIABLES ===")
 
