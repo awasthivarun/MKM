@@ -33,6 +33,7 @@ from mkm.postprocessing.residuals import (
 from mkm.postprocessing.plotting import (
     plot_observation_grid,
     plot_pointwise_variable,
+    plot_parameter_posteriors,
 )
 
 __all__ = [
@@ -57,4 +58,5 @@ __all__ = [
     "summarize_pointwise_posterior_variable",
     "plot_observation_grid", 
     "plot_pointwise_variable",
+    "plot_parameter_posteriors,",
 ]

@@ -33,6 +33,7 @@ from mkm.postprocessing.observables import (
 from mkm.postprocessing.plotting import (
     plot_observation_grid,
     plot_pointwise_variable,
+    plot_parameter_posteriors,
 )
 
 from mkm.model_data import build_model_data
@@ -105,6 +106,7 @@ def main():
 
     idata = az.from_netcdf(posterior_dir / "posterior.nc")
     posterior = idata.posterior
+    parameter_specs = config["prior_profiles"][MATERIAL][model_name]["parameters"]
 
     selected = pd.read_parquet(DATA_PATH)
     selected = selected[selected["material"] == MATERIAL].copy()
@@ -129,6 +131,12 @@ def main():
         model_name=model_name,
     )
     parameter_contraction.to_csv(tables_dir / "parameter_contraction.csv", index=False)
+
+    plot_parameter_posteriors(
+        posterior=posterior,
+        parameter_specs=parameter_specs,
+        output_path=figures_dir / "posterior_parameters.png",
+    )
 
     noise_summary = build_noise_summary(posterior)
     noise_summary.to_csv(tables_dir / "noise_summary.csv", index=False)

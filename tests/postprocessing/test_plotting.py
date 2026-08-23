@@ -2,11 +2,14 @@ import matplotlib
 
 matplotlib.use("Agg")
 
+import numpy as np
 import pandas as pd
+import xarray as xr
 
 from mkm.postprocessing.plotting import (
     plot_observation_grid,
     plot_pointwise_variable,
+    plot_parameter_posteriors,
 )
 
 def test_plot_observation_grid_saves_predictive_figure(
@@ -142,6 +145,25 @@ def test_plot_pointwise_variable_saves_figure(
         variable_name="theta_CO",
         output_path=output_path,
     )
+
+    assert output_path.exists()
+    assert output_path.stat().st_size > 0
+
+def test_plot_parameter_posteriors_saves_figure(tmp_path):
+    posterior = xr.Dataset(
+        {
+            "x": (("chain", "draw"), np.array([[0.8, 0.9, 1.0], [1.0, 1.1, 1.2]])),
+            "q": (("chain", "draw"), np.array([[0.2, 0.3, 0.4], [0.3, 0.4, 0.5]])),
+        }
+    )
+
+    specs = {
+        "x": {"distribution": "normal", "mu": 0.0, "sigma": 2.0},
+        "q": {"distribution": "uniform", "lower": 0.0, "upper": 1.0},
+    }
+
+    output_path = tmp_path / "parameters.png"
+    plot_parameter_posteriors(posterior, specs, output_path)
 
     assert output_path.exists()
     assert output_path.stat().st_size > 0
