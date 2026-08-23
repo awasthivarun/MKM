@@ -204,15 +204,5 @@ def test_setup_offsets_sum_to_zero_within_experiment():
         )
 
 
-def test_likelihood_backward_compatible_alias_returns_same_types():
-    inputs = _build_test_inputs()
-    coords = build_model_coords(inputs)
-    ln_rate_model_values = np.array([1.0, 1.2, 2.0])
-
-    with pm.Model(coords=coords):
-        ln_rate_model = pm.Data("ln_rate_model", ln_rate_model_values, dims="model_point")
-        canonical = add_log_rate_likelihood(ln_rate_model=ln_rate_model, inputs=inputs)
-        alias = add_material_log_rate_likelihood(ln_rate_model=ln_rate_model, inputs=inputs)
-
-    assert type(alias) is type(canonical)
-    assert alias.observed.name == canonical.observed.name
+def test_likelihood_backward_compatible_alias():
+    assert add_material_log_rate_likelihood is add_log_rate_likelihood

@@ -185,5 +185,4 @@ def add_log_rate_likelihood(
     )
 
 
-def add_material_log_rate_likelihood(*args, **kwargs):
-    return add_log_rate_likelihood(*args, **kwargs)
+add_material_log_rate_likelihood = add_log_rate_likelihood

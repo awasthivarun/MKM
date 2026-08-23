@@ -45,3 +45,10 @@ This separation is intentional: mechanism equations and fit-assembly metadata ar
 Scientific calculations should live in `src/mkm/`, while `scripts/` should ideally remain thin, reproducible workflow entry points.
 
 Some current scripts still contain mixed calculation and plotting logic and are documented as future refactor targets rather than changed during housekeeping.
+
+## Typical commands
+
+python scripts/process_agpd_basic.py
+python scripts/plot_agpd_basic.py
+python scripts/fit_agpd_posterior.py BF_LH --likelihood setup_intercept
+pytest tests -v
