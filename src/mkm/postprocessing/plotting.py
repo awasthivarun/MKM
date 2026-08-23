@@ -327,3 +327,78 @@ def plot_sampling_pairs(inference_data, parameter_names, output_path: str | Path
     pm.add_title("Posterior parameter pair structure")
     pm.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close("all")
+
+def plot_alpha_comparison(comparison, output_dir: str | Path, material):
+    for c_koh, koh_data in comparison.groupby("C_KOH_M", sort=True):
+        fig, axes = plt.subplots(2, 2, figsize=(10, 8), sharex=True)
+        axes = axes.ravel()
+
+        for ax, (co_fraction, data) in zip(axes, koh_data.groupby("CO_mole_fraction", sort=True)):
+            data = data.sort_values("E_V_SHE")
+            ax.fill_between(data["E_V_SHE"], data["q025"], data["q975"], alpha=0.20, linewidth=0)
+            ax.plot(data["E_V_SHE"], data["q50"], linewidth=1.5, label="posterior")
+            ax.errorbar(
+                data["E_V_SHE"], data["alpha_mean"], yerr=data["alpha_sd"], fmt="o",
+                markersize=3, linewidth=0.8, label="experiment",
+            )
+            ax.set_title(f"CO = {100 * co_fraction:g}%")
+            ax.set_ylabel(r"$\alpha$")
+            ax.grid(alpha=0.20)
+
+        axes[-2].set_xlabel("Potential (V vs SHE)")
+        axes[-1].set_xlabel("Potential (V vs SHE)")
+        axes[0].legend()
+        fig.suptitle(f"{material}, {c_koh:g} M KOH")
+        fig.tight_layout()
+        fig.savefig(Path(output_dir) / f"alpha_KOH_{c_koh:g}.png", dpi=220, bbox_inches="tight")
+        plt.close(fig)
+
+
+def plot_delta_oh_comparison(comparison, output_path: str | Path, material):
+    fig, axes = plt.subplots(2, 2, figsize=(10, 8), sharex=True)
+    axes = axes.ravel()
+
+    for ax, (co_fraction, data) in zip(axes, comparison.groupby("CO_mole_fraction", sort=True)):
+        data = data.sort_values("E_V_SHE")
+        ax.fill_between(data["E_V_SHE"], data["q025"], data["q975"], alpha=0.20, linewidth=0)
+        ax.plot(data["E_V_SHE"], data["q50"], linewidth=1.5, label="posterior")
+        ax.errorbar(
+            data["E_V_SHE"], data["delta_OH"], yerr=data["delta_OH_sd"], fmt="o",
+            markersize=3, linewidth=0.8, label="experiment",
+        )
+        ax.set_title(f"CO = {100 * co_fraction:g}%")
+        ax.set_ylabel(r"$\delta_{\mathrm{OH}}$")
+        ax.grid(alpha=0.20)
+
+    axes[-2].set_xlabel("Potential (V vs SHE)")
+    axes[-1].set_xlabel("Potential (V vs SHE)")
+    axes[0].legend()
+    fig.suptitle(material)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=220, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_delta_co_comparison(comparison, output_dir: str | Path, material):
+    for c_koh, koh_data in comparison.groupby("C_KOH_M", sort=True):
+        fig, axes = plt.subplots(1, 3, figsize=(12, 4), sharex=True)
+
+        grouped = koh_data.groupby(["CO_lower_mole_fraction", "CO_upper_mole_fraction"], sort=True)
+        for ax, ((lower_co, upper_co), data) in zip(axes, grouped):
+            data = data.sort_values("E_V_SHE")
+            ax.fill_between(data["E_V_SHE"], data["q025"], data["q975"], alpha=0.20, linewidth=0)
+            ax.plot(data["E_V_SHE"], data["q50"], linewidth=1.5, label="posterior")
+            ax.errorbar(
+                data["E_V_SHE"], data["delta_CO"], yerr=data["delta_CO_sd"], fmt="o",
+                markersize=3, linewidth=0.8, label="experiment",
+            )
+            ax.set_title(f"{100 * lower_co:g}% -> {100 * upper_co:g}% CO")
+            ax.set_xlabel("Potential (V vs SHE)")
+            ax.set_ylabel(r"$\delta_{\mathrm{CO}}$")
+            ax.grid(alpha=0.20)
+
+        axes[0].legend()
+        fig.suptitle(f"{material}, {c_koh:g} M KOH")
+        fig.tight_layout()
+        fig.savefig(Path(output_dir) / f"delta_CO_KOH_{c_koh:g}.png", dpi=220, bbox_inches="tight")
+        plt.close(fig)
