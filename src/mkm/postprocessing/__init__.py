@@ -30,6 +30,11 @@ from mkm.postprocessing.residuals import (
     summarize_shared_replicate_residuals,
 )
 
+from mkm.postprocessing.plotting import (
+    plot_observation_grid,
+    plot_pointwise_variable,
+)
+
 __all__ = [
     "PosteriorObservableSummary",
     "summarize_pointwise_pathway_fractions",
@@ -50,4 +55,6 @@ __all__ = [
     "summarize_residual_curves",
     "summarize_shared_replicate_residuals",
     "summarize_pointwise_posterior_variable",
+    "plot_observation_grid", 
+    "plot_pointwise_variable",
 ]
