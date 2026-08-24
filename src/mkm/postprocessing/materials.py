@@ -6,6 +6,73 @@ import pandas as pd
 from mkm.postprocessing.diagnostics import summarize_scalar_samples
 
 
+def summarize_setup_offsets(posterior, inputs, observations):
+    """Summarize standardized setup latents and the actual zero-sum log-rate offsets."""
+    required_variables = ("z_ln_rate_setup", "ln_rate_setup_offset")
+    missing = [name for name in required_variables if name not in posterior]
+    if missing:
+        raise ValueError(f"Posterior is missing setup variables: {missing}.")
+
+    if inputs.setup_labels is None or inputs.observation_setup_index is None:
+        raise ValueError("Setup metadata are unavailable for this likelihood.")
+
+    n_setups = len(inputs.setup_labels)
+    observation_setup_index = np.asarray(inputs.observation_setup_index, dtype=np.int64)
+
+    if len(observation_setup_index) != len(observations):
+        raise ValueError("Observation setup indices do not align with the observation table.")
+
+    metadata_columns = ["material", "electrolyte_concentration_M", "replicate"]
+    missing_columns = [column for column in metadata_columns if column not in observations.columns]
+    if missing_columns:
+        raise ValueError(f"Observation table is missing setup metadata columns: {missing_columns}.")
+
+    setup_metadata = observations[metadata_columns].copy()
+    setup_metadata.insert(0, "setup_index", observation_setup_index)
+    setup_metadata = setup_metadata.drop_duplicates().sort_values("setup_index").reset_index(drop=True)
+
+    if len(setup_metadata) != n_setups or not np.array_equal(
+        setup_metadata["setup_index"].to_numpy(dtype=np.int64),
+        np.arange(n_setups, dtype=np.int64),
+    ):
+        raise ValueError("Setup indices do not map one-to-one onto setup metadata.")
+
+    if inputs.setup_experiment_index is not None:
+        setup_experiment_index = np.asarray(inputs.setup_experiment_index, dtype=np.int64)
+        if len(setup_experiment_index) != n_setups:
+            raise ValueError("Setup experiment indices do not align with setup labels.")
+        setup_metadata.insert(1, "setup_experiment_index", setup_experiment_index)
+
+    setup_metadata["setup_label"] = list(inputs.setup_labels)
+    result = setup_metadata.copy()
+
+    for variable_name, prefix in (
+        ("z_ln_rate_setup", "z"),
+        ("ln_rate_setup_offset", "offset"),
+    ):
+        data = posterior[variable_name]
+        if "setup" not in data.dims:
+            raise ValueError(f"Posterior variable '{variable_name}' does not have a setup dimension.")
+
+        values = np.asarray(data, dtype=float)
+        setup_axis = data.dims.index("setup")
+        values = np.moveaxis(values, setup_axis, -1)
+
+        if values.ndim != 3 or values.shape[-1] != n_setups:
+            raise ValueError(
+                f"Posterior variable '{variable_name}' must reduce to chain x draw x setup; got {values.shape}."
+            )
+
+        summaries = [
+            summarize_scalar_samples(values[..., setup_index])
+            for setup_index in range(n_setups)
+        ]
+        for statistic in ("mean", "sd", "median", "hdi95_lower", "hdi95_upper"):
+            result[f"{prefix}_{statistic}"] = [summary[statistic] for summary in summaries]
+
+    return result
+
+
 def summarize_material_noise(posterior):
     records = []
 

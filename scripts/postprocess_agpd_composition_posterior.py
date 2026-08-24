@@ -24,6 +24,7 @@ from mkm.postprocessing.materials import (
     summarize_observation_diagnostics_by_material,
     summarize_pointwise_loo_by_material,
     summarize_residual_structure_by_material,
+    summarize_setup_offsets,
 )
 from mkm.postprocessing.observable_comparison import (
     ExperimentalObservableComparison,
@@ -337,6 +338,16 @@ def main():
     material_noise = summarize_material_noise(posterior)
     material_noise.to_csv(tables_dir / "noise_summary_by_material.csv", index=False)
 
+    if likelihood_name == "setup_intercept":
+        setup_offsets = summarize_setup_offsets(
+            posterior=posterior,
+            inputs=inputs,
+            observations=model_data.observations,
+        )
+        setup_offsets.to_csv(tables_dir / "setup_offset_summary.csv", index=False)
+    else:
+        setup_offsets = pd.DataFrame()
+
     observation_diagnostics = build_observation_diagnostics(
         inference_data=idata,
         model_data=model_data,
@@ -541,6 +552,9 @@ def main():
 
     print("\n=== MATERIAL NOISE ===")
     print(material_noise.to_string(index=False))
+
+    if not setup_offsets.empty:
+        print(f"\nSetup-offset table: {len(setup_offsets)} rows saved to setup_offset_summary.csv")
 
     print("\n=== MATERIAL RESIDUALS ===")
     print(material_residual_summary.to_string(index=False))
