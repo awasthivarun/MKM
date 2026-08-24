@@ -52,13 +52,17 @@ composition_parameterizations:
             mu: 0.0
             sigma: 0.10
           deltaG5_0:
-            distribution: normal
+            distribution: truncated_normal
             mu: 0.0
             sigma: 0.10
+            lower: -0.2
+            upper: 0.40
           Gact2_BF_0:
-            distribution: normal
+            distribution: truncated_normal
             mu: 0.0
             sigma: 0.10
+            lower: -0.20
+            upper: 0.40
           Gact2_ER_0:
             distribution: normal
             mu: 0.0
@@ -163,7 +167,7 @@ prior_profiles:
         beta_2_BF:
           distribution: uniform
           lower: 0.0
-          upper: 1.0
+          upper: 0.1
         beta_2_ER:
           distribution: uniform
           lower: 0.0
@@ -189,7 +193,7 @@ prior_profiles:
           mu: 0.7
           sigma: 0.2
           lower: 0.5
-          upper: 1.0
+          upper: 0.8
         Gact2_LH_0:
           distribution: truncated_normal
           mu: 0.7

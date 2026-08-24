@@ -1,5 +1,5 @@
-created_utc: '2026-08-24T19:36:45.233122+00:00'
-git_commit: f0ff292d99bd3ed95a77fa6633556f742d180168
+created_utc: '2026-08-24T21:04:12.189975+00:00'
+git_commit: d2eb4ccfafda07a7add25835ed078da2f6db1aab
 python: 3.13.15
 platform: Windows-11-10.0.26200-SP0
 material: composition
@@ -9,7 +9,7 @@ inputs:
   data_path: data\processed\AgPd_COOx_basic\analysis\AgPd_COOx_basic_selected.parquet
   data_sha256: d56f47beb8a25820fe8c71701d77ead06fb137a0885ae8634eb0ab358b686e72
   model_config_path: config\models\agpd_basic.yaml
-  model_config_sha256: 28c214f88bf4314c6387629ca0ef4b9eeba66e780861250111ce52c61e033776
+  model_config_sha256: f60aa8fd133c1b9c310fa76ba351d70c6dec65e817818a191014294e05f478b7
 sampler:
   nuts_sampler: nutpie
   backend: numba
