@@ -29,10 +29,16 @@ def test_plot_observation_grid_saves_predictive_figure(tmp_path):
     )
     output_path = tmp_path / "predictive.png"
 
+    frame["rate"] = np.exp(frame["ln_rate"])
+    frame["rate_predictive_hdi95_lower"] = np.exp(frame["ln_rate_predictive_hdi95_lower"])
+    frame["rate_predictive_median"] = np.exp(frame["ln_rate_predictive_median"])
+    frame["rate_predictive_hdi95_upper"] = np.exp(frame["ln_rate_predictive_hdi95_upper"])
+
     plot_observation_grid(
         observations=frame,
         output_path=output_path,
         residual=False,
+        y_scale="log",
     )
 
     assert output_path.exists()
@@ -59,7 +65,7 @@ def test_plot_observation_grid_saves_rate_figure(tmp_path):
         observations=frame,
         output_path=output_path,
         residual=False,
-        scale="rate",
+        y_scale="linear",
         distribution="predictive",
     )
 

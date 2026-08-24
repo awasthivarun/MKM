@@ -133,11 +133,11 @@ def plot_observation_grid(
     observations,
     output_path: str | Path,
     residual=False,
-    scale="log",
+    y_scale="log",
     distribution="predictive",
 ):
-    if scale not in {"log", "rate"}:
-        raise ValueError("scale must be 'log' or 'rate'.")
+    if y_scale not in {"linear", "log"}:
+        raise ValueError("y_scale must be 'linear' or 'log'.")
     if distribution not in {"mechanism", "conditional", "predictive"}:
         raise ValueError("distribution must be 'mechanism', 'conditional', or 'predictive'.")
 
@@ -152,10 +152,10 @@ def plot_observation_grid(
         squeeze=False,
     )
 
-    observed_column = "ln_rate" if scale == "log" else "rate"
+    observed_column = "rate"
 
     if not residual:
-        prefix = f"{'ln_rate' if scale == 'log' else 'rate'}_{distribution}"
+        prefix = f"rate_{distribution}"
         median_column, lower_column, upper_column = _posterior_interval_columns(observations, prefix)
 
     for row, co_fraction in enumerate(CO_values):
@@ -226,7 +226,7 @@ def plot_observation_grid(
             if residual:
                 ax.axhline(0.0, linestyle="--", linewidth=1.0, alpha=0.5)
 
-            if scale == "rate" and not residual:
+            if not residual and y_scale == "log":
                 ax.set_yscale("log")
 
             if row == 0:
@@ -249,9 +249,9 @@ def plot_observation_grid(
         fig.supylabel("ln(rate) observed - posterior conditional median")
     else:
         label = distribution.replace("_", " ")
-        scale_label = "log rate" if scale == "log" else "rate"
-        fig.suptitle(f"Posterior {label} {scale_label}: median and 95% HDI")
-        fig.supylabel("ln(rate / s$^{-1}$)" if scale == "log" else "rate / s$^{-1}$")
+        axis_label = "log y-axis" if y_scale == "log" else "linear y-axis"
+        fig.suptitle(f"Posterior {label} rate: median and 95% HDI ({axis_label})")
+        fig.supylabel("rate / s$^{-1}$")
 
     fig.supxlabel("Potential (V vs SHE)")
     fig.tight_layout(rect=(0.04, 0.04, 0.96, 0.97))

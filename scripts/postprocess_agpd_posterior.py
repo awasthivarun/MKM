@@ -282,16 +282,16 @@ def main():
     for distribution in ("mechanism", "conditional", "predictive"):
         plot_observation_grid(
             observations=observation_diagnostics,
-            output_path=figures_dir / f"posterior_{distribution}_log_rate.png",
+            output_path=figures_dir / f"posterior_{distribution}_rate_linear.png",
             residual=False,
-            scale="log",
+            y_scale="linear",
             distribution=distribution,
         )
         plot_observation_grid(
             observations=observation_diagnostics,
-            output_path=figures_dir / f"posterior_{distribution}_rate.png",
+            output_path=figures_dir / f"posterior_{distribution}_rate_log.png",
             residual=False,
-            scale="rate",
+            y_scale="log",
             distribution=distribution,
         )
 
@@ -299,7 +299,6 @@ def main():
         observations=observation_diagnostics,
         output_path=figures_dir / "conditional_log_rate_residuals.png",
         residual=True,
-        scale="log",
         distribution="conditional",
     )
 
