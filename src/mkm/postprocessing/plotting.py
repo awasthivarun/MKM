@@ -499,6 +499,49 @@ def plot_pointwise_elpd_difference(frame, numerator_model, denominator_model, ou
     plt.close(fig)
 
 
+def plot_pointwise_loo(pointwise, model_name, output_path: str | Path):
+    koh_values = sorted(pointwise["electrolyte_concentration_M"].unique())
+    co_values = sorted(pointwise["CO_mole_fraction"].unique())
+
+    fig, axes = plt.subplots(
+        len(co_values), len(koh_values),
+        figsize=(3.8 * len(koh_values), 2.7 * len(co_values)),
+        sharex=True, sharey=True, squeeze=False,
+    )
+
+    for row, co_fraction in enumerate(co_values):
+        for col, c_koh in enumerate(koh_values):
+            ax = axes[row, col]
+            condition = pointwise[
+                (pointwise["electrolyte_concentration_M"] == c_koh)
+                & (pointwise["CO_mole_fraction"] == co_fraction)
+            ]
+
+            for replicate, curve in condition.groupby("replicate", sort=True):
+                curve = curve.sort_values("E_V_SHE")
+                ax.plot(
+                    curve["E_V_SHE"], curve["elpd_loo"], marker="o", markersize=2.5,
+                    linewidth=1.0, alpha=0.75, label=replicate,
+                )
+
+            ax.grid(alpha=0.20)
+            if row == 0:
+                ax.set_title(f"{c_koh:g} M KOH")
+            if col == len(koh_values) - 1:
+                ax.text(
+                    1.04, 0.5, f"{100 * co_fraction:g}% CO", transform=ax.transAxes,
+                    rotation=-90, va="center",
+                )
+
+    axes[0, 0].legend(title="replicate", fontsize=8)
+    fig.supxlabel("Potential (V vs SHE)")
+    fig.supylabel("Pointwise PSIS-LOO ELPD")
+    fig.suptitle(f"Pointwise PSIS-LOO: {model_name}")
+    fig.tight_layout(rect=(0.04, 0.04, 0.96, 0.97))
+    fig.savefig(output_path, dpi=220, bbox_inches="tight")
+    plt.close(fig)
+
+
 def plot_loo_pit_ecdf(loo_pit, model_name, output_path: str | Path):
     from mkm.postprocessing.calibration import build_loo_pit_datatree
 
@@ -510,6 +553,7 @@ def plot_loo_pit_ecdf(loo_pit, model_name, output_path: str | Path):
         group="loo_pit",
         sample_dims=["observation"],
         method="pot_c",
+        envelope_prob=0.95,
         coverage=False,
         backend="matplotlib",
     )
@@ -529,12 +573,14 @@ def plot_loo_pit_coverage(loo_pit, model_name, output_path: str | Path):
         group="loo_pit",
         sample_dims=["observation"],
         method="pot_c",
+        envelope_prob=0.95,
         coverage=True,
         backend="matplotlib",
     )
     pc.add_title(f"LOO predictive coverage: {model_name}")
     pc.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close("all")
+
 
 def plot_loo_pit_conditions(pointwise, model_name, output_path: str | Path):
     koh_values = sorted(pointwise["electrolyte_concentration_M"].unique())

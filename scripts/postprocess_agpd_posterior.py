@@ -37,10 +37,17 @@ from mkm.postprocessing.plotting import (
     plot_sampling_pairs,
     plot_sampling_rank,
     plot_sampling_trace,
+    plot_loo_pit_conditions,
+    plot_loo_pit_coverage,
+    plot_loo_pit_ecdf,
+    plot_pareto_k,
+    plot_pointwise_loo,
 )
 from mkm.postprocessing.predictions import build_observation_diagnostics
 from mkm.postprocessing.residuals import summarize_residual_curves, summarize_shared_replicate_residuals
 from mkm.postprocessing.sampling import build_sampling_diagnostics, sampling_parameter_names
+from mkm.postprocessing.calibration import compute_normal_loo_pit
+from mkm.postprocessing.loo import compute_loo_diagnostics
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -328,6 +335,46 @@ def main():
         residual=True,
     )
 
+    loo = compute_loo_diagnostics(
+        inference_data=idata,
+        observations=model_data.observations,
+        model_name=model_name,
+        var_name="ln_rate_observed",
+    )
+    loo.summary.to_csv(tables_dir / "loo_summary.csv", index=False)
+    loo.pointwise.to_parquet(derived_dir / "loo_pointwise.parquet", index=False)
+
+    calibration = compute_normal_loo_pit(
+        inference_data=idata,
+        loo_result=loo.loo_result,
+        observations=model_data.observations,
+        inputs=inputs,
+        likelihood_name=likelihood_name,
+        var_name="ln_rate_observed",
+    )
+    calibration.summary.to_csv(tables_dir / "loo_pit_summary.csv", index=False)
+    calibration.pointwise.to_parquet(derived_dir / "loo_pit.parquet", index=False)
+
+    plot_pointwise_loo(
+        pointwise=loo.pointwise,
+        model_name=model_name,
+        output_path=figures_dir / "pointwise_loo.png",
+    )
+    plot_pareto_k(
+        loo_result=loo.loo_result,
+        model_name=model_name,
+        output_path=figures_dir / "pareto_k.png",
+    )
+
+    pit = calibration.pointwise["loo_pit"].to_numpy(dtype=float)
+    plot_loo_pit_ecdf(loo_pit=pit, model_name=model_name, output_path=figures_dir / "loo_pit_ecdf.png")
+    plot_loo_pit_coverage(loo_pit=pit, model_name=model_name, output_path=figures_dir / "loo_pit_coverage.png")
+    plot_loo_pit_conditions(
+        pointwise=calibration.pointwise,
+        model_name=model_name,
+        output_path=figures_dir / "loo_pit_conditions.png",
+    )
+
     physical_summary = build_physical_summary(posterior)
     physical_summary.to_csv(tables_dir / "physical_summary.csv", index=False)
 
@@ -422,6 +469,18 @@ def main():
 
     print("\n=== EXPERIMENTAL OBSERVABLES ===")
     print(observable_summary.to_string(index=False))
+
+    print("\n=== PSIS-LOO ===")
+    print(loo.summary.to_string(index=False))
+
+    print("\n=== LOO-PIT CALIBRATION ===")
+    print(calibration.summary.to_string(index=False))
+
+    if likelihood_name == "setup_intercept":
+        print(
+            "LOO scope: observation-wise conditional prediction; other observations from the same "
+            "setup remain available when one observation is held out."
+        )
 
     print("\n=== PHYSICAL VARIABLES ===")
     if physical_summary.empty:
