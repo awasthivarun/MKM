@@ -641,3 +641,56 @@ def plot_loo_pit_conditions(pointwise, model_name, output_path: str | Path):
     fig.tight_layout(rect=(0.04, 0.04, 0.96, 0.97))
     fig.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close(fig)
+
+
+def plot_transition_state_drc(summary, model_name, output_path: str | Path):
+    koh_values = sorted(summary["electrolyte_concentration_M"].unique())
+    co_values = sorted(summary["CO_mole_fraction"].unique())
+    controls = summary[["control", "label"]].drop_duplicates().itertuples(index=False)
+
+    fig, axes = plt.subplots(
+        len(co_values), len(koh_values),
+        figsize=(3.8 * len(koh_values), 2.7 * len(co_values)),
+        sharex=True, sharey=True, squeeze=False,
+    )
+
+    for control, label in controls:
+        control_data = summary.loc[summary["control"] == control]
+
+        for row, co_fraction in enumerate(co_values):
+            for col, c_koh in enumerate(koh_values):
+                ax = axes[row, col]
+                condition = control_data[
+                    (control_data["electrolyte_concentration_M"] == c_koh)
+                    & (control_data["CO_mole_fraction"] == co_fraction)
+                ].sort_values("E_V_SHE")
+
+                line, = ax.plot(condition["E_V_SHE"], condition["q50"], linewidth=1.5, label=label)
+                ax.fill_between(
+                    condition["E_V_SHE"], condition["q025"], condition["q975"],
+                    color=line.get_color(), alpha=0.15, linewidth=0,
+                )
+
+    for row, co_fraction in enumerate(co_values):
+        for col, c_koh in enumerate(koh_values):
+            ax = axes[row, col]
+            ax.axhline(0.0, linestyle="--", linewidth=0.8, alpha=0.45)
+            ax.axhline(1.0, linestyle=":", linewidth=0.8, alpha=0.35)
+            ax.grid(alpha=0.20)
+
+            if row == 0:
+                ax.set_title(f"{c_koh:g} M KOH")
+
+            if col == len(koh_values) - 1:
+                ax.text(
+                    1.04, 0.5, f"{100 * co_fraction:g}% CO",
+                    transform=ax.transAxes, rotation=-90, va="center",
+                )
+
+    axes[0, 0].legend(title="transition state", fontsize=8)
+    fig.supxlabel("Potential (V vs SHE)")
+    fig.supylabel(r"$X_{\mathrm{TS}}$")
+    fig.suptitle(f"Transition-state degree of rate control: {model_name}")
+    fig.tight_layout(rect=(0.04, 0.04, 0.96, 0.97))
+    fig.savefig(output_path, dpi=220, bbox_inches="tight")
+    plt.close(fig)
