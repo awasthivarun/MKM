@@ -135,6 +135,7 @@ def plot_observation_grid(
     residual=False,
     y_scale="log",
     distribution="predictive",
+    context_label=None,
 ):
     if y_scale not in {"linear", "log"}:
         raise ValueError("y_scale must be 'linear' or 'log'.")
@@ -244,13 +245,15 @@ def plot_observation_grid(
 
             ax.grid(alpha=0.20)
 
+    prefix = f"{context_label}: " if context_label else ""
+
     if residual:
-        fig.suptitle("Conditional log-rate residuals")
+        fig.suptitle(f"{prefix}Conditional log-rate residuals")
         fig.supylabel("ln(rate) observed - posterior conditional median")
     else:
         label = distribution.replace("_", " ")
         axis_label = "log y-axis" if y_scale == "log" else "linear y-axis"
-        fig.suptitle(f"Posterior {label} rate: median and 95% HDI ({axis_label})")
+        fig.suptitle(f"{prefix}Posterior {label} rate: median and 95% HDI ({axis_label})")
         fig.supylabel("rate / s$^{-1}$")
 
     fig.supxlabel("Potential (V vs SHE)")
@@ -258,7 +261,7 @@ def plot_observation_grid(
     fig.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close(fig)
 
-def plot_pointwise_variable(summary, variable_name, output_path: str | Path):
+def plot_pointwise_variable(summary, variable_name, output_path: str | Path, context_label=None):
     KOH_values = sorted(summary["electrolyte_concentration_M"].unique())
     CO_values = sorted(summary["CO_mole_fraction"].unique())
 
@@ -306,7 +309,8 @@ def plot_pointwise_variable(summary, variable_name, output_path: str | Path):
 
             ax.grid(alpha=0.20)
 
-    fig.suptitle(variable_name)
+    title = f"{context_label}: {variable_name}" if context_label else variable_name
+    fig.suptitle(title)
     fig.supxlabel("Potential (V vs SHE)")
     fig.supylabel(variable_name)
     fig.tight_layout(rect=(0.04, 0.04, 0.96, 0.97))
