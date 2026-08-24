@@ -1,51 +1,125 @@
-# scripts/README.md
+# Script inventory
 
-Script inventory and current status.
+Scripts are command-line entry points. Reusable calculations belong in `src/mkm/`.
 
-## Canonical workflow scripts
+## Canonical workflow
 
-- `process_agpd_basic.py` — **canonical**
-  - Ingests raw AgPd workbooks and writes standardized/analysis/derived observable parquet outputs.
+### `process_agpd_basic.py`
 
-- `plot_agpd_basic.py` — **canonical**
-  - Generates preprocessing summary plots from processed AgPd tables.
+Builds standardized and selected AgPd analysis tables, rates, alpha, OH order, and paired CO order.
 
-- `fit_agpd_posterior.py` — **canonical**
-  - Fits configured AgPd model posteriors (iid or setup-intercept likelihood) and writes posterior artifacts/diagnostics.
+```powershell
+python scripts/process_agpd_basic.py
+```
 
-## Current diagnostic scripts
+### `plot_agpd_basic.py`
 
-- `check_agpd_prior_predictive.py` — **diagnostic**
-  - Runs prior predictive checks and writes prior-derived summaries.
+Generates preprocessing/data-summary figures from processed tables.
 
-- `diagnose_agpd_likelihood.py` — **diagnostic**
-  - Summarizes replicate dispersion/centered residual structure from processed data.
+```powershell
+python scripts/plot_agpd_basic.py
+```
 
-- `diagnose_agpd_setup_structure.py` — **diagnostic**
-  - Quantifies replicate/setup offset structure in processed observations.
+### `check_agpd_prior_predictive.py`
 
-- `compare_agpd_posterior_observables.py` — **diagnostic**
-  - Compares posterior derived observables with experimental summaries and writes comparison outputs/plots.
+Runs configured Ag10Pd90 prior predictive checks and saves numerical summaries.
 
-- `diagnose_agpd_posterior_science.py` — **diagnostic**
-  - Produces broad posterior science diagnostics (parameter contraction, residual structure, physical checks, plots).
+```powershell
+python scripts/check_agpd_prior_predictive.py
+```
 
-## Development / exploratory / legacy scripts
+### `fit_agpd_posterior.py`
 
-- `smoke_agpd_posterior.py` — **development**
-  - Short smoke-run posterior check for fast environment/model sanity.
+Fits one registered AgPd model with the selected likelihood.
 
-- `plot_agpd_posterior_geometry.py` — **development**
-  - Ad hoc trace/pair plotting focused on posterior geometry inspection.
+```powershell
+python scripts/fit_agpd_posterior.py BF_LH --likelihood setup_intercept
+```
 
-- `diagnose_agpd_posterior.py` — **legacy/superseded**
-  - Earlier posterior diagnostic entry point that assumes older output layout (`.../posterior/<material>/<model>/...`) and is superseded by likelihood-aware scripts.
+### `postprocess_agpd_posterior.py`
 
-## Path-convention note
+Canonical single-model posterior workflow. Generates:
 
-Posterior scripts currently support historical path variants in some places, including:
+- sampler diagnostics
+- parameter diagnostics
+- predictions and residuals
+- coverages/pathways
+- experimental observable comparisons
+- pointwise PSIS-LOO/Pareto-k
+- LOO-PIT calibration
 
-- `results/AgPd_COOx_basic/posterior/Ag10Pd90/<model>` (legacy)
-- `results/AgPd_COOx_basic/posterior/Ag10Pd90/<likelihood>/<model>` (current direction)
+```powershell
+python scripts/postprocess_agpd_posterior.py BF_LH --likelihood setup_intercept
+```
 
-Do not delete or move historical outputs during housekeeping; centralization is a future migration task.
+### `compare_agpd_models.py`
+
+Canonical multi-model comparison. Contains only products requiring multiple fits:
+
+- stacking/model-comparison table
+- aggregate ELPD differences
+- pointwise ELPD differences
+
+```powershell
+python scripts/compare_agpd_models.py --likelihood setup_intercept
+```
+
+### `postprocess_agpd_drc.py`
+
+Computes posterior transition-state DRC, sum-rule checks, finite-difference convergence, and DRC plots.
+
+```powershell
+python scripts/postprocess_agpd_drc.py BF_LH --likelihood setup_intercept --check-half-step
+```
+
+## Compatibility entry point
+
+### `diagnose_agpd_posterior_science.py`
+
+Compatibility wrapper forwarding to `postprocess_agpd_posterior.py`.
+
+New documentation should use the canonical postprocessing command.
+
+## Focused diagnostic scripts
+
+### `diagnose_agpd_likelihood.py`
+
+Explores experimental replicate dispersion and preliminary likelihood assumptions.
+
+### `diagnose_agpd_setup_structure.py`
+
+Quantifies persistent A/B/C setup structure across paired CO series.
+
+These are experimental-design diagnostics, not replacements for posterior postprocessing.
+
+## Development / exploratory / superseded
+
+### `smoke_agpd_posterior.py`
+
+Short posterior sampling smoke/benchmark run. Keep as a development tool and make model/likelihood arguments explicit before broader use.
+
+### `plot_agpd_posterior_geometry.py`
+
+Ad hoc posterior geometry plots. Superseded for routine use by the ArviZ sampler/pair plots in canonical postprocessing.
+
+### `compare_agpd_posterior_observables.py`
+
+Earlier standalone posterior-observable comparison. Superseded by canonical posterior postprocessing.
+
+### `diagnose_agpd_posterior.py`
+
+Older posterior diagnostic using legacy output paths. Superseded.
+
+## Path convention
+
+Canonical posterior path:
+
+```text
+results/AgPd_COOx_basic/posterior/<material>/<likelihood>/<model>/
+```
+
+Historical paths without the likelihood level remain for provenance. Do not create new outputs under the legacy hierarchy.
+
+## Current limitation
+
+Canonical scripts still hard-code `Ag10Pd90`. The next workflow refactor should add `--material` and centralize path/config/context construction.

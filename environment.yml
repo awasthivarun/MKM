@@ -1,0 +1,57 @@
+# Validated development environment for the MKM rebuild.
+#
+# Create from the repository root:
+#   conda env create -f environment.yml
+#   conda activate mkm
+#   python -m pip install -e . --no-deps
+#
+# This environment reproduces the current Windows/conda-forge stack.
+# The validated MKL + LLVM OpenMP combination can emit the known
+# threadpoolctl warning during short posterior tests.
+
+name: mkm
+
+channels:
+  - conda-forge
+  - nodefaults
+
+dependencies:
+  - python=3.13.15
+  - pip=26.2.1
+  - setuptools=84.0.0
+
+  # Numerical stack
+  - numpy=2.4.6
+  - scipy=1.18.0
+  - pandas=3.0.5
+  - xarray=2026.7.0
+  - pyarrow=25.0.0
+  - openpyxl=3.1.5
+  - pyyaml=6.0.3
+  - h5py=3.16.0
+
+  # Bayesian / symbolic stack
+  - pymc=6.3.1
+  - pytensor=3.3.0
+  - nutpie=0.16.11
+  - numba=0.66.0
+  - llvmlite=0.48.0
+
+  # ArviZ split API used directly by the repository
+  - arviz=1.3.0
+  - arviz-base=1.3.0
+  - arviz-plots=1.3.0
+  - arviz-stats=1.3.0
+
+  # Plotting / interactive development / tests
+  - matplotlib-base=3.11.1
+  - ipykernel=7.3.0
+  - pytest=9.1.1
+
+  # Match the validated BLAS backend
+  - mkl=2026.1.0
+  - "blas=*=mkl"
+
+  - pip:
+      - black==26.5.1
+      - h5netcdf==1.8.1

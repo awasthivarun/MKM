@@ -1,8 +1,8 @@
 # REPO_MAP
 
-Detailed orientation map for the MKM rebuild repository.
+Orientation guide for the MKM rebuild.
 
-## Big-picture workflow graph
+## End-to-end workflow
 
 ```text
 Raw Excel workbooks
@@ -28,123 +28,310 @@ conditions / model_points / observations
         v
 src/mkm/model_inputs.py
         |
-        +-----------------------------+
-        |                             |
-        v                             v
-src/mkm/models/agpd_basic.py   src/mkm/mechanisms/agpd_basic.py
-        |                             |
-        +--------------+--------------+
-                       |
-                       v
+        +-------------------------------+
+        |                               |
+        v                               v
+src/mkm/models/agpd_basic.py     src/mkm/mechanisms/agpd_basic.py
+        |                               |
+        +---------------+---------------+
+                        |
+                        v
               src/mkm/inference/model.py
-                       |
-                       v
-           src/mkm/inference/likelihoods.py
-                       |
-                       v
-             posterior fitting scripts
-                       |
-                       v
-                  posterior.nc
-                       |
-                       v
-              diagnostics / plots / LOO
+                        |
+                        v
+          src/mkm/inference/likelihoods.py
+                        |
+                        v
+            scripts/fit_agpd_posterior.py
+                        |
+                        v
+                   posterior.nc
+                        |
+        +---------------+----------------+
+        |                                |
+        v                                v
+scripts/postprocess_agpd_posterior.py   scripts/postprocess_agpd_drc.py
+        |                                |
+        v                                v
+src/mkm/postprocessing/*               TS-DRC draws/summaries/checks
+        |
+        v
+single-model tables / derived data / figures
+        |
+        v
+scripts/compare_agpd_models.py
+        |
+        v
+multi-model ELPD differences / stacking
 ```
 
-## Core directories and responsibilities
+## Core directories
 
-- `config/preprocessing/agpd_basic.yaml`: experimental-data and preprocessing conventions (materials, concentrations, pairing structure, grid/truncation rules).
-- `config/models/agpd_basic.yaml`: model-facing configuration (surface composition assumptions, priors, likelihood hyperparameters).
-- `data/raw/AgPd_COOx_basic/`: source workbooks.
-- `data/processed/AgPd_COOx_basic/`: standardized/analysis parquet outputs used by inference.
-- `src/mkm/preprocessing/`: workbook parsing, interpolation, truncation, derived experimental observables.
-- `src/mkm/model_data.py`: converts selected replicate tables into canonical `conditions`, `model_points`, `observations` tables.
-- `src/mkm/model_inputs.py`: converts canonical tables into indexed arrays and coordinates for PyMC/PyTensor.
-- `src/mkm/mechanisms/`: mechanism equations and evaluators.
-- `src/mkm/models/`: model registry and mechanism/prior-profile binding.
-- `src/mkm/inference/`: priors, likelihood construction, model assembly, posterior and prior-predictive utilities.
-- `src/mkm/observable_maps.py`: linear maps from modeled log-rate draws to derived observables (`alpha`, `delta_OH`, adjacent `delta_CO`).
-- `scripts/`: workflow/diagnostic entry points.
-- `tests/`: validation of preprocessing, mechanisms, model assembly, priors, likelihoods, diagnostics.
-- `results/` and `figures/`: generated inference artifacts and plots.
+### `config/`
+
+- `config/preprocessing/agpd_basic.yaml`
+  - experimental design and preprocessing facts
+  - materials, concentrations, replicates
+  - paired CO-series contract
+  - grid, interpolation, normalization, truncation
+
+- `config/models/agpd_basic.yaml`
+  - gas/electrolyte/model conventions
+  - surface-composition assumptions
+  - likelihood priors and setup grouping
+  - material/model prior profiles
+
+These files intentionally describe different concerns and should not be merged.
+
+### `src/mkm/preprocessing/`
+
+Workbook ingestion, validation, interpolation, rate conversion, truncation, experimental alpha, OH order, and paired CO order.
+
+### `src/mkm/model_data.py`
+
+Builds canonical:
+
+- `conditions`
+- `model_points`
+- `observations`
+
+This is the stable boundary between dataset-specific preprocessing and generic modeling.
+
+### `src/mkm/model_inputs.py`
+
+Converts canonical tables into indexed NumPy arrays for PyMC/PyTensor, including:
+
+- material/condition/model-point indices
+- observation-to-model-point indices
+- setup indices
+- zero-sum setup-experiment indices
+- model-point mechanism inputs
+
+### `src/mkm/mechanisms/`
+
+Mathematical/chemical kernels:
+
+- thermodynamic and kinetic primitives
+- site balances
+- QEA coverages
+- CO SSA
+- pathway rates
+- mechanism parameter/result dataclasses
+
+### `src/mkm/models/`
+
+Fit-ready model registry:
+
+- parameter dataclass
+- mechanism evaluator
+- prior-profile compatibility
+- material/model binding
+
+### `src/mkm/inference/`
+
+Generic Bayesian machinery:
+
+- prior creation
+- log-rate likelihoods
+- PyMC model assembly
+- posterior sampling
+- deterministic reconstruction
+- log-likelihood calculation
+- prior predictive calculations
+
+### `src/mkm/observable_maps.py`
+
+Fixed linear maps from model log rate to:
+
+- transfer coefficient `alpha`
+- OH reaction order
+- adjacent CO reaction order
+
+### `src/mkm/postprocessing/`
+
+Numerical posterior products:
+
+- `diagnostics.py`: parameter/noise/physical summaries and balance checks
+- `sampling.py`: sampler diagnostics and ArviZ-compatible sampler-stat normalization
+- `predictions.py`: observation-level mechanism/conditional/predictive distributions
+- `residuals.py`: curve structure and shared-vs-replicate discrepancy
+- `observables.py`: pointwise and linear-observable posterior summaries
+- `observable_comparison.py`: posterior-vs-experiment comparisons
+- `loo.py`: single-model PSIS-LOO and Pareto-k
+- `calibration.py`: analytic Normal LOO-PIT
+- `model_comparison.py`: genuinely multi-model ELPD comparisons
+- `drc.py`: posterior transition-state DRC
+- `plotting.py`: current figure implementation
+
+## Canonical scripts
+
+- `process_agpd_basic.py`
+- `plot_agpd_basic.py`
+- `check_agpd_prior_predictive.py`
+- `fit_agpd_posterior.py`
+- `postprocess_agpd_posterior.py`
+- `compare_agpd_models.py`
+- `postprocess_agpd_drc.py`
+
+See `scripts/README.md` for exact ownership.
+
+## Single-model versus multi-model ownership
+
+### Single-model posterior postprocessing
+
+Owned by:
+
+```text
+scripts/postprocess_agpd_posterior.py
+```
+
+Includes:
+
+- sampler diagnostics
+- posterior parameter plots/contraction
+- predictions/residuals
+- physical checks
+- alpha/reaction-order comparisons
+- pointwise PSIS-LOO
+- Pareto-k
+- LOO-PIT and calibration
+- coverages/pathway fractions
+
+### Multi-model comparison
+
+Owned by:
+
+```text
+scripts/compare_agpd_models.py
+```
+
+Includes only quantities that require multiple posteriors:
+
+- model comparison table
+- stacking weights
+- aggregate ELPD differences
+- pointwise ELPD differences
+
+### Transition-state DRC
+
+Owned by:
+
+```text
+scripts/postprocess_agpd_drc.py
+```
+
+Persists:
+
+- posterior DRC draws
+- condition-resolved summaries
+- sum-rule checks
+- finite-difference step-convergence checks
+- DRC figures
 
 ## Where do I change...?
 
-- **Raw workbook parsing**: `src/mkm/preprocessing/agpd_basic.py` (`load_agpd_workbook`, parsing helpers), plus `src/mkm/preprocessing/validation.py` contracts.
-- **Interpolation/grid rules**: `src/mkm/preprocessing/agpd_basic.py` (`_build_analysis_grid`, interpolation path in `build_agpd_analysis_grid`).
-- **Reaction-order calculations**: `src/mkm/preprocessing/observables.py` and AgPd wrappers in `src/mkm/preprocessing/agpd_basic.py`.
-- **A chemical mechanism equation**: `src/mkm/mechanisms/agpd_basic.py`.
-- **Add a new mechanism**: mechanism layer first (`src/mkm/mechanisms/`), then register in `src/mkm/models/agpd_basic.py`.
-- **Prior distributions**: `config/models/agpd_basic.yaml` prior profiles + interpretation in `src/mkm/inference/priors.py`.
-- **Likelihood definition**: `src/mkm/inference/likelihoods.py`.
-- **PyMC full-model assembly**: `src/mkm/inference/model.py`.
-- **Posterior sampling execution**: `scripts/fit_agpd_posterior.py` using `src/mkm/inference/posterior.py` utilities.
-- **Observable maps**: `src/mkm/observable_maps.py`.
-- **Future reusable post-processing calculations**: should move toward `src/mkm/` modules; currently much remains in `scripts/` diagnostics.
-- **Tests**: `tests/` and `tests/preprocessing/`, `tests/inference/`.
+- **Raw workbook parsing:** `src/mkm/preprocessing/agpd_basic.py`
+- **Validation contracts:** `src/mkm/preprocessing/validation.py`
+- **Interpolation/grid rules:** `src/mkm/preprocessing/agpd_basic.py`, `potential.py`
+- **Experimental reaction orders:** `src/mkm/preprocessing/observables.py`
+- **A mechanism equation:** `src/mkm/mechanisms/agpd_basic.py`
+- **Registered models:** `src/mkm/models/agpd_basic.py`
+- **Priors:** `config/models/agpd_basic.yaml`, `src/mkm/inference/priors.py`
+- **Likelihood:** `src/mkm/inference/likelihoods.py`
+- **Full PyMC assembly:** `src/mkm/inference/model.py`
+- **Posterior sampler:** `src/mkm/inference/posterior.py`
+- **Alpha/order maps:** `src/mkm/observable_maps.py`
+- **Posterior diagnostic calculation:** `src/mkm/postprocessing/`
+- **Plotting:** `src/mkm/postprocessing/plotting.py`
+- **Transition-state DRC definitions:** `src/mkm/postprocessing/drc.py`
+- **Canonical CLI behavior:** `scripts/`
 
-## Mechanisms vs models (important distinction)
+## Adding a new AgPd model
 
-- `src/mkm/mechanisms/` = mathematical/chemical kernels and parameter/result dataclasses.
-- `src/mkm/models/` = fit-ready registry and compatibility checks that tie mechanism dataclasses/evaluators to configured prior profiles.
+### Existing evaluator, new fit-ready model
 
-This separation allows mechanism development without rewriting generic inference infrastructure.
+1. register it in `src/mkm/models/agpd_basic.py`
+2. add material/model priors in `config/models/agpd_basic.yaml`
+3. add tests
+4. reuse the generic fit/postprocessing infrastructure
 
-## Adding a new AgPd mechanism (extensibility path)
+### New mathematical mechanism
 
-For a **new fit configuration of an existing evaluator**:
+1. add parameter/result dataclasses and evaluator in `src/mkm/mechanisms/`
+2. register the model
+3. add prior profiles
+4. add mechanism/limit/physicality tests
+5. declare its pointwise outputs and DRC controls
+6. reuse generic inference and observable maps
 
-1. Register the model in `src/mkm/models/agpd_basic.py`.
-2. Add prior profile(s) in `config/models/agpd_basic.yaml`.
-3. Add tests.
-4. Reuse existing generic inference pipeline.
+Normally this should not require changes to:
 
-For a **new mathematical mechanism**:
+- preprocessing
+- model-data construction
+- generic likelihood assembly
+- generic PyMC assembly
+- posterior sampling
+- alpha/OH-order/CO-order maps
 
-1. Add parameter/result dataclass and evaluator in the mechanism layer.
-2. Register it in `src/mkm/models/agpd_basic.py`.
-3. Add priors in `config/models/agpd_basic.yaml`.
-4. Add mechanism-specific tests.
-5. Reuse generic model assembly/likelihood/posterior infrastructure.
+## Current extensibility bottleneck
 
-This ordinarily should not require changes to preprocessing, model-data construction, model-input indexing, generic likelihood assembly, generic PyMC model assembly, posterior sampling utilities, or existing alpha/OH-order/CO-order map machinery.
+The inference core is modular, but model-specific postprocessing metadata is currently spread across:
 
-## Notes on current script modularity
+- model registry
+- pointwise-variable lists
+- physical-balance lists
+- DRC control registry
 
-Inference infrastructure under `src/mkm/inference/` is relatively modular.
-Current posterior post-processing in `scripts/` is less modular and includes mixed calculation + plotting code. That is a known future refactor area, not changed during this housekeeping pass.
+The next extensibility refactor should introduce one model metadata contract for:
 
-## Results-path status
+- pointwise variables
+- pathway fractions
+- site balances
+- transition-state controls
 
-Historical outputs currently include both styles:
+## Result hierarchy
 
-- `results/AgPd_COOx_basic/posterior/Ag10Pd90/BF`
-- `results/AgPd_COOx_basic/posterior/Ag10Pd90/setup_intercept/BF`
-
-Legacy paths are retained for provenance compatibility.
-
-Intended eventual canonical hierarchy:
+Canonical:
 
 ```text
-results/
-└── AgPd_COOx_basic/
-    └── posterior/
-        └── <material>/
-            └── <likelihood>/
-                └── <model>/
+results/AgPd_COOx_basic/posterior/<material>/<likelihood>/<model>/
+├── posterior_free.nc
+├── posterior.nc
+├── sampler_diagnostics.csv
+└── postprocessing/
+    ├── tables/
+    ├── derived/
+    └── figures/
 ```
 
-Examples:
+Multi-model comparison:
 
-- `Ag10Pd90/setup_intercept/BF`
-- `Ag10Pd90/setup_intercept/BF_LH`
-- `Ag10Pd90/setup_intercept/CO_BF_ER_LH`
+```text
+results/AgPd_COOx_basic/posterior/<material>/<likelihood>/model_comparison/
+```
 
-Path centralization/migration is intentionally deferred to a future housekeeping step to avoid risking historical-result provenance.
+Historical pre-likelihood paths remain for provenance and should be migrated deliberately, not deleted ad hoc.
 
-## Config split is intentional
+## Environment
 
-- `config/preprocessing/agpd_basic.yaml` = experiment/data-processing facts.
-- `config/models/agpd_basic.yaml` = model/statistical conventions and priors.
+- `pyproject.toml`: package metadata, direct Python dependencies, tool configuration
+- `environment.yml`: validated Conda development/scientific stack
 
-These are intentionally separate concerns and should not be merged.
+Recommended setup:
+
+```powershell
+conda env create -f environment.yml
+conda activate mkm
+python -m pip install -e . --no-deps
+```
+
+## Current refactor priorities
+
+1. centralize paths/config/material context
+2. add `--material` to canonical scripts
+3. move posterior orchestration into package-level workflow functions
+4. split postprocessing plotting by domain
+5. centralize model metadata
+6. add run metadata/provenance
+7. define generated-results policy
+8. add CLI integration tests
