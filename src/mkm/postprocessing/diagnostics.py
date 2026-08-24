@@ -84,6 +84,26 @@ def summarize_scalar_samples(values):
     }
 
 
+def build_posterior_parameter_summary(posterior, parameter_specs):
+    """Summarize configured scalar physical parameters from posterior draws."""
+    records = []
+
+    for name in parameter_specs:
+        if name not in posterior:
+            raise ValueError(f"Posterior is missing configured parameter '{name}'.")
+
+        values = posterior[name].squeeze(drop=True)
+        extra_dims = set(values.dims) - {"chain", "draw"}
+        if extra_dims:
+            raise ValueError(
+                f"Physical parameter '{name}' is not scalar; remaining dimensions: {sorted(extra_dims)}."
+            )
+
+        records.append({"parameter": name, **summarize_scalar_samples(values)})
+
+    return pd.DataFrame(records)
+
+
 def prior_statistics(spec):
     distribution = spec["distribution"]
 
@@ -138,8 +158,9 @@ def prior_statistics(spec):
     raise ValueError(f"Unsupported prior distribution '{distribution}'.")
 
 
-def build_parameter_contraction(posterior, config, material, model_name):
-    parameter_specs = config["prior_profiles"][material][model_name]["parameters"]
+def build_parameter_contraction(posterior, config, material, model_name, parameter_specs=None):
+    if parameter_specs is None:
+        parameter_specs = config["prior_profiles"][material][model_name]["parameters"]
 
     records = []
 

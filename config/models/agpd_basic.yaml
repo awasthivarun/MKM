@@ -29,7 +29,6 @@ surface_composition:
   Ag75Pd25:
     Ag_fraction: 0.75
     Pd_fraction: 0.25
-
   Ag90Pd10:
     Ag_fraction: 0.90
     Pd_fraction: 0.10
@@ -37,6 +36,33 @@ surface_composition:
 surface_assumptions:
   surface_composition_equals_bulk: true
   random_mixing: true
+
+composition_parameterizations:
+  linear_xAg:
+    x_reference: 0.50
+    models:
+      CO_BF_ER_LH:
+        slopes:
+          deltaG1_0:
+            distribution: normal
+            mu: 0.0
+            sigma: 0.10
+          deltaG4_0:
+            distribution: normal
+            mu: 0.0
+            sigma: 0.10
+          deltaG5_0:
+            distribution: normal
+            mu: 0.0
+            sigma: 0.10
+          Gact2_BF_0:
+            distribution: normal
+            mu: 0.0
+            sigma: 0.10
+          Gact2_ER_0:
+            distribution: normal
+            mu: 0.0
+            sigma: 0.10
 
 likelihood:
   sigma_prior_median: 0.20
@@ -54,7 +80,6 @@ likelihood:
 
     prior_median: 0.10
     prior_log_sd: 0.75
-
 prior_profiles:
   Ag10Pd90: &legacy_alloy_prior_profile
     BF:
@@ -85,7 +110,6 @@ prior_profiles:
           mu: 0.7
           sigma: 0.2
           lower: 0.0
-
     BF_LH:
       provenance: legacy_tuned_for_multimodality
       parameters:
@@ -119,7 +143,6 @@ prior_profiles:
           mu: 0.7
           sigma: 0.2
           lower: 0.0
-
     CO_BF_ER_LH:
       provenance: legacy_tuned_for_multimodality
       parameters:

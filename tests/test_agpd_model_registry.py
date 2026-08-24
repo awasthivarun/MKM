@@ -6,7 +6,13 @@ import yaml
 from mkm.inference.model import build_pymc_model
 from mkm.model_data import build_model_data
 from mkm.model_inputs import build_model_input_arrays
-from mkm.models.agpd_basic import available_agpd_models, build_agpd_mechanism, get_agpd_model_definition
+from mkm.models.agpd_basic import (
+    available_agpd_composition_parameterizations,
+    available_agpd_models,
+    build_agpd_composition_mechanism,
+    build_agpd_mechanism,
+    get_agpd_model_definition,
+)
 
 
 def _load_config():
@@ -16,12 +22,10 @@ def _load_config():
 
 def _make_inputs(materials=("Ag10Pd90",)):
     records = []
-
     for material in materials:
         for replicate, offset in zip(["A", "B", "C"], [-0.05, 0.0, 0.05]):
             for grid_index in range(3):
                 ln_rate = -2.0 + 3.0 * 0.01 * grid_index + offset
-
                 records.append(
                     {
                         "material": material,
@@ -34,7 +38,6 @@ def _make_inputs(materials=("Ag10Pd90",)):
                         "ln_rate": ln_rate,
                     }
                 )
-
     data = pd.DataFrame(records)
 
     model_data = build_model_data(selected_replicates=data, electrolyte_concentration_column="C_KOH_M")
@@ -44,6 +47,10 @@ def _make_inputs(materials=("Ag10Pd90",)):
 
 def test_agpd_registry_contains_models_of_interest():
     assert set(available_agpd_models()) == {"BF", "BF_LH", "CO_BF_ER_LH"}
+
+
+def test_agpd_composition_parameterizations_include_linear_xag():
+    assert set(available_agpd_composition_parameterizations()) == {"shared", "linear_xAg"}
 
 
 def test_agpd_registry_rejects_unknown_model():
@@ -62,10 +69,39 @@ def test_ag10pd90_registered_models_build_with_finite_logp(model_name):
         sigma_prior_median=config["likelihood"]["sigma_prior_median"],
         sigma_prior_log_sd=config["likelihood"]["sigma_prior_log_sd"],
     )
-
     logp = built.model.compile_logp()(built.model.initial_point())
 
     assert np.isfinite(logp)
+
+
+def test_linear_xag_large_composition_model_builds_with_expected_slopes():
+    config = _load_config()
+    materials = ("Ag10Pd90", "Ag50Pd50", "Pd100")
+    inputs = _make_inputs(materials=materials)
+    mechanism = build_agpd_composition_mechanism(
+        model_name="CO_BF_ER_LH",
+        materials=materials,
+        config=config,
+        composition_model="linear_xAg",
+    )
+
+    built = build_pymc_model(
+        inputs=inputs,
+        mechanism=mechanism,
+        sigma_prior_median=config["likelihood"]["sigma_prior_median"],
+        sigma_prior_log_sd=config["likelihood"]["sigma_prior_log_sd"],
+    )
+    free_names = {rv.name for rv in built.model.free_RVs}
+    expected_slopes = {
+        "deltaG1_0_xAg_slope",
+        "deltaG4_0_xAg_slope",
+        "deltaG5_0_xAg_slope",
+        "Gact2_BF_0_xAg_slope",
+        "Gact2_ER_0_xAg_slope",
+    }
+
+    assert expected_slopes <= free_names
+    assert np.isfinite(built.model.compile_logp()(built.model.initial_point()))
 
 
 def test_agpd_registered_model_rejects_multiple_materials():

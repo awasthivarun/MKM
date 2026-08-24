@@ -16,6 +16,7 @@ from mkm.postprocessing.diagnostics import (
     build_balance_summary,
     build_noise_summary,
     build_parameter_contraction,
+    build_posterior_parameter_summary,
     build_physical_summary,
 )
 from mkm.postprocessing.loo import compute_loo_diagnostics
@@ -84,6 +85,26 @@ def parse_args():
     parser.add_argument("--composition-model", default=DEFAULT_COMPOSITION_MODEL)
     parser.add_argument("--likelihood", choices=["iid", "setup_intercept"], default="iid")
     return parser.parse_args()
+
+
+def _composition_parameter_specs(config, prior_material, model_name, composition_model):
+    parameter_specs = dict(config["prior_profiles"][prior_material][model_name]["parameters"])
+
+    if composition_model == "shared":
+        return parameter_specs
+
+    try:
+        slope_specs = config["composition_parameterizations"][composition_model]["models"][model_name]["slopes"]
+    except KeyError as error:
+        raise ValueError(
+            f"No parameter specification is configured for composition model "
+            f"'{composition_model}' and mechanism '{model_name}'."
+        ) from error
+
+    for parameter_name, spec in slope_specs.items():
+        parameter_specs[f"{parameter_name}_xAg_slope"] = spec
+
+    return parameter_specs
 
 
 def _load_run_metadata(posterior_dir):
@@ -304,13 +325,19 @@ def main():
 
     idata = az.from_netcdf(posterior_path)
     posterior = idata.posterior
-    parameter_specs = config["prior_profiles"][prior_material][model_name]["parameters"]
+    parameter_specs = _composition_parameter_specs(
+        config=config,
+        prior_material=prior_material,
+        model_name=model_name,
+        composition_model=composition_model,
+    )
 
     parameter_contraction = build_parameter_contraction(
         posterior=posterior,
         config=config,
         material=prior_material,
         model_name=model_name,
+        parameter_specs=parameter_specs,
     )
     parameter_contraction.insert(0, "prior_profile_material", prior_material)
     parameter_contraction.to_csv(tables_dir / "parameter_contraction.csv", index=False)
@@ -323,6 +350,16 @@ def main():
 
     sampling_names = sampling_parameter_names(posterior, parameter_specs)
     sampling = build_sampling_diagnostics(idata, sampling_names)
+
+    posterior_parameter_summary = build_posterior_parameter_summary(posterior, parameter_specs)
+    posterior_parameter_summary = posterior_parameter_summary.merge(
+        sampling.parameter_summary[["parameter", "r_hat", "ess_bulk", "ess_tail"]],
+        on="parameter",
+        how="left",
+        validate="one_to_one",
+    )
+    posterior_parameter_summary.to_csv(tables_dir / "posterior_parameter_summary.csv", index=False)
+
     sampling.parameter_summary.to_csv(tables_dir / "sampler_parameter_diagnostics.csv", index=False)
     sampling.run_summary.to_csv(tables_dir / "sampler_run_summary.csv", index=False)
     sampling.bfmi_by_chain.to_csv(tables_dir / "sampler_bfmi_by_chain.csv", index=False)
@@ -549,6 +586,9 @@ def main():
 
     print("\n=== SAMPLER ===")
     print(sampling.run_summary.to_string(index=False))
+
+    print("\n=== POSTERIOR PARAMETERS ===")
+    print(posterior_parameter_summary.to_string(index=False))
 
     print("\n=== MATERIAL NOISE ===")
     print(material_noise.to_string(index=False))

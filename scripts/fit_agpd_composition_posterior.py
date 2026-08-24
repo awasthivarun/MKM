@@ -1,4 +1,4 @@
-"""Fit a shared-energetics AgPd composition model across multiple materials."""
+"""Fit an AgPd composition model across multiple materials."""
 
 from argparse import ArgumentParser
 from time import perf_counter
@@ -15,6 +15,7 @@ from mkm.inference.posterior import (
 )
 from mkm.models.agpd_basic import (
     available_agpd_composition_models,
+    available_agpd_composition_parameterizations,
     build_agpd_composition_mechanism,
 )
 from mkm.project_paths import ProjectPaths
@@ -26,8 +27,7 @@ from mkm.workflows.agpd_basic import (
     load_agpd_model_config,
 )
 
-
-COMPOSITION_MODEL = "shared"
+DEFAULT_COMPOSITION_MODEL = "shared"
 DEFAULT_PRIOR_MATERIAL = "Ag10Pd90"
 
 DRAWS = 1000
@@ -46,7 +46,6 @@ def _validate_posterior_deterministic(name, values):
 
     if np.any(np.isnan(values)) or np.any(np.isposinf(values)):
         raise RuntimeError(f"Posterior deterministic '{name}' contains NaN or +inf values.")
-
     if name not in PATHWAY_LOG_RATE_NAMES and np.any(np.isneginf(values)):
         raise RuntimeError(f"Posterior deterministic '{name}' contains -inf values.")
 
@@ -54,6 +53,11 @@ def _validate_posterior_deterministic(name, values):
 def parse_args():
     parser = ArgumentParser()
     parser.add_argument("model", choices=available_agpd_composition_models())
+    parser.add_argument(
+        "--composition-model",
+        choices=available_agpd_composition_parameterizations(),
+        default=DEFAULT_COMPOSITION_MODEL,
+    )
     parser.add_argument("--materials", nargs="+", default=None)
     parser.add_argument("--prior-material", default=DEFAULT_PRIOR_MATERIAL)
     parser.add_argument("--likelihood", choices=["iid", "setup_intercept"], default="iid")
@@ -68,6 +72,7 @@ def parse_args():
 def main():
     args = parse_args()
     model_name = args.model
+    composition_model = args.composition_model
     likelihood_name = args.likelihood
 
     paths = ProjectPaths.discover(__file__)
@@ -77,7 +82,6 @@ def main():
     unknown = [material for material in materials if material not in config["surface_composition"]]
     if unknown:
         raise ValueError(f"Unknown AgPd materials: {unknown}.")
-
     if args.prior_material not in config["prior_profiles"]:
         raise ValueError(f"No prior profile is configured for '{args.prior_material}'.")
 
@@ -88,12 +92,11 @@ def main():
         materials=tuple(inputs.materials),
         config=config,
         prior_material=args.prior_material,
+        composition_model=composition_model,
     )
-
     likelihood_config = config["likelihood"]
     setup_config = likelihood_config["setup_intercept"]
     use_setup_intercept = likelihood_name == "setup_intercept"
-
     built = build_pymc_model(
         inputs=inputs,
         mechanism=mechanism,
@@ -103,14 +106,12 @@ def main():
         setup_prior_median=setup_config["prior_median"],
         setup_prior_log_sd=setup_config["prior_log_sd"],
     )
-
     output_dir = paths.agpd_composition_posterior_output_dir(
-        composition_model=COMPOSITION_MODEL,
+        composition_model=composition_model,
         model_name=model_name,
         likelihood_name=likelihood_name,
     )
     output_dir.mkdir(parents=True, exist_ok=True)
-
     sampler_settings = {
         "nuts_sampler": "nutpie",
         "backend": "numba",
@@ -130,26 +131,32 @@ def main():
         model_config_path=paths.agpd_model_config_path,
         sampler=sampler_settings,
     )
-    metadata["composition_model"] = COMPOSITION_MODEL
+    metadata["composition_model"] = composition_model
     metadata["materials"] = list(inputs.materials)
     metadata["prior_profile_material"] = args.prior_material
-    write_run_metadata(metadata, output_dir / "run_metadata.yaml")
 
+    if composition_model == "linear_xAg":
+        linear_config = config["composition_parameterizations"]["linear_xAg"]
+        metadata["composition_x_reference"] = float(linear_config["x_reference"])
+        metadata["composition_slope_parameters"] = list(linear_config["models"][model_name]["slopes"])
+
+    write_run_metadata(metadata, output_dir / "run_metadata.yaml")
     print(f"\nAgPd composition model: {model_name}")
-    print(f"Composition parameterization: {COMPOSITION_MODEL}")
+    print(f"Composition parameterization: {composition_model}")
     print(f"Materials: {', '.join(inputs.materials)}")
     print(f"Prior profile source: {args.prior_material}")
     print(f"Likelihood: {likelihood_name}")
     print(f"Material-specific noise terms: {len(inputs.materials)}")
 
+    if composition_model == "linear_xAg":
+        print(f"x_Ag reference: {metadata['composition_x_reference']:.2f}")
+        print(f"Linear x_Ag slopes: {', '.join(metadata['composition_slope_parameters'])}")
     if use_setup_intercept:
         print(f"Setups: {len(inputs.setup_labels)}")
-
     print("Sampler: nutpie / numba")
     print(f"Chains: {CHAINS}, tune: {TUNE}, draws: {DRAWS}, target_accept: {TARGET_ACCEPT}")
 
     posterior_free_path = output_dir / "posterior_free.nc"
-
     if args.resume_free:
         if not posterior_free_path.exists():
             raise FileNotFoundError(f"Free posterior not found: {posterior_free_path}")
@@ -158,7 +165,6 @@ def main():
         print(f"Reusing free posterior: {posterior_free_path}")
     else:
         start = perf_counter()
-
         idata = sample_posterior(
             built,
             draws=DRAWS,
@@ -179,7 +185,6 @@ def main():
     free_var_names = [rv.name for rv in built.model.free_RVs]
     diagnostics = az.summary(idata, var_names=free_var_names, kind="diagnostics", round_to=None)
     diagnostics.to_csv(output_dir / "sampler_diagnostics.csv")
-
     if sampling_seconds is not None:
         print(f"\nSampling wall time: {sampling_seconds:.2f} s")
     else:
@@ -206,7 +211,6 @@ def main():
 
     for name in deterministic_names:
         _validate_posterior_deterministic(name, posterior[name])
-
     idata = add_log_likelihood(idata, built, backend="numba", progressbar=True)
     idata.to_netcdf(output_dir / "posterior.nc", engine="h5netcdf")
 
