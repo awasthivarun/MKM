@@ -179,40 +179,7 @@ from model log-rate draws on nonrectangular designs.
 
 ## Current likelihood
 
-Preferred likelihood:
-
-\[
-\ln r_i^{\mathrm{obs}}
-\sim
-\mathcal N\left(
-\ln r_{p(i)}^{\mathrm{model}}+b_{s(i)},
-\sigma_{\mathrm{res},m(i)}
-\right)
-\]
-
-with setup:
-
-```text
-(material, electrolyte_concentration_M, replicate)
-```
-
-and zero-sum constraint within each material/KOH experiment:
-
-\[
-b_{k,A}+b_{k,B}+b_{k,C}=0.
-\]
-
-Priors:
-
-\[
-\sigma_{\mathrm{res},m}\sim\mathrm{LogNormal}(\ln0.20,0.75)
-\]
-
-\[
-\sigma_{\mathrm{setup},m}\sim\mathrm{LogNormal}(\ln0.10,0.75).
-\]
-
-The iid likelihood remains available as a control.
+Current working likelihood is material-specific IID log-rate Normal noise. One effective residual scale per material intentionally absorbs experimental scatter, unmodeled setup variation, and model discrepancy. Correlated residual structure is acknowledged but deferred until the mechanistic mean function is better established.
 
 ## Mechanisms
 

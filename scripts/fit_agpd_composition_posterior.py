@@ -56,7 +56,7 @@ def parse_args():
     parser.add_argument("model", choices=available_agpd_composition_models())
     parser.add_argument("--materials", nargs="+", default=None)
     parser.add_argument("--prior-material", default=DEFAULT_PRIOR_MATERIAL)
-    parser.add_argument("--likelihood", choices=["iid", "setup_intercept"], default="setup_intercept")
+    parser.add_argument("--likelihood", choices=["iid", "setup_intercept"], default="iid")
     parser.add_argument(
         "--resume-free",
         action="store_true",

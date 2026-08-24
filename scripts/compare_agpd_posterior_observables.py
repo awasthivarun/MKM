@@ -42,7 +42,7 @@ def parse_args():
     parser.add_argument(
         "--likelihood",
         choices=["iid", "setup_intercept"],
-        default="setup_intercept",
+        default="iid",
     )
     return parser.parse_args()
 

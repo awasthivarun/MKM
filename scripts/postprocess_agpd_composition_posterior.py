@@ -82,7 +82,7 @@ def parse_args():
     parser = ArgumentParser()
     parser.add_argument("model", choices=available_agpd_composition_models())
     parser.add_argument("--composition-model", default=DEFAULT_COMPOSITION_MODEL)
-    parser.add_argument("--likelihood", choices=["iid", "setup_intercept"], default="setup_intercept")
+    parser.add_argument("--likelihood", choices=["iid", "setup_intercept"], default="iid")
     return parser.parse_args()
 
 

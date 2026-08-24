@@ -24,7 +24,7 @@ def parse_args():
     parser = ArgumentParser()
     parser.add_argument("model", choices=available_agpd_models())
     parser.add_argument("--material", default=DEFAULT_MATERIAL)
-    parser.add_argument("--likelihood", choices=["iid", "setup_intercept"], default="setup_intercept")
+    parser.add_argument("--likelihood", choices=["iid", "setup_intercept"], default="iid")
     parser.add_argument("--step-eV", type=float, default=1e-4)
     parser.add_argument("--check-half-step", action="store_true")
     return parser.parse_args()

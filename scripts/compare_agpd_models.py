@@ -17,7 +17,7 @@ DEFAULT_MATERIAL = "Ag10Pd90"
 def parse_args():
     parser = ArgumentParser()
     parser.add_argument("--material", default=DEFAULT_MATERIAL)
-    parser.add_argument("--likelihood", choices=["iid", "setup_intercept"], default="setup_intercept")
+    parser.add_argument("--likelihood", choices=["iid", "setup_intercept"], default="iid")
     parser.add_argument("--models", nargs="+", choices=available_agpd_models(), default=None)
     return parser.parse_args()
 
