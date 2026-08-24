@@ -1,14 +1,16 @@
+from types import SimpleNamespace
+
 import numpy as np
 import pandas as pd
 import xarray as xr
 
+from mkm.observable_maps import LinearObservableMap
 from mkm.postprocessing.observables import (
     summarize_posterior_linear_observable,
     summarize_posterior_model_variable,
     summarize_pointwise_posterior_variable,
 )
-from mkm.observable_maps import LinearObservableMap
-from types import SimpleNamespace
+
 
 def _make_idata():
     ln_rate = np.array(
@@ -17,7 +19,6 @@ def _make_idata():
             [[3.0, 4.0, 6.0], [4.0, 5.0, 7.0]],
         ]
     )
-
     posterior = xr.Dataset(
         {
             "ln_rate_model": (("chain", "draw", "model_point"), ln_rate),
@@ -34,7 +35,6 @@ def _make_idata():
 def test_posterior_model_variable_summary_aligns_with_model_points():
     idata = _make_idata()
     model_points = pd.DataFrame({"model_point_id": [0, 1, 2]})
-
     summary = summarize_posterior_model_variable(
         idata,
         model_points,
@@ -43,11 +43,13 @@ def test_posterior_model_variable_summary_aligns_with_model_points():
 
     assert len(summary) == 3
     np.testing.assert_allclose(summary["rate_fraction_BF_mean"], 0.25)
+    np.testing.assert_allclose(summary["rate_fraction_BF_median"], 0.25)
+    np.testing.assert_allclose(summary["rate_fraction_BF_hdi95_lower"], 0.25)
+    np.testing.assert_allclose(summary["rate_fraction_BF_hdi95_upper"], 0.25)
 
 
 def test_posterior_linear_observable_preserves_chain_information():
     idata = _make_idata()
-
     observable_map = LinearObservableMap(
         outputs=pd.DataFrame({"observable_id": [0], "label": ["difference"]}),
         terms=pd.DataFrame(
@@ -63,7 +65,10 @@ def test_posterior_linear_observable_preserves_chain_information():
 
     assert len(summary.pooled) == 1
     assert len(summary.by_chain) == 2
-    np.testing.assert_allclose(summary.pooled.loc[0, "q50"], 3.0)
+    np.testing.assert_allclose(summary.pooled.loc[0, "median"], 3.0)
+    np.testing.assert_allclose(summary.pooled.loc[0, "hdi95_lower"], 3.0)
+    np.testing.assert_allclose(summary.pooled.loc[0, "hdi95_upper"], 3.0)
+
 
 def test_inference_posterior_diagnostics_remains_compatible():
     from mkm.inference.posterior_diagnostics import (
@@ -74,6 +79,7 @@ def test_inference_posterior_diagnostics_remains_compatible():
     )
 
     assert old_import is new_import
+
 
 def test_pointwise_summary_uses_generic_statistic_columns():
     posterior = xr.Dataset(
@@ -90,15 +96,8 @@ def test_pointwise_summary_uses_generic_statistic_columns():
         }
     )
 
-    inference_data = SimpleNamespace(
-        posterior=posterior
-    )
-
-    model_points = pd.DataFrame(
-        {
-            "model_point_id": [0, 1],
-        }
-    )
+    inference_data = SimpleNamespace(posterior=posterior)
+    model_points = pd.DataFrame({"model_point_id": [0, 1]})
 
     result = summarize_pointwise_posterior_variable(
         inference_data=inference_data,
@@ -109,12 +108,14 @@ def test_pointwise_summary_uses_generic_statistic_columns():
     assert {
         "mean",
         "sd",
-        "q025",
-        "q50",
-        "q975",
+        "median",
+        "hdi95_lower",
+        "hdi95_upper",
     }.issubset(result.columns)
 
-    assert "theta_CO_q50" not in result.columns
+    assert "theta_CO_median" not in result.columns
+    assert "q50" not in result.columns
+
 
 def test_model_variable_summary_retains_prefixed_columns():
     posterior = xr.Dataset(
@@ -131,15 +132,8 @@ def test_model_variable_summary_retains_prefixed_columns():
         }
     )
 
-    inference_data = SimpleNamespace(
-        posterior=posterior
-    )
-
-    model_points = pd.DataFrame(
-        {
-            "model_point_id": [0],
-        }
-    )
+    inference_data = SimpleNamespace(posterior=posterior)
+    model_points = pd.DataFrame({"model_point_id": [0]})
 
     result = summarize_posterior_model_variable(
         inference_data=inference_data,
@@ -147,5 +141,8 @@ def test_model_variable_summary_retains_prefixed_columns():
         variable_name="theta_CO",
     )
 
-    assert "theta_CO_q50" in result.columns
+    assert "theta_CO_median" in result.columns
+    assert "theta_CO_hdi95_lower" in result.columns
+    assert "theta_CO_hdi95_upper" in result.columns
+    assert "median" not in result.columns
     assert "q50" not in result.columns

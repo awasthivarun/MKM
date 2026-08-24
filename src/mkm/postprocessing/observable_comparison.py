@@ -27,12 +27,14 @@ def build_experimental_observable_comparison(
         how="inner",
         validate="one_to_one",
     )
-    pooled_result["residual_q50"] = pooled_result["q50"] - pooled_result[observed_column]
-    pooled_result["abs_residual_q50"] = np.abs(pooled_result["residual_q50"])
-    pooled_result["standardized_residual_q50"] = pooled_result["residual_q50"] / pooled_result[observed_sd_column]
-    pooled_result["experimental_value_inside_posterior_95"] = (
-        (pooled_result[observed_column] >= pooled_result["q025"])
-        & (pooled_result[observed_column] <= pooled_result["q975"])
+    pooled_result["residual_median"] = pooled_result["median"] - pooled_result[observed_column]
+    pooled_result["abs_residual_median"] = np.abs(pooled_result["residual_median"])
+    pooled_result["standardized_residual_median"] = (
+        pooled_result["residual_median"] / pooled_result[observed_sd_column]
+    )
+    pooled_result["experimental_value_inside_posterior_95_hdi"] = (
+        (pooled_result[observed_column] >= pooled_result["hdi95_lower"])
+        & (pooled_result[observed_column] <= pooled_result["hdi95_upper"])
     )
 
     chain_result = by_chain.merge(
@@ -43,19 +45,19 @@ def build_experimental_observable_comparison(
     )
 
     chain_spread = (
-        chain_result.groupby(key_columns, dropna=False)["q50"]
-        .agg(chain_q50_min="min", chain_q50_max="max")
+        chain_result.groupby(key_columns, dropna=False)["median"]
+        .agg(chain_median_min="min", chain_median_max="max")
         .reset_index()
     )
-    chain_spread["chain_q50_range"] = chain_spread["chain_q50_max"] - chain_spread["chain_q50_min"]
+    chain_spread["chain_median_range"] = chain_spread["chain_median_max"] - chain_spread["chain_median_min"]
     chain_spread = chain_spread.merge(
         experimental[key_columns + [observed_sd_column]],
         on=key_columns,
         how="left",
         validate="one_to_one",
     )
-    chain_spread["chain_q50_range_over_exp_sd"] = (
-        chain_spread["chain_q50_range"] / chain_spread[observed_sd_column]
+    chain_spread["chain_median_range_over_exp_sd"] = (
+        chain_spread["chain_median_range"] / chain_spread[observed_sd_column]
     )
 
     return ExperimentalObservableComparison(
@@ -69,18 +71,18 @@ def summarize_experimental_observable(name, comparison):
     pooled = comparison.pooled
     spread = comparison.chain_spread
 
-    standardized = pooled["standardized_residual_q50"].replace([np.inf, -np.inf], np.nan).dropna()
-    chain_scaled = spread["chain_q50_range_over_exp_sd"].replace([np.inf, -np.inf], np.nan).dropna()
+    standardized = pooled["standardized_residual_median"].replace([np.inf, -np.inf], np.nan).dropna()
+    chain_scaled = spread["chain_median_range_over_exp_sd"].replace([np.inf, -np.inf], np.nan).dropna()
 
     return {
         "observable": name,
         "n_points": len(pooled),
-        "median_abs_residual_q50": float(pooled["abs_residual_q50"].median()),
-        "median_abs_standardized_residual_q50": float(standardized.abs().median()),
-        "posterior_95_contains_experimental_mean": float(
-            pooled["experimental_value_inside_posterior_95"].mean()
+        "median_abs_residual": float(pooled["abs_residual_median"].median()),
+        "median_abs_standardized_residual": float(standardized.abs().median()),
+        "posterior_95_hdi_contains_experimental_mean": float(
+            pooled["experimental_value_inside_posterior_95_hdi"].mean()
         ),
-        "median_chain_q50_range_over_exp_sd": float(chain_scaled.median()),
-        "p95_chain_q50_range_over_exp_sd": float(chain_scaled.quantile(0.95)),
-        "max_chain_q50_range_over_exp_sd": float(chain_scaled.max()),
+        "median_chain_median_range_over_exp_sd": float(chain_scaled.median()),
+        "p95_chain_median_range_over_exp_sd": float(chain_scaled.quantile(0.95)),
+        "max_chain_median_range_over_exp_sd": float(chain_scaled.max()),
     }

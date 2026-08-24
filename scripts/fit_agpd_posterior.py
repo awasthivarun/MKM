@@ -1,11 +1,8 @@
 from argparse import ArgumentParser
-from pathlib import Path
 from time import perf_counter
 
 import arviz as az
 import numpy as np
-import pandas as pd
-import yaml
 
 from mkm.inference.model import build_pymc_model
 from mkm.inference.posterior import (
@@ -14,18 +11,18 @@ from mkm.inference.posterior import (
     sample_posterior,
     summarize_sampler_health,
 )
-from mkm.model_data import build_model_data
-from mkm.model_inputs import build_model_input_arrays
 from mkm.models.agpd_basic import available_agpd_models, build_agpd_mechanism
+from mkm.project_paths import ProjectPaths
+from mkm.provenance import build_fit_metadata, write_run_metadata
+from mkm.workflows.agpd_basic import (
+    build_agpd_inputs,
+    build_agpd_model_data,
+    load_agpd_model_config,
+    validate_agpd_material,
+)
 
 
-ROOT = Path(__file__).resolve().parents[1]
-
-DATA_PATH = ROOT / "data" / "processed" / "AgPd_COOx_basic" / "analysis" / "AgPd_COOx_basic_selected.parquet"
-CONFIG_PATH = ROOT / "config" / "models" / "agpd_basic.yaml"
-OUTPUT_ROOT = ROOT / "results" / "AgPd_COOx_basic" / "posterior"
-
-MATERIAL = "Ag10Pd90"
+DEFAULT_MATERIAL = "Ag10Pd90"
 
 DRAWS = 1000
 TUNE = 1000
@@ -38,6 +35,7 @@ RANDOM_SEED = 20260821
 def parse_args():
     parser = ArgumentParser()
     parser.add_argument("model", choices=available_agpd_models())
+    parser.add_argument("--material", default=DEFAULT_MATERIAL)
     parser.add_argument("--likelihood", choices=["iid", "setup_intercept"], default="setup_intercept")
     return parser.parse_args()
 
@@ -45,33 +43,20 @@ def parse_args():
 def main():
     args = parse_args()
     model_name = args.model
+    material = args.material
     likelihood_name = args.likelihood
 
-    with open(CONFIG_PATH, "r") as file:
-        config = yaml.safe_load(file)
+    paths = ProjectPaths.discover(__file__)
+    config = load_agpd_model_config(paths)
+    validate_agpd_material(config, material)
 
     likelihood_config = config["likelihood"]
     setup_config = likelihood_config["setup_intercept"]
-
     use_setup_intercept = likelihood_name == "setup_intercept"
 
-    setup_group_columns = setup_config["group_columns"] if use_setup_intercept else None
-    setup_zero_sum_columns = setup_config["zero_sum_within"] if use_setup_intercept else None
-
-    selected = pd.read_parquet(DATA_PATH)
-    selected = selected.loc[selected["material"] == MATERIAL].copy()
-
-    model_data = build_model_data(
-        selected_replicates=selected,
-        electrolyte_concentration_column="C_KOH_M",
-    )
-    inputs = build_model_input_arrays(
-        model_data,
-        setup_group_columns=setup_group_columns,
-        setup_zero_sum_columns=setup_zero_sum_columns,
-    )
-
-    mechanism = build_agpd_mechanism(model_name=model_name, material=MATERIAL, config=config)
+    model_data = build_agpd_model_data(paths, material)
+    inputs = build_agpd_inputs(model_data, config, likelihood_name)
+    mechanism = build_agpd_mechanism(model_name=model_name, material=material, config=config)
 
     built = build_pymc_model(
         inputs=inputs,
@@ -83,16 +68,37 @@ def main():
         setup_prior_log_sd=setup_config["prior_log_sd"],
     )
 
-    output_dir = OUTPUT_ROOT / MATERIAL / likelihood_name / model_name
+    output_dir = paths.agpd_posterior_output_dir(material, model_name, likelihood_name)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"\n{MATERIAL}: {model_name}")
+    sampler_settings = {
+        "nuts_sampler": "nutpie",
+        "backend": "numba",
+        "draws": DRAWS,
+        "tune": TUNE,
+        "chains": CHAINS,
+        "cores": CORES,
+        "target_accept": TARGET_ACCEPT,
+        "random_seed": RANDOM_SEED,
+    }
+    metadata = build_fit_metadata(
+        root=paths.root,
+        material=material,
+        model_name=model_name,
+        likelihood_name=likelihood_name,
+        data_path=paths.agpd_selected_path,
+        model_config_path=paths.agpd_model_config_path,
+        sampler=sampler_settings,
+    )
+    write_run_metadata(metadata, output_dir / "run_metadata.yaml")
+
+    print(f"\n{material}: {model_name}")
     print(f"Likelihood: {likelihood_name}")
 
     if use_setup_intercept:
         print(f"Setups: {len(inputs.setup_labels)}")
-        
-    print(f"Sampler: nutpie / numba")
+
+    print("Sampler: nutpie / numba")
     print(f"Chains: {CHAINS}, tune: {TUNE}, draws: {DRAWS}, target_accept: {TARGET_ACCEPT}")
 
     start = perf_counter()
@@ -105,13 +111,12 @@ def main():
         cores=CORES,
         target_accept=TARGET_ACCEPT,
         random_seed=RANDOM_SEED,
-        nuts_sampler="nutpie",
-        backend="numba",
+        nuts_sampler=sampler_settings["nuts_sampler"],
+        backend=sampler_settings["backend"],
         compute_convergence_checks=False,
     )
 
     sampling_seconds = perf_counter() - start
-
     idata.to_netcdf(output_dir / "posterior_free.nc", engine="h5netcdf")
 
     health = summarize_sampler_health(idata)
@@ -123,7 +128,6 @@ def main():
         kind="diagnostics",
         round_to=None,
     )
-
     diagnostics.to_csv(output_dir / "sampler_diagnostics.csv")
 
     print(f"\nSampling wall time: {sampling_seconds:.2f} s")

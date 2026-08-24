@@ -674,8 +674,11 @@ def solve_pd_co_ssa_qea_oh(
 
 
 def evaluate_agpd_co_bf_er_lh(state: AgPdPointState, parameters: AgPdCOBFERRLHParameters, temperature_K):
-    if np.any(state.Ag_fraction <= 0):
-        raise ValueError("CO-BF-ER-LH requires a positive Ag fraction because BF parameters would otherwise be unidentified.")
+    if np.all(state.Ag_fraction <= 0):
+        raise ValueError(
+            "CO-BF-ER-LH requires a positive Ag fraction in at least one model point because "
+            "BF parameters would otherwise be unidentified."
+        )
 
     if np.any(state.Pd_fraction <= 0):
         raise ValueError("CO-BF-ER-LH requires a positive Pd fraction.")

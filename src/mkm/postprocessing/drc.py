@@ -11,6 +11,7 @@ import xarray as xr
 from mkm.constants import K_B_EV_K
 from mkm.mechanisms.agpd_basic import build_agpd_point_state
 from mkm.models.agpd_basic import get_agpd_model_definition
+from mkm.postprocessing.diagnostics import summarize_samples
 
 
 @dataclass(frozen=True)
@@ -114,9 +115,7 @@ def _summarize_transition_state_draws(draws, model_points):
     n_chains, n_draws, n_controls, n_points = values.shape
     samples = values.reshape(n_chains * n_draws, n_controls, n_points)
 
-    q025, q50, q975 = np.quantile(samples, [0.025, 0.5, 0.975], axis=0)
-    mean = np.mean(samples, axis=0)
-    sd = np.std(samples, axis=0, ddof=1) if samples.shape[0] > 1 else np.full((n_controls, n_points), np.nan)
+    summary = summarize_samples(samples)
 
     metadata = model_points.sort_values("model_point_id").reset_index(drop=True).copy()
     if len(metadata) != n_points:
@@ -132,11 +131,11 @@ def _summarize_transition_state_draws(draws, model_points):
         frame["control"] = control_name
         frame["parameter"] = control_parameter
         frame["label"] = control_label
-        frame["mean"] = mean[control_index]
-        frame["sd"] = sd[control_index]
-        frame["q025"] = q025[control_index]
-        frame["q50"] = q50[control_index]
-        frame["q975"] = q975[control_index]
+        frame["mean"] = summary["mean"][control_index]
+        frame["sd"] = summary["sd"][control_index]
+        frame["median"] = summary["median"][control_index]
+        frame["hdi95_lower"] = summary["hdi95_lower"][control_index]
+        frame["hdi95_upper"] = summary["hdi95_upper"][control_index]
         records.append(frame)
 
     return pd.concat(records, ignore_index=True)

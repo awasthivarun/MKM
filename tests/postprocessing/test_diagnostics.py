@@ -34,7 +34,6 @@ def test_build_parameter_contraction_uses_material_model_profile():
             ]
         )
     }
-
     config = {
         "prior_profiles": {
             "Ag10Pd90": {
@@ -50,7 +49,6 @@ def test_build_parameter_contraction_uses_material_model_profile():
             }
         }
     }
-
     result = build_parameter_contraction(
         posterior=posterior,
         config=config,
@@ -60,7 +58,9 @@ def test_build_parameter_contraction_uses_material_model_profile():
 
     assert result["parameter"].tolist() == ["x"]
     assert result.loc[0, "prior_sd"] == pytest.approx(2.0)
-    assert result.loc[0, "posterior_q50"] == pytest.approx(1.0)
+    assert result.loc[0, "posterior_median"] == pytest.approx(1.0)
+    assert result.loc[0, "posterior_hdi95_lower"] <= result.loc[0, "posterior_median"]
+    assert result.loc[0, "posterior_hdi95_upper"] >= result.loc[0, "posterior_median"]
     assert result.loc[0, "sd_ratio_posterior_over_prior"] > 0.0
 
 
@@ -77,16 +77,13 @@ def test_build_noise_summary_handles_material_and_setup_scales():
         "sigma_ln_rate_setup_material",
     }
 
-    material = result[
-        result["variable"] == "sigma_ln_rate_material"
-    ].iloc[0]
+    material = result[result["variable"] == "sigma_ln_rate_material"].iloc[0]
+    setup = result[result["variable"] == "sigma_ln_rate_setup_material"].iloc[0]
 
-    setup = result[
-        result["variable"] == "sigma_ln_rate_setup_material"
-    ].iloc[0]
-
-    assert material["q50"] == pytest.approx(0.4)
-    assert setup["q50"] == pytest.approx(0.08)
+    assert material["median"] == pytest.approx(0.4)
+    assert setup["median"] == pytest.approx(0.08)
+    assert material["hdi95_lower"] == pytest.approx(0.4)
+    assert material["hdi95_upper"] == pytest.approx(0.4)
 
 
 def test_build_physical_summary_detects_out_of_bounds_values():
@@ -100,10 +97,10 @@ def test_build_physical_summary_detects_out_of_bounds_values():
     }
 
     result = build_physical_summary(posterior)
-
     assert result["variable"].tolist() == ["theta_CO"]
     assert result.loc[0, "maximum"] == pytest.approx(1.01)
     assert result.loc[0, "fraction_above_one"] > 0.0
+    assert {"median", "hdi95_lower", "hdi95_upper"}.issubset(result.columns)
 
 
 def test_build_balance_summary_checks_sites_and_pathways():
@@ -118,7 +115,6 @@ def test_build_balance_summary_checks_sites_and_pathways():
     }
 
     result = build_balance_summary(posterior)
-
     assert set(result["balance"]) == {
         "Pd",
         "Ag",

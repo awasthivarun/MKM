@@ -1,16 +1,19 @@
 """Generate persistent numerical and graphical post-processing products for an AgPd posterior fit."""
 
 from argparse import ArgumentParser
-from pathlib import Path
-
 import arviz as az
 import numpy as np
 import pandas as pd
-import yaml
 
-from mkm.model_data import build_model_data
-from mkm.model_inputs import build_model_input_arrays
 from mkm.models.agpd_basic import available_agpd_models
+from mkm.project_paths import ProjectPaths
+from mkm.workflows.agpd_basic import (
+    build_agpd_inputs,
+    build_agpd_model_data,
+    load_agpd_model_config,
+    load_agpd_preprocessing_config,
+    validate_agpd_material,
+)
 from mkm.observable_maps import build_adjacent_log_order_map, build_alpha_map, build_log_slope_order_map
 from mkm.postprocessing.diagnostics import (
     build_balance_summary,
@@ -50,19 +53,7 @@ from mkm.postprocessing.calibration import compute_normal_loo_pit
 from mkm.postprocessing.loo import compute_loo_diagnostics
 
 
-ROOT = Path(__file__).resolve().parents[1]
-
-ANALYSIS_ROOT = ROOT / "data" / "processed" / "AgPd_COOx_basic" / "analysis"
-DATA_PATH = ANALYSIS_ROOT / "AgPd_COOx_basic_selected.parquet"
-SUMMARY_PATH = ANALYSIS_ROOT / "AgPd_COOx_basic_summary.parquet"
-DELTA_OH_PATH = ANALYSIS_ROOT / "AgPd_COOx_basic_delta_OH.parquet"
-DELTA_CO_PATH = ANALYSIS_ROOT / "AgPd_COOx_basic_delta_CO.parquet"
-
-CONFIG_PATH = ROOT / "config" / "models" / "agpd_basic.yaml"
-PREPROCESSING_CONFIG_PATH = ROOT / "config" / "preprocessing" / "agpd_basic.yaml"
-POSTERIOR_ROOT = ROOT / "results" / "AgPd_COOx_basic" / "posterior"
-
-MATERIAL = "Ag10Pd90"
+DEFAULT_MATERIAL = "Ag10Pd90"
 
 POINTWISE_VARIABLES = (
     "theta_CO",
@@ -79,44 +70,19 @@ POINTWISE_VARIABLES = (
 def parse_args():
     parser = ArgumentParser()
     parser.add_argument("model", choices=available_agpd_models())
+    parser.add_argument("--material", default=DEFAULT_MATERIAL)
     parser.add_argument("--likelihood", choices=["iid", "setup_intercept"], default="setup_intercept")
     return parser.parse_args()
 
 
-def _get_posterior_dir(model_name, likelihood_name):
-    if likelihood_name == "setup_intercept":
-        path = POSTERIOR_ROOT / MATERIAL / "setup_intercept" / model_name
-    else:
-        new_path = POSTERIOR_ROOT / MATERIAL / "iid" / model_name
-        legacy_path = POSTERIOR_ROOT / MATERIAL / model_name
-        path = new_path if (new_path / "posterior.nc").exists() else legacy_path
+def _load_experimental_observables(paths, material):
+    experimental_alpha = pd.read_parquet(paths.agpd_summary_path)
+    experimental_oh = pd.read_parquet(paths.agpd_delta_oh_path)
+    experimental_co = pd.read_parquet(paths.agpd_delta_co_path)
 
-    posterior_path = path / "posterior.nc"
-
-    if not posterior_path.exists():
-        raise FileNotFoundError(f"Posterior not found: {posterior_path}")
-
-    return path
-
-
-def _load_configs():
-    with open(CONFIG_PATH, "r") as file:
-        config = yaml.safe_load(file)
-
-    with open(PREPROCESSING_CONFIG_PATH, "r") as file:
-        preprocessing_config = yaml.safe_load(file)
-
-    return config, preprocessing_config
-
-
-def _load_experimental_observables():
-    experimental_alpha = pd.read_parquet(SUMMARY_PATH)
-    experimental_oh = pd.read_parquet(DELTA_OH_PATH)
-    experimental_co = pd.read_parquet(DELTA_CO_PATH)
-
-    experimental_alpha = experimental_alpha.loc[experimental_alpha["material"] == MATERIAL].copy()
-    experimental_oh = experimental_oh.loc[experimental_oh["material"] == MATERIAL].copy()
-    experimental_co = experimental_co.loc[experimental_co["material"] == MATERIAL].copy()
+    experimental_alpha = experimental_alpha.loc[experimental_alpha["material"] == material].copy()
+    experimental_oh = experimental_oh.loc[experimental_oh["material"] == material].copy()
+    experimental_co = experimental_co.loc[experimental_co["material"] == material].copy()
 
     return experimental_alpha, experimental_oh, experimental_co
 
@@ -244,12 +210,16 @@ def _save_observable_comparisons(comparisons, tables_dir, derived_dir):
 def main():
     args = parse_args()
     model_name = args.model
+    material = args.material
     likelihood_name = args.likelihood
 
-    config, preprocessing_config = _load_configs()
-    experimental_alpha, experimental_oh, experimental_co = _load_experimental_observables()
+    paths = ProjectPaths.discover(__file__)
+    config = load_agpd_model_config(paths)
+    preprocessing_config = load_agpd_preprocessing_config(paths)
+    validate_agpd_material(config, material)
+    experimental_alpha, experimental_oh, experimental_co = _load_experimental_observables(paths, material)
 
-    posterior_dir = _get_posterior_dir(model_name=model_name, likelihood_name=likelihood_name)
+    posterior_dir = paths.agpd_posterior_dir(material, model_name, likelihood_name)
 
     output_dir = posterior_dir / "postprocessing"
     tables_dir = output_dir / "tables"
@@ -261,30 +231,15 @@ def main():
 
     idata = az.from_netcdf(posterior_dir / "posterior.nc")
     posterior = idata.posterior
-    parameter_specs = config["prior_profiles"][MATERIAL][model_name]["parameters"]
+    parameter_specs = config["prior_profiles"][material][model_name]["parameters"]
 
-    selected = pd.read_parquet(DATA_PATH)
-    selected = selected.loc[selected["material"] == MATERIAL].copy()
-
-    model_data = build_model_data(
-        selected_replicates=selected,
-        electrolyte_concentration_column="C_KOH_M",
-    )
-
-    if likelihood_name == "setup_intercept":
-        setup_config = config["likelihood"]["setup_intercept"]
-        inputs = build_model_input_arrays(
-            model_data,
-            setup_group_columns=setup_config["group_columns"],
-            setup_zero_sum_columns=setup_config["zero_sum_within"],
-        )
-    else:
-        inputs = build_model_input_arrays(model_data)
+    model_data = build_agpd_model_data(paths, material)
+    inputs = build_agpd_inputs(model_data, config, likelihood_name)
 
     parameter_contraction = build_parameter_contraction(
         posterior=posterior,
         config=config,
-        material=MATERIAL,
+        material=material,
         model_name=model_name,
     )
     parameter_contraction.to_csv(tables_dir / "parameter_contraction.csv", index=False)
@@ -324,15 +279,28 @@ def main():
     shared_residuals = summarize_shared_replicate_residuals(observation_diagnostics)
     shared_residuals.to_csv(tables_dir / "shared_replicate_residual_summary.csv", index=False)
 
-    plot_observation_grid(
-        observations=observation_diagnostics,
-        output_path=figures_dir / "posterior_predictive_log_rate.png",
-        residual=False,
-    )
+    for distribution in ("mechanism", "conditional", "predictive"):
+        plot_observation_grid(
+            observations=observation_diagnostics,
+            output_path=figures_dir / f"posterior_{distribution}_log_rate.png",
+            residual=False,
+            scale="log",
+            distribution=distribution,
+        )
+        plot_observation_grid(
+            observations=observation_diagnostics,
+            output_path=figures_dir / f"posterior_{distribution}_rate.png",
+            residual=False,
+            scale="rate",
+            distribution=distribution,
+        )
+
     plot_observation_grid(
         observations=observation_diagnostics,
         output_path=figures_dir / "conditional_log_rate_residuals.png",
         residual=True,
+        scale="log",
+        distribution="conditional",
     )
 
     loo = compute_loo_diagnostics(
@@ -411,20 +379,20 @@ def main():
     plot_alpha_comparison(
         comparison=observable_comparisons["alpha"].pooled,
         output_dir=figures_dir,
-        material=MATERIAL,
+        material=material,
     )
     plot_delta_oh_comparison(
         comparison=observable_comparisons["delta_OH"].pooled,
         output_path=figures_dir / "delta_OH.png",
-        material=MATERIAL,
+        material=material,
     )
     plot_delta_co_comparison(
         comparison=observable_comparisons["delta_CO"].pooled,
         output_dir=figures_dir,
-        material=MATERIAL,
+        material=material,
     )
 
-    print(f"\n{MATERIAL}: {model_name}")
+    print(f"\n{material}: {model_name}")
     print(f"Likelihood: {likelihood_name}")
 
     print("\n=== SAMPLER ===")
@@ -436,9 +404,9 @@ def main():
         "prior_sd",
         "posterior_sd",
         "sd_ratio_posterior_over_prior",
-        "posterior_q025",
-        "posterior_q50",
-        "posterior_q975",
+        "posterior_median",
+        "posterior_hdi95_lower",
+        "posterior_hdi95_upper",
     ]
     print(
         parameter_contraction[contraction_columns]
@@ -457,8 +425,8 @@ def main():
     print(f"conditional residual RMS: {np.sqrt(np.mean(residual.to_numpy() ** 2)):.4f}")
     print(f"median |conditional standardized residual|: {np.median(np.abs(standardized)):.3f}")
     print(
-        "observations inside posterior predictive 95%: "
-        f"{observation_diagnostics['observed_inside_predictive_95'].mean():.1%}"
+        "observations inside posterior predictive 95% HDI: "
+        f"{observation_diagnostics['observed_inside_predictive_95_hdi'].mean():.1%}"
     )
     print(f"median curve lag-1 residual correlation: {curve_residuals['lag1_residual_correlation'].median():.3f}")
     print(f"median |residual slope| per V: {curve_residuals['residual_slope_per_V'].abs().median():.3f}")

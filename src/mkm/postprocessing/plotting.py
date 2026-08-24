@@ -107,7 +107,40 @@ def plot_parameter_posteriors(posterior, parameter_specs, output_path: str | Pat
     plt.close(fig)
 
 
-def plot_observation_grid(observations, output_path: str | Path, residual=False):
+def _posterior_interval_columns(frame, prefix=None):
+    base = "" if prefix is None else f"{prefix}_"
+
+    new = (
+        f"{base}median",
+        f"{base}hdi95_lower",
+        f"{base}hdi95_upper",
+    )
+    if all(column in frame.columns for column in new):
+        return new
+
+    legacy = (
+        f"{base}q50",
+        f"{base}q025",
+        f"{base}q975",
+    )
+    if all(column in frame.columns for column in legacy):
+        return legacy
+
+    raise ValueError(f"Could not find posterior median/95% interval columns for prefix '{prefix}'.")
+
+
+def plot_observation_grid(
+    observations,
+    output_path: str | Path,
+    residual=False,
+    scale="log",
+    distribution="predictive",
+):
+    if scale not in {"log", "rate"}:
+        raise ValueError("scale must be 'log' or 'rate'.")
+    if distribution not in {"mechanism", "conditional", "predictive"}:
+        raise ValueError("distribution must be 'mechanism', 'conditional', or 'predictive'.")
+
     KOH_values = sorted(observations["electrolyte_concentration_M"].unique())
     CO_values = sorted(observations["CO_mole_fraction"].unique())
 
@@ -119,19 +152,23 @@ def plot_observation_grid(observations, output_path: str | Path, residual=False)
         squeeze=False,
     )
 
+    observed_column = "ln_rate" if scale == "log" else "rate"
+
+    if not residual:
+        prefix = f"{'ln_rate' if scale == 'log' else 'rate'}_{distribution}"
+        median_column, lower_column, upper_column = _posterior_interval_columns(observations, prefix)
+
     for row, co_fraction in enumerate(CO_values):
         for col, c_koh in enumerate(KOH_values):
             ax = axes[row, col]
-
             condition = observations[
                 (observations["electrolyte_concentration_M"] == c_koh)
                 & (observations["CO_mole_fraction"] == co_fraction)
             ]
 
-            for replicate, curve in condition.groupby("replicate", sort=True):
-                curve = curve.sort_values("E_V_SHE")
-
-                if residual:
+            if residual:
+                for replicate, curve in condition.groupby("replicate", sort=True):
+                    curve = curve.sort_values("E_V_SHE")
                     ax.plot(
                         curve["E_V_SHE"],
                         curve["residual_conditional"],
@@ -139,33 +176,58 @@ def plot_observation_grid(observations, output_path: str | Path, residual=False)
                         alpha=0.65,
                         label=replicate,
                     )
-                else:
-                    observed_line, = ax.plot(
+            else:
+                for replicate, curve in condition.groupby("replicate", sort=True):
+                    curve = curve.sort_values("E_V_SHE")
+                    ax.plot(
                         curve["E_V_SHE"],
-                        curve["ln_rate"],
+                        curve[observed_column],
                         linewidth=1.0,
                         alpha=0.45,
                         label=f"{replicate} observed",
                     )
 
+                if distribution == "mechanism":
+                    posterior_curve = (
+                        condition.sort_values("E_V_SHE")
+                        .drop_duplicates("model_point_id")
+                    )
                     ax.fill_between(
-                        curve["E_V_SHE"],
-                        curve["ln_rate_predictive_q025"],
-                        curve["ln_rate_predictive_q975"],
-                        color=observed_line.get_color(),
-                        alpha=0.08,
+                        posterior_curve["E_V_SHE"],
+                        posterior_curve[lower_column],
+                        posterior_curve[upper_column],
+                        alpha=0.16,
                         linewidth=0,
                     )
-
                     ax.plot(
-                        curve["E_V_SHE"],
-                        curve["ln_rate_predictive_q50"],
-                        color=observed_line.get_color(),
-                        linewidth=1.5,
+                        posterior_curve["E_V_SHE"],
+                        posterior_curve[median_column],
+                        linewidth=1.8,
+                        label="mechanism posterior",
                     )
+                else:
+                    for replicate, curve in condition.groupby("replicate", sort=True):
+                        curve = curve.sort_values("E_V_SHE")
+                        line, = ax.plot(
+                            curve["E_V_SHE"],
+                            curve[median_column],
+                            linewidth=1.5,
+                            label=f"{replicate} {distribution}",
+                        )
+                        ax.fill_between(
+                            curve["E_V_SHE"],
+                            curve[lower_column],
+                            curve[upper_column],
+                            color=line.get_color(),
+                            alpha=0.10,
+                            linewidth=0,
+                        )
 
             if residual:
                 ax.axhline(0.0, linestyle="--", linewidth=1.0, alpha=0.5)
+
+            if scale == "rate" and not residual:
+                ax.set_yscale("log")
 
             if row == 0:
                 ax.set_title(f"{c_koh:g} M KOH")
@@ -186,14 +248,15 @@ def plot_observation_grid(observations, output_path: str | Path, residual=False)
         fig.suptitle("Conditional log-rate residuals")
         fig.supylabel("ln(rate) observed - posterior conditional median")
     else:
-        fig.suptitle("Posterior predictive log rates")
-        fig.supylabel("ln(rate / s$^{-1}$)")
+        label = distribution.replace("_", " ")
+        scale_label = "log rate" if scale == "log" else "rate"
+        fig.suptitle(f"Posterior {label} {scale_label}: median and 95% HDI")
+        fig.supylabel("ln(rate / s$^{-1}$)" if scale == "log" else "rate / s$^{-1}$")
 
     fig.supxlabel("Potential (V vs SHE)")
     fig.tight_layout(rect=(0.04, 0.04, 0.96, 0.97))
     fig.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close(fig)
-
 
 def plot_pointwise_variable(summary, variable_name, output_path: str | Path):
     KOH_values = sorted(summary["electrolyte_concentration_M"].unique())
@@ -216,15 +279,17 @@ def plot_pointwise_variable(summary, variable_name, output_path: str | Path):
                 & (summary["CO_mole_fraction"] == co_fraction)
             ].sort_values("E_V_SHE")
 
+            median_column, lower_column, upper_column = _posterior_interval_columns(condition)
+
             ax.fill_between(
                 condition["E_V_SHE"],
-                condition["q025"],
-                condition["q975"],
+                condition[lower_column],
+                condition[upper_column],
                 alpha=0.20,
                 linewidth=0,
             )
 
-            ax.plot(condition["E_V_SHE"], condition["q50"], linewidth=2.0)
+            ax.plot(condition["E_V_SHE"], condition[median_column], linewidth=2.0)
 
             if row == 0:
                 ax.set_title(f"{c_koh:g} M KOH")
@@ -335,8 +400,8 @@ def plot_alpha_comparison(comparison, output_dir: str | Path, material):
 
         for ax, (co_fraction, data) in zip(axes, koh_data.groupby("CO_mole_fraction", sort=True)):
             data = data.sort_values("E_V_SHE")
-            ax.fill_between(data["E_V_SHE"], data["q025"], data["q975"], alpha=0.20, linewidth=0)
-            ax.plot(data["E_V_SHE"], data["q50"], linewidth=1.5, label="posterior")
+            ax.fill_between(data["E_V_SHE"], data["hdi95_lower"], data["hdi95_upper"], alpha=0.20, linewidth=0)
+            ax.plot(data["E_V_SHE"], data["median"], linewidth=1.5, label="posterior")
             ax.errorbar(
                 data["E_V_SHE"], data["alpha_mean"], yerr=data["alpha_sd"], fmt="o",
                 markersize=3, linewidth=0.8, label="experiment",
@@ -360,8 +425,8 @@ def plot_delta_oh_comparison(comparison, output_path: str | Path, material):
 
     for ax, (co_fraction, data) in zip(axes, comparison.groupby("CO_mole_fraction", sort=True)):
         data = data.sort_values("E_V_SHE")
-        ax.fill_between(data["E_V_SHE"], data["q025"], data["q975"], alpha=0.20, linewidth=0)
-        ax.plot(data["E_V_SHE"], data["q50"], linewidth=1.5, label="posterior")
+        ax.fill_between(data["E_V_SHE"], data["hdi95_lower"], data["hdi95_upper"], alpha=0.20, linewidth=0)
+        ax.plot(data["E_V_SHE"], data["median"], linewidth=1.5, label="posterior")
         ax.errorbar(
             data["E_V_SHE"], data["delta_OH"], yerr=data["delta_OH_sd"], fmt="o",
             markersize=3, linewidth=0.8, label="experiment",
@@ -386,8 +451,8 @@ def plot_delta_co_comparison(comparison, output_dir: str | Path, material):
         grouped = koh_data.groupby(["CO_lower_mole_fraction", "CO_upper_mole_fraction"], sort=True)
         for ax, ((lower_co, upper_co), data) in zip(axes, grouped):
             data = data.sort_values("E_V_SHE")
-            ax.fill_between(data["E_V_SHE"], data["q025"], data["q975"], alpha=0.20, linewidth=0)
-            ax.plot(data["E_V_SHE"], data["q50"], linewidth=1.5, label="posterior")
+            ax.fill_between(data["E_V_SHE"], data["hdi95_lower"], data["hdi95_upper"], alpha=0.20, linewidth=0)
+            ax.plot(data["E_V_SHE"], data["median"], linewidth=1.5, label="posterior")
             ax.errorbar(
                 data["E_V_SHE"], data["delta_CO"], yerr=data["delta_CO_sd"], fmt="o",
                 markersize=3, linewidth=0.8, label="experiment",
@@ -665,9 +730,9 @@ def plot_transition_state_drc(summary, model_name, output_path: str | Path):
                     & (control_data["CO_mole_fraction"] == co_fraction)
                 ].sort_values("E_V_SHE")
 
-                line, = ax.plot(condition["E_V_SHE"], condition["q50"], linewidth=1.5, label=label)
+                line, = ax.plot(condition["E_V_SHE"], condition["median"], linewidth=1.5, label=label)
                 ax.fill_between(
-                    condition["E_V_SHE"], condition["q025"], condition["q975"],
+                    condition["E_V_SHE"], condition["hdi95_lower"], condition["hdi95_upper"],
                     color=line.get_color(), alpha=0.15, linewidth=0,
                 )
 

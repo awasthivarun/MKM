@@ -10,7 +10,6 @@ from mkm.postprocessing.drc import compute_transition_state_drc
 
 
 MATERIAL = "Ag10Pd90"
-
 CONFIG = {
     "temperature_K": 293.15,
     "gas": {
@@ -76,7 +75,6 @@ def test_bf_transition_state_drc_is_one():
             "Gact2_0": [0.66, 0.68],
         }
     )
-
     result = compute_transition_state_drc(
         inference_data=idata,
         model_name="BF",
@@ -102,7 +100,6 @@ def test_bf_lh_transition_state_drcs_sum_to_one():
             "Gact2_LH_0": [0.72, 0.74],
         }
     )
-
     result = compute_transition_state_drc(
         inference_data=idata,
         model_name="BF_LH",
@@ -128,7 +125,6 @@ def test_transition_state_drc_summary_preserves_model_point_metadata():
             "Gact2_0": [0.66, 0.68],
         }
     )
-
     result = compute_transition_state_drc(
         inference_data=idata,
         model_name="BF",
@@ -139,4 +135,6 @@ def test_transition_state_drc_summary_preserves_model_point_metadata():
 
     assert result.summary["model_point_id"].tolist() == [0, 1]
     assert result.summary["control"].unique().tolist() == ["BF"]
-    assert result.summary["q50"].tolist() == pytest.approx([1.0, 1.0])
+    assert result.summary["median"].tolist() == pytest.approx([1.0, 1.0])
+    assert result.summary["hdi95_lower"].tolist() == pytest.approx([1.0, 1.0])
+    assert result.summary["hdi95_upper"].tolist() == pytest.approx([1.0, 1.0])

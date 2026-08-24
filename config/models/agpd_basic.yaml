@@ -56,7 +56,7 @@ likelihood:
     prior_log_sd: 0.75
 
 prior_profiles:
-  Ag10Pd90:
+  Ag10Pd90: &legacy_alloy_prior_profile
     BF:
       provenance: legacy_tuned_for_multimodality
       parameters:
@@ -173,3 +173,7 @@ prior_profiles:
           sigma: 0.2
           lower: 0.5
           upper: 1.0
+  Ag25Pd75: *legacy_alloy_prior_profile
+  Ag50Pd50: *legacy_alloy_prior_profile
+  Ag75Pd25: *legacy_alloy_prior_profile
+  Ag90Pd10: *legacy_alloy_prior_profile

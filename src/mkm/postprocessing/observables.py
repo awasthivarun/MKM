@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 from mkm.observable_maps import evaluate_linear_observable_map_draws
+from mkm.postprocessing.diagnostics import summarize_samples
 
 
 @dataclass(frozen=True)
@@ -22,55 +23,24 @@ def _get_posterior(inference_data):
         raise ValueError("Inference data does not contain a posterior group.") from error
 
 
-def _summarize(values, axis):
-    values = np.asarray(values, dtype=float)
-
-    return {
-        "mean": np.mean(values, axis=axis),
-        "sd": np.std(values, axis=axis, ddof=1),
-        "q025": np.quantile(values, 0.025, axis=axis),
-        "q50": np.quantile(values, 0.50, axis=axis),
-        "q975": np.quantile(values, 0.975, axis=axis),
-    }
-
-
-def summarize_pointwise_posterior_variable(
-    inference_data,
-    model_points,
-    variable_name,
-):
+def summarize_pointwise_posterior_variable(inference_data, model_points, variable_name):
     posterior = _get_posterior(inference_data)
 
     if variable_name not in posterior:
-        raise ValueError(
-            f"Posterior does not contain '{variable_name}'."
-        )
+        raise ValueError(f"Posterior does not contain '{variable_name}'.")
 
-    values = np.asarray(
-        posterior[variable_name],
-        dtype=float,
-    )
+    values = np.asarray(posterior[variable_name], dtype=float)
 
     if values.ndim != 3:
         raise ValueError(
-            f"Posterior variable '{variable_name}' must have shape "
-            "(chain, draw, model_point)."
+            f"Posterior variable '{variable_name}' must have shape (chain, draw, model_point)."
         )
 
     if values.shape[-1] != len(model_points):
-        raise ValueError(
-            f"Posterior variable '{variable_name}' does not align "
-            "with model points."
-        )
+        raise ValueError(f"Posterior variable '{variable_name}' does not align with model points.")
 
-    flattened = values.reshape(
-        (-1, values.shape[-1])
-    )
-
-    summary = _summarize(
-        flattened,
-        axis=0,
-    )
+    flattened = values.reshape((-1, values.shape[-1]))
+    summary = summarize_samples(flattened)
 
     result = model_points.copy()
 
@@ -80,30 +50,17 @@ def summarize_pointwise_posterior_variable(
     return result
 
 
-def summarize_posterior_model_variable(
-    inference_data,
-    model_points,
-    variable_name,
-):
+def summarize_posterior_model_variable(inference_data, model_points, variable_name):
     result = summarize_pointwise_posterior_variable(
         inference_data=inference_data,
         model_points=model_points,
         variable_name=variable_name,
     )
 
-    statistics = (
-        "mean",
-        "sd",
-        "q025",
-        "q50",
-        "q975",
-    )
+    statistics = ("mean", "sd", "median", "hdi95_lower", "hdi95_upper")
 
     return result.rename(
-        columns={
-            statistic: f"{variable_name}_{statistic}"
-            for statistic in statistics
-        }
+        columns={statistic: f"{variable_name}_{statistic}" for statistic in statistics}
     )
 
 
@@ -114,21 +71,13 @@ def summarize_posterior_linear_observable(inference_data, observable_map):
         raise ValueError("Posterior does not contain 'ln_rate_model'.")
 
     ln_rate = np.asarray(posterior["ln_rate_model"], dtype=float)
-    observable_draws = evaluate_linear_observable_map_draws(
-        ln_rate,
-        observable_map,
-    )
+    observable_draws = evaluate_linear_observable_map_draws(ln_rate, observable_map)
 
     if observable_draws.ndim != 3:
-        raise ValueError(
-            "Expected observable draws with shape "
-            "(chain, draw, observable)."
-        )
+        raise ValueError("Expected observable draws with shape (chain, draw, observable).")
 
-    pooled_values = observable_draws.reshape(
-        (-1, observable_draws.shape[-1])
-    )
-    pooled_summary = _summarize(pooled_values, axis=0)
+    pooled_values = observable_draws.reshape((-1, observable_draws.shape[-1]))
+    pooled_summary = summarize_samples(pooled_values)
 
     pooled = observable_map.outputs.copy()
 
@@ -138,7 +87,7 @@ def summarize_posterior_linear_observable(inference_data, observable_map):
     chain_records = []
 
     for chain in range(observable_draws.shape[0]):
-        summary = _summarize(observable_draws[chain], axis=0)
+        summary = summarize_samples(observable_draws[chain])
         frame = observable_map.outputs.copy()
         frame.insert(0, "chain", chain)
 
@@ -149,21 +98,14 @@ def summarize_posterior_linear_observable(inference_data, observable_map):
 
     by_chain = pd.concat(chain_records, ignore_index=True)
 
-    return PosteriorObservableSummary(
-        pooled=pooled,
-        by_chain=by_chain,
-    )
+    return PosteriorObservableSummary(pooled=pooled, by_chain=by_chain)
 
 
 def summarize_pointwise_pathway_fractions(inference_data, model_points):
     posterior = _get_posterior(inference_data)
     results = {}
 
-    for name in [
-        "rate_fraction_BF",
-        "rate_fraction_ER",
-        "rate_fraction_LH",
-    ]:
+    for name in ["rate_fraction_BF", "rate_fraction_ER", "rate_fraction_LH"]:
         if name not in posterior:
             continue
 

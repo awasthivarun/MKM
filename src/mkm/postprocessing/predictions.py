@@ -57,6 +57,13 @@ def build_observation_distribution_draws(inference_data, inputs, likelihood_name
     )
 
 
+def _add_distribution_summary(observations, prefix, draws):
+    summary = summarize_samples(draws)
+
+    for statistic, values in summary.items():
+        observations[f"{prefix}_{statistic}"] = values
+
+
 def build_observation_diagnostics(
     inference_data,
     model_data,
@@ -78,10 +85,15 @@ def build_observation_diagnostics(
     rng = np.random.default_rng(random_seed)
     posterior_predictive = conditional_mu + sigma_observation * rng.standard_normal(conditional_mu.shape)
 
-    mechanism_summary = summarize_samples(mechanism_mu)
-    conditional_summary = summarize_samples(conditional_mu)
-    predictive_summary = summarize_samples(posterior_predictive)
-    sigma_summary = summarize_samples(sigma_observation)
+    mechanism_rate = np.exp(mechanism_mu)
+    conditional_rate = np.exp(conditional_mu)
+    predictive_rate = np.exp(posterior_predictive)
+
+    if not all(
+        np.all(np.isfinite(values))
+        for values in (mechanism_rate, conditional_rate, predictive_rate)
+    ):
+        raise RuntimeError("Rate-space posterior draws contain non-finite values after exponentiation.")
 
     observations = model_data.observations.copy()
 
@@ -90,29 +102,29 @@ def build_observation_diagnostics(
             f"Posterior contains {n_observations} observations, but model data contain {len(observations)}."
         )
 
-    observations["ln_rate_mechanism_q025"] = mechanism_summary["q025"]
-    observations["ln_rate_mechanism_q50"] = mechanism_summary["q50"]
-    observations["ln_rate_mechanism_q975"] = mechanism_summary["q975"]
+    observations["rate"] = np.exp(observations["ln_rate"].to_numpy(dtype=float))
 
-    observations["ln_rate_conditional_q025"] = conditional_summary["q025"]
-    observations["ln_rate_conditional_q50"] = conditional_summary["q50"]
-    observations["ln_rate_conditional_q975"] = conditional_summary["q975"]
+    _add_distribution_summary(observations, "ln_rate_mechanism", mechanism_mu)
+    _add_distribution_summary(observations, "ln_rate_conditional", conditional_mu)
+    _add_distribution_summary(observations, "ln_rate_predictive", posterior_predictive)
+    _add_distribution_summary(observations, "rate_mechanism", mechanism_rate)
+    _add_distribution_summary(observations, "rate_conditional", conditional_rate)
+    _add_distribution_summary(observations, "rate_predictive", predictive_rate)
+    _add_distribution_summary(observations, "sigma_ln_rate", sigma_observation)
 
-    observations["ln_rate_predictive_q025"] = predictive_summary["q025"]
-    observations["ln_rate_predictive_q50"] = predictive_summary["q50"]
-    observations["ln_rate_predictive_q975"] = predictive_summary["q975"]
-
-    observations["sigma_ln_rate_q50"] = sigma_summary["q50"]
-    observations["residual_mechanism"] = observations["ln_rate"] - observations["ln_rate_mechanism_q50"]
-    observations["residual_conditional"] = observations["ln_rate"] - observations["ln_rate_conditional_q50"]
-
+    observations["residual_mechanism"] = (
+        observations["ln_rate"] - observations["ln_rate_mechanism_median"]
+    )
+    observations["residual_conditional"] = (
+        observations["ln_rate"] - observations["ln_rate_conditional_median"]
+    )
     observations["standardized_residual_conditional"] = (
-        observations["residual_conditional"] / observations["sigma_ln_rate_q50"]
+        observations["residual_conditional"] / observations["sigma_ln_rate_median"]
     )
 
-    observations["observed_inside_predictive_95"] = (
-        (observations["ln_rate"] >= observations["ln_rate_predictive_q025"])
-        & (observations["ln_rate"] <= observations["ln_rate_predictive_q975"])
+    observations["observed_inside_predictive_95_hdi"] = (
+        (observations["ln_rate"] >= observations["ln_rate_predictive_hdi95_lower"])
+        & (observations["ln_rate"] <= observations["ln_rate_predictive_hdi95_upper"])
     )
 
     return observations
