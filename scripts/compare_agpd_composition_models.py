@@ -6,14 +6,16 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from mkm.models.agpd_basic import available_agpd_composition_models
+from mkm.models.agpd_basic import (
+    available_agpd_composition_models,
+    available_agpd_composition_parameterizations,
+)
 from mkm.project_paths import ProjectPaths
 
 
 DEFAULT_REFERENCE_MODEL = "BF_LH"
 DEFAULT_CANDIDATE_MODEL = "CO_BF_ER_LH"
 DEFAULT_COMPOSITION_MODEL = "shared"
-DEFAULT_LIKELIHOOD = "setup_intercept"
 
 _ALIGNMENT_CANDIDATES = (
     "observation_id",
@@ -28,12 +30,20 @@ _ALIGNMENT_CANDIDATES = (
 
 def parse_args():
     models = available_agpd_composition_models()
+    composition_models = available_agpd_composition_parameterizations()
 
     parser = ArgumentParser()
     parser.add_argument("--reference-model", choices=models, default=DEFAULT_REFERENCE_MODEL)
     parser.add_argument("--candidate-model", choices=models, default=DEFAULT_CANDIDATE_MODEL)
-    parser.add_argument("--composition-model", default=DEFAULT_COMPOSITION_MODEL)
-    parser.add_argument("--likelihood", choices=["iid", "setup_intercept"], default=DEFAULT_LIKELIHOOD)
+    parser.add_argument(
+        "--composition-model",
+        choices=composition_models,
+        default=DEFAULT_COMPOSITION_MODEL,
+        help="Shorthand composition parameterization used for both fits unless a side-specific value is given.",
+    )
+    parser.add_argument("--reference-composition-model", choices=composition_models)
+    parser.add_argument("--candidate-composition-model", choices=composition_models)
+    parser.add_argument("--likelihood", choices=["iid", "setup_intercept"], required=True)
     return parser.parse_args()
 
 
@@ -214,20 +224,31 @@ def compare_material_table(reference, candidate, key_columns, metrics):
 def main():
     args = parse_args()
 
-    if args.reference_model == args.candidate_model:
-        raise ValueError("Reference and candidate models must be different.")
+    reference_composition_model = args.reference_composition_model or args.composition_model
+    candidate_composition_model = args.candidate_composition_model or args.composition_model
+
+    if (
+        args.reference_model == args.candidate_model
+        and reference_composition_model == candidate_composition_model
+    ):
+        raise ValueError(
+            "Reference and candidate must differ by mechanism, composition parameterization, or both."
+        )
+
+    reference_label = f"{reference_composition_model}/{args.reference_model}"
+    candidate_label = f"{candidate_composition_model}/{args.candidate_model}"
 
     paths = ProjectPaths.discover(__file__)
 
     reference = _load_products(
         paths,
-        composition_model=args.composition_model,
+        composition_model=reference_composition_model,
         likelihood_name=args.likelihood,
         model_name=args.reference_model,
     )
     candidate = _load_products(
         paths,
-        composition_model=args.composition_model,
+        composition_model=candidate_composition_model,
         likelihood_name=args.likelihood,
         model_name=args.candidate_model,
     )
@@ -235,14 +256,19 @@ def main():
     paired_loo = build_paired_loo(
         reference=reference["loo"],
         candidate=candidate["loo"],
-        reference_model=args.reference_model,
-        candidate_model=args.candidate_model,
+        reference_model=reference_label,
+        candidate_model=candidate_label,
     )
+    paired_loo["reference_composition_model"] = reference_composition_model
+    paired_loo["candidate_composition_model"] = candidate_composition_model
+
     loo_summary = summarize_paired_loo(
         paired_loo,
-        reference_model=args.reference_model,
-        candidate_model=args.candidate_model,
+        reference_model=reference_label,
+        candidate_model=candidate_label,
     )
+    loo_summary["reference_composition_model"] = reference_composition_model
+    loo_summary["candidate_composition_model"] = candidate_composition_model
 
     residual_metrics = (
         "mechanism_residual_mean",
@@ -284,10 +310,28 @@ def main():
     reference_posterior_dir = reference["root"].parent
     candidate_posterior_dir = candidate["root"].parent
 
-    if reference_posterior_dir.parent != candidate_posterior_dir.parent:
-        raise ValueError("Composition model posteriors do not share the same comparison parent directory.")
+    if reference_composition_model == candidate_composition_model:
+        if reference_posterior_dir.parent != candidate_posterior_dir.parent:
+            raise ValueError("Composition model posteriors do not share the same comparison parent directory.")
+        output_dir = reference_posterior_dir.parent / "model_comparison"
+    else:
+        reference_composition_root = reference_posterior_dir.parent.parent.parent
+        candidate_composition_root = candidate_posterior_dir.parent.parent.parent
 
-    output_dir = reference_posterior_dir.parent / "model_comparison"
+        if reference_composition_root != candidate_composition_root:
+            raise ValueError("Composition posteriors do not share the same composition-results root.")
+
+        comparison_name = (
+            f"{candidate_composition_model}__{args.candidate_model}"
+            f"_vs_{reference_composition_model}__{args.reference_model}"
+        )
+        output_dir = (
+            reference_composition_root
+            / "model_comparison"
+            / args.likelihood
+            / comparison_name
+        )
+
     output_dir.mkdir(parents=True, exist_ok=True)
 
     paired_loo.to_parquet(output_dir / "paired_loo_pointwise.parquet", index=False)
@@ -298,9 +342,13 @@ def main():
 
     print(
         f"\nAgPd composition model comparison: "
-        f"{args.candidate_model} vs {args.reference_model}"
+        f"{candidate_label} vs {reference_label}"
     )
-    print(f"Composition parameterization: {args.composition_model}")
+    if reference_composition_model == candidate_composition_model:
+        print(f"Composition parameterization: {reference_composition_model}")
+    else:
+        print(f"Reference composition parameterization: {reference_composition_model}")
+        print(f"Candidate composition parameterization: {candidate_composition_model}")
     print(f"Likelihood: {args.likelihood}")
 
     print("\n=== PAIRED PSIS-LOO ===")

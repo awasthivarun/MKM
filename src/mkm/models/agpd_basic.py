@@ -98,19 +98,28 @@ def _get_linear_xag_config(config, model_name):
     return x_reference, slope_specs
 
 
+def get_agpd_composition_parameterization(config, model_name, composition_model="shared"):
+    """Return x-reference and configured slope specs for a composition parameterization."""
+    if composition_model == "shared":
+        return None, {}
+    if composition_model == "linear_xAg":
+        return _get_linear_xag_config(config, model_name)
+
+    raise ValueError(
+        f"Unknown AgPd composition parameterization '{composition_model}'. "
+        f"Available parameterizations: {available_agpd_composition_parameterizations()}."
+    )
+
+
 def get_agpd_composition_parameter_specs(config, prior_material, model_name, composition_model="shared"):
     profile = get_agpd_prior_profile(config, prior_material, model_name)
     parameter_specs = dict(profile["parameters"])
 
-    if composition_model == "shared":
-        return parameter_specs
-    if composition_model != "linear_xAg":
-        raise ValueError(
-            f"Unknown AgPd composition parameterization '{composition_model}'. "
-            f"Available parameterizations: {available_agpd_composition_parameterizations()}."
-        )
-
-    _, slope_specs = _get_linear_xag_config(config, model_name)
+    _, slope_specs = get_agpd_composition_parameterization(
+        config=config,
+        model_name=model_name,
+        composition_model=composition_model,
+    )
     for parameter_name, spec in slope_specs.items():
         parameter_specs[f"{parameter_name}_xAg_slope"] = spec
     return parameter_specs
@@ -145,6 +154,7 @@ def build_agpd_composition_mechanism(
     config,
     prior_material="Ag10Pd90",
     composition_model="shared",
+    prediction_only=False,
 ):
     """Build an AgPd composition model with shared or linear-in-xAg energetics."""
     if model_name not in _AGPD_COMPOSITION_MODELS:
@@ -159,8 +169,10 @@ def build_agpd_composition_mechanism(
         )
 
     materials = tuple(materials)
-    if len(materials) < 2:
-        raise ValueError("A composition model requires at least two materials.")
+    if not prediction_only and len(materials) < 2:
+        raise ValueError("A composition model requires at least two materials for fitting.")
+    if prediction_only and len(materials) < 1:
+        raise ValueError("A composition prediction requires at least one material.")
     if len(set(materials)) != len(materials):
         raise ValueError("Composition-model materials must be unique.")
 
@@ -173,15 +185,14 @@ def build_agpd_composition_mechanism(
     parameter_specs = profile["parameters"]
     _validate_parameter_specs(definition, parameter_specs, f"{prior_material}/{model_name}")
 
-    if composition_model == "linear_xAg":
-        x_reference, slope_specs = _get_linear_xag_config(config, model_name)
-        slope_prior_specs = {
-            f"{parameter_name}_xAg_slope": spec for parameter_name, spec in slope_specs.items()
-        }
-    else:
-        x_reference = None
-        slope_specs = {}
-        slope_prior_specs = {}
+    x_reference, slope_specs = get_agpd_composition_parameterization(
+        config=config,
+        model_name=model_name,
+        composition_model=composition_model,
+    )
+    slope_prior_specs = {
+        f"{parameter_name}_xAg_slope": spec for parameter_name, spec in slope_specs.items()
+    }
 
     def mechanism(point_inputs):
         if tuple(point_inputs.materials) != materials:

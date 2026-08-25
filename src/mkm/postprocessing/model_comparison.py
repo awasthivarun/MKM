@@ -5,6 +5,8 @@ import arviz_stats as azs
 import numpy as np
 import pandas as pd
 
+from mkm.postprocessing.loo import compute_loo_result
+
 
 @dataclass(frozen=True)
 class LOOModelComparison:
@@ -15,10 +17,15 @@ class LOOModelComparison:
 
 
 def compute_loo_results(inference_data_by_model, var_name="ln_rate_observed"):
-    results = {
-        model_name: azs.loo(inference_data, var_name=var_name, pointwise=True)
-        for model_name, inference_data in inference_data_by_model.items()
-    }
+    results = {}
+
+    for model_name, inference_data in inference_data_by_model.items():
+        loo_result, _ = compute_loo_result(
+            inference_data=inference_data,
+            var_name=var_name,
+            pointwise=True,
+        )
+        results[model_name] = loo_result
 
     n_points = {name: result.n_data_points for name, result in results.items()}
     if len(set(n_points.values())) != 1:

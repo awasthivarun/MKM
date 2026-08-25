@@ -8,6 +8,9 @@ import xarray as xr
 from mkm.postprocessing.diagnostics import NOISE_VARIABLES
 
 
+DIAGNOSTIC_NUISANCE_VARIABLES = (*NOISE_VARIABLES, "z_ln_rate_setup")
+
+
 @dataclass(frozen=True)
 class SamplingDiagnostics:
     parameter_summary: pd.DataFrame
@@ -16,6 +19,7 @@ class SamplingDiagnostics:
 
 
 def sampling_parameter_names(posterior, parameter_specs):
+    """Return scalar parameters suitable for the standard sampler plots."""
     names = list(parameter_specs)
 
     for name in NOISE_VARIABLES:
@@ -31,7 +35,42 @@ def sampling_parameter_names(posterior, parameter_specs):
     return names
 
 
-def build_sampling_datatree(inference_data, parameter_names):
+def _component_label(values, dim, index):
+    if dim in values.coords and values.coords[dim].ndim == 1:
+        return str(values.coords[dim].values[index])
+    return str(index)
+
+
+def _expand_vector_nuisance_variables(posterior, existing_names):
+    """Expand vector nuisance variables into scalar components for diagnostics."""
+    variables = {}
+    existing_names = set(existing_names)
+
+    for name in DIAGNOSTIC_NUISANCE_VARIABLES:
+        if name not in posterior or name in existing_names:
+            continue
+
+        values = posterior[name].squeeze(drop=True)
+        extra_dims = tuple(dim for dim in values.dims if dim not in {"chain", "draw"})
+
+        if not extra_dims:
+            variables[name] = values
+            continue
+
+        shape = tuple(values.sizes[dim] for dim in extra_dims)
+        for index in np.ndindex(shape):
+            indexers = dict(zip(extra_dims, index, strict=True))
+            labels = [
+                f"{dim}={_component_label(values, dim, dim_index)}"
+                for dim, dim_index in zip(extra_dims, index, strict=True)
+            ]
+            component_name = f"{name}[{','.join(labels)}]"
+            variables[component_name] = values.isel(indexers, drop=True)
+
+    return variables
+
+
+def build_sampling_datatree(inference_data, parameter_names, include_vector_noise=False):
     posterior = inference_data.posterior
     variables = {}
 
@@ -49,6 +88,9 @@ def build_sampling_datatree(inference_data, parameter_names):
 
         variables[name] = values
 
+    if include_vector_noise:
+        variables.update(_expand_vector_nuisance_variables(posterior, variables))
+
     groups = {"/posterior": xr.Dataset(variables)}
 
     if hasattr(inference_data, "sample_stats"):
@@ -63,7 +105,11 @@ def build_sampling_datatree(inference_data, parameter_names):
             "maxdepth_reached": "reached_max_treedepth",
             "logp": "lp",
         }
-        rename = {source: target for source, target in aliases.items() if source in sample_stats and target not in sample_stats}
+        rename = {
+            source: target
+            for source, target in aliases.items()
+            if source in sample_stats and target not in sample_stats
+        }
 
         if rename:
             sample_stats = sample_stats.rename(rename)
@@ -72,17 +118,19 @@ def build_sampling_datatree(inference_data, parameter_names):
 
     return xr.DataTree.from_dict(groups)
 
+
 def build_sampling_diagnostics(inference_data, parameter_names):
-    data = build_sampling_datatree(inference_data, parameter_names)
+    data = build_sampling_datatree(inference_data, parameter_names, include_vector_noise=True)
+    diagnostic_names = list(data["posterior"].to_dataset().data_vars)
 
     parameter_summary = azs.summary(
-        data, var_names=parameter_names, group="posterior", kind="diagnostics", fmt="wide", round_to="none"
+        data, var_names=diagnostic_names, group="posterior", kind="diagnostics", fmt="wide", round_to="none"
     )
     parameter_summary = parameter_summary.reset_index()
     parameter_summary = parameter_summary.rename(columns={parameter_summary.columns[0]: "parameter"})
 
     has_errors, diagnostics = azs.diagnose(
-        data, var_names=parameter_names, show_diagnostics=False, return_diagnostics=True
+        data, var_names=diagnostic_names, show_diagnostics=False, return_diagnostics=True
     )
 
     bfmi = np.asarray(diagnostics["bfmi"]["bfmi_values"], dtype=float).reshape(-1)

@@ -36,13 +36,17 @@ def test_posterior_output_path_always_uses_canonical_layout(tmp_path):
     )
 
 
-def test_iid_reader_supports_legacy_layout(tmp_path):
+def test_iid_reader_does_not_fallback_to_legacy_layout(tmp_path):
     paths = ProjectPaths(root=tmp_path)
     legacy = tmp_path / "results" / "AgPd_COOx_basic" / "posterior" / "Ag10Pd90" / "BF"
     legacy.mkdir(parents=True)
     (legacy / "posterior.nc").touch()
 
-    assert paths.agpd_posterior_dir("Ag10Pd90", "BF", "iid") == legacy
+    with pytest.raises(FileNotFoundError, match="Posterior not found"):
+        paths.agpd_posterior_dir("Ag10Pd90", "BF", "iid")
+
+    canonical = paths.agpd_posterior_dir("Ag10Pd90", "BF", "iid", require_posterior=False)
+    assert canonical == paths.agpd_posterior_output_dir("Ag10Pd90", "BF", "iid")
 
 
 def test_missing_posterior_is_reported(tmp_path):

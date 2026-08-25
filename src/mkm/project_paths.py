@@ -82,13 +82,8 @@ class ProjectPaths:
         *,
         require_posterior: bool = True,
     ) -> Path:
-        """Resolve a posterior directory, preserving the historical iid fallback."""
+        """Resolve the canonical posterior directory."""
         canonical = self.agpd_posterior_output_dir(material, model_name, likelihood_name)
-
-        if likelihood_name == "iid" and not (canonical / "posterior.nc").exists():
-            legacy = self.agpd_posterior_root / material / model_name
-            if (legacy / "posterior.nc").exists():
-                canonical = legacy
 
         if require_posterior and not (canonical / "posterior.nc").exists():
             raise FileNotFoundError(f"Posterior not found: {canonical / 'posterior.nc'}")

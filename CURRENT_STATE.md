@@ -2,78 +2,36 @@
 
 ## Project status
 
-The AgPd basic rebuild now contains a complete first-generation Ag10Pd90 workflow:
+The AgPd basic rebuild now supports both individual-material and multi-material composition inference:
 
 ```text
 preprocessing
 → model construction
-→ prior predictive checks
 → posterior inference
 → sampler/physical diagnostics
 → experimental observable comparison
-→ single-model PSIS-LOO and LOO-PIT
-→ multi-model ELPD comparison
-→ posterior transition-state DRC
+→ PSIS-LOO and LOO-PIT
+→ model comparison
+→ transition-state DRC for individual-material fits
 ```
 
-**Validated checkpoint:** **192 tests passed, 7 known warnings**
+Current scientific scope: AgPd CO oxidation in basic media across
 
-**Current scientific scope:** AgPd CO oxidation in basic media, with Ag10Pd90 as the first fully rebuilt posterior-analysis case.
+- `Pd100`
+- `Ag10Pd90`
+- `Ag25Pd75`
+- `Ag50Pd50`
+- `Ag75Pd25`
+- `Ag90Pd10`
 
-**Current engineering focus:** repository consolidation, reproducible environment specification, removal of workflow duplication, and preparation for additional materials/models.
+Current working likelihood: material-specific IID Normal residuals in log-rate space.
 
-## Repository foundation
-
-Implemented:
-
-- `src/` package layout and editable installation
-- immutable raw-data policy
-- dataset-specific preprocessing configuration
-- separate model/likelihood/prior configuration
-- nonrectangular model-data architecture
-- explicit replicate observations
-- zero-sum setup indexing
-- reusable mechanism registry and PyMC assembly
-- permanent postprocessing package
-- canonical posterior/model-comparison/DRC scripts
-- 192-test suite
-
-Known warnings:
-
-- seven non-failing environment/runtime warnings in the validated Windows environment
-- the main recurring warning is Intel and LLVM OpenMP runtimes coexisting during short posterior tests
-- warnings are not currently evidence of failed calculations, but the environment rebuild should recheck them
-
-## Validated environment
-
-Current working stack:
-
-- Python 3.13.15
-- PyMC 6.3.1
-- PyTensor 3.3.0
-- nutpie 0.16.11
-- NumPy 2.4.6
-- SciPy 1.18.0
-- Numba 0.66.0
-- pandas 3.0.5
-- xarray 2026.7.0
-- ArviZ split stack 1.3.0
-- matplotlib 3.11.1
-- pytest 9.1.1
-
-`pyproject.toml` and `environment.yml` now define the intended package and development environment.
+The zero-sum setup-intercept likelihood remains implemented for comparison/history but is not the current working likelihood. Strong residual correlation along potential remains present under IID and is intentionally deferred while the mechanistic mean function is developed.
 
 ## AgPd basic preprocessing
 
 ### Experimental contract
 
-- Materials:
-  - `Pd100`
-  - `Ag10Pd90`
-  - `Ag25Pd75`
-  - `Ag50Pd50`
-  - `Ag75Pd25`
-  - `Ag90Pd10`
 - KOH: 0.25, 0.50, 1.00 M
 - CO mole fraction: 0.001, 0.01, 0.10, 1.00
 - Replicates: A/B/C
@@ -93,12 +51,14 @@ Current working stack:
 ### Rate normalization
 
 \[
-r = \frac{j}{2(210)} = \frac{j}{420}\;\mathrm{s^{-1}}
+r=\frac{j}{420}\;\mathrm{s^{-1}}
 \]
 
 for `j` in µA/cm²_Pd.
 
 This is a Pd-ECSA-normalized rate, not a per-total-surface-atom rate.
+
+For the AgPd mechanisms, explicit `Ag_fraction` and `Pd_fraction` factors represent random-mixing ensemble/neighbor probabilities relative to a Pd-centered rate normalization. They are not additional ECSA normalization factors.
 
 ### Truncation
 
@@ -117,11 +77,7 @@ Processed counts:
 
 ## Paired CO-series design and reaction order
 
-Confirmed design:
-
-- within fixed material/KOH, replicate A across all CO pressures is one connected series
-- likewise B and C
-- pairing resets across KOH concentrations
+Within fixed material/KOH, replicate A across all CO pressures is one connected series; likewise B and C. Pairing resets across KOH concentrations.
 
 Pairing key:
 
@@ -134,56 +90,44 @@ Replicate-specific adjacent CO order:
 \[
 \delta_{\mathrm{CO},r}
 =
-\frac{\ln r_{r,H}-\ln r_{r,L}}{\ln(y_H/y_L)}
+\frac{\ln r_{r,H}-\ln r_{r,L}}{\ln(y_H/y_L)}.
 \]
 
 The summary uses the mean and sample SD across A/B/C.
 
-Outputs:
-
-- paired replicate CO-order rows: 6579
-- summarized CO-order rows: 2193
-
 ## Generic data/model architecture
 
-### Model data
+`model_data.py` creates canonical `conditions`, `model_points`, and `observations`. Only observed combinations are represented.
 
-`model_data.py` creates:
+`model_inputs.py` builds material/condition/model-point arrays, observed log rates, observation-to-model-point mappings, setup indices, and mechanism inputs.
 
-- `conditions`
-- `model_points`
-- `observations`
-
-Only actually observed combinations are represented.
-
-### Model inputs
-
-`model_inputs.py` builds:
-
-- material/condition/model-point arrays
-- observed log-rate arrays
-- observation-to-model-point mapping
-- setup labels and indices
-- zero-sum setup-experiment indices
-- model-point mechanism inputs
-
-### Observable maps
-
-Fixed linear maps produce:
+Fixed observable maps produce:
 
 - \(\alpha\)
 - \(\delta_{\mathrm{OH}}\)
 - adjacent \(\delta_{\mathrm{CO}}\)
 
-from model log-rate draws on nonrectangular designs.
+from posterior model log-rate draws.
 
 ## Current likelihood
 
-Current working likelihood is material-specific IID log-rate Normal noise. One effective residual scale per material intentionally absorbs experimental scatter, unmodeled setup variation, and model discrepancy. Correlated residual structure is acknowledged but deferred until the mechanistic mean function is better established.
+The working model is
+
+\[
+\ln r_i^{\mathrm{obs}}
+\sim
+\mathcal N\!\left(\ln r_i^{\mathrm{model}},\sigma_{m(i)}^2\right),
+\]
+
+with one `sigma_ln_rate_material` per material.
+
+The residual scale is interpreted as an effective combination of experimental scatter, unmodeled setup variation, and model discrepancy. It is not a pure measurement standard deviation.
+
+Residuals remain strongly correlated between adjacent potential points. Therefore IID posterior HDIs can be narrower than calibrated physical uncertainty. This does not prevent the IID model from being used to develop and compare mechanistic mean functions.
 
 ## Mechanisms
 
-Registered Ag10Pd90 models:
+Registered models:
 
 - `BF`
 - `BF_LH`
@@ -197,261 +141,165 @@ Implemented components:
 - stable log-sum-exp pathway addition
 - analytic CO-SSA quadratic solution
 - mean-field Ag/Pd neighbor probabilities
+- exact detailed balance for reversible CO adsorption/desorption
 
-Current conventions:
+Potential conventions:
 
 \[
-\Delta G(E)=\Delta G_0-nE
+\Delta G(E)=\Delta G_0-nE,
 \]
 
 \[
 G^\ddagger(E)=G^\ddagger_0-\beta nE.
 \]
 
-Only Ag10Pd90 prior profiles are rebuilt. They remain legacy-tuned profiles and are not treated as neutral physical priors.
-
-## Posterior inference
-
-All setup-aware fits used:
-
-- nutpie / numba
-- 4 chains
-- 1000 tune
-- 1000 retained draws
-- target acceptance 0.9
-
-### BF
-
-- 0 divergences
-- max R-hat approximately 1.00
-- min bulk ESS approximately 580
-- min tail ESS approximately 650
-- residual log-rate scale approximately 0.429
-- setup scale approximately 0.076
-
-### BF_LH
-
-- 0 divergences
-- max R-hat approximately 1.006 in current ArviZ diagnostics
-- min bulk ESS approximately 476
-- min tail ESS approximately 567
-- residual log-rate scale approximately 0.425
-- setup scale approximately 0.077
-
-### CO_BF_ER_LH
-
-- 0 divergences in the setup-aware fit
-- max R-hat approximately 1.00
-- min bulk ESS approximately 150
-- min tail ESS approximately 160
-- residual log-rate scale approximately 0.423
-- setup scale approximately 0.075
-
-The setup-aware likelihood materially improved the large model's sampler geometry relative to its earlier iid fit.
-
-## Setup validation
-
-The fitted setup offsets reproduce the directly observed A/B/C pattern while summing to zero within each KOH condition to numerical precision.
-
-Interpretation:
-
-- persistent setup effects are real
-- the setup model represents them correctly
-- setup effects do not explain the large model-data discrepancy
-
-## Experimental observables
-
-Setup-aware posterior mismatch:
-
-### BF
-
-- median \(|\Delta\alpha|\): 0.0333
-- median \(|\Delta\delta_{\mathrm{OH}}|\): 0.1050
-- median \(|\Delta\delta_{\mathrm{CO}}|\): 0.2861
-- median standardized CO-order residual: 12.507
-
-### BF_LH
-
-- median \(|\Delta\alpha|\): 0.0305
-- median \(|\Delta\delta_{\mathrm{OH}}|\): 0.1007
-- median \(|\Delta\delta_{\mathrm{CO}}|\): 0.2862
-- median standardized CO-order residual: 12.231
-
-### CO_BF_ER_LH
-
-- median \(|\Delta\alpha|\): 0.0281
-- median \(|\Delta\delta_{\mathrm{OH}}|\): 0.0847
-- median \(|\Delta\delta_{\mathrm{CO}}|\): 0.2871
-- median standardized CO-order residual: 12.356
-
-The paired-data and likelihood corrections do not repair the CO-order failure.
-
-## Residual diagnostics
-
-Conditional residual:
+For the reversible CO step,
 
 \[
-e_i=
-\ln r_i^{\mathrm{obs}}
--
-\left(\ln r_i^{\mathrm{model}}+b_{s(i)}\right).
+\ln k_{-1}=\ln k_1-\ln K_1,
 \]
 
-Residual RMS:
+so the reverse reaction tracks the forward barrier and reaction free energy exactly.
 
-- BF: 0.4271
-- BF_LH: 0.4231
-- CO_BF_ER_LH: 0.4214
+## Composition inference
 
-Median adjacent-potential residual correlation:
+Composition workflows use all six materials in a single fit.
 
-- BF: 0.993
-- BF_LH: 0.985
-- CO_BF_ER_LH: 0.985
+Available parameterizations:
 
-For BF_LH, the median fraction of squared residual structure shared across A/B/C is:
+- `shared`
+- `linear_xAg`
+
+The linear parameterization uses
 
 \[
-0.984.
+p(x_{\mathrm{Ag}})=p_{0.5}+s_p(x_{\mathrm{Ag}}-0.5).
 \]
 
-Therefore, the fitted residual scale around 0.42 is primarily a model-discrepancy scale, not pure experimental noise.
+Current `CO_BF_ER_LH` slopes:
 
-Current decision:
+- `deltaG1_0_xAg_slope`
+- `deltaG4_0_xAg_slope`
+- `deltaG5_0_xAg_slope`
+- `Gact2_BF_0_xAg_slope`
+- `Gact2_ER_0_xAg_slope`
 
-- retain the zero-sum setup likelihood
-- do not add a flexible discrepancy process merely to absorb reproducible mechanistic failure
-- revisit correlated/grouped error only for a clearly defined predictive question
+The slope priors are regularizing priors intended to exclude remote, implausible multimodal branches. The numerical bounds are not treated as universal physical bounds on effective energies at every composition.
 
-## Physical posterior checks
+### Current converged `linear_xAg / iid / CO_BF_ER_LH` checkpoint
 
-Across current models:
+Sampler:
 
-- coverages remain in \([0,1]\)
-- Pd site balance holds to machine precision
-- Ag site balance holds to machine precision
-- pathway fractions remain bounded and sum to one
+- 0 divergences
+- max R-hat: 1.0059
+- min bulk ESS: 621
+- min tail ESS: 881
 
-No obvious nonphysical coverage pathology explains the poor CO-order behavior.
+Posterior slope medians and 95% HDIs:
+
+| parameter | median | 95% HDI |
+| --- | ---: | ---: |
+| `deltaG1_0_xAg_slope` | 0.04547 | [0.04305, 0.04789] |
+| `deltaG4_0_xAg_slope` | -0.05370 | [-0.06360, -0.04419] |
+| `deltaG5_0_xAg_slope` | -0.03005 | [-0.03681, -0.02270] |
+| `Gact2_BF_0_xAg_slope` | 0.04056 | [0.03522, 0.04656] |
+| `Gact2_ER_0_xAg_slope` | -0.02482 | [-0.03214, -0.01723] |
+
+These are statistically well resolved within the current IID model. Their narrow HDIs should not be interpreted as fully calibrated physical uncertainty because the residual process is strongly correlated along potential.
+
+The composition-induced energy changes are on the scale of tens of meV across the measured composition range. No hard BEP relationship is imposed; only exact detailed-balance relationships are enforced.
+
+## Current material behavior
+
+The converged linear composition model improves the description of much of the alloy series but Ag10Pd90 remains a major weakness.
+
+Current IID material residual scales for the converged linear model are approximately:
+
+| material | median `sigma_ln_rate_material` |
+| --- | ---: |
+| Ag10Pd90 | 1.332 |
+| Ag25Pd75 | 0.455 |
+| Ag50Pd50 | 0.361 |
+| Ag75Pd25 | 0.348 |
+| Ag90Pd10 | 0.431 |
+| Pd100 | 0.343 |
+
+Ag10Pd90 therefore deserves explicit held-out-material testing rather than being interpreted from observation-wise LOO alone.
+
+## Experimental observables and residual structure
+
+The model continues to reproduce some rate-surface behavior while showing strong mismatch in experimental observables, particularly CO reaction order.
+
+Residuals remain highly correlated along potential within experimental curves. Observation-wise PSIS-LOO is therefore useful for locating where a model succeeds or fails, but it does not represent prediction of a new curve or a new material.
+
+## Predictive-validation plan
+
+Two refit-based validation levels are now preferred:
+
+### LOCO — leave one condition out
+
+Hold out one material-specific `(KOH, CO)` condition and all three A/B/C replicate curves at that condition.
+
+Example:
+
+```text
+Ag50Pd50, 0.5 M KOH, 10% CO
+```
+
+All potential points from replicates A, B, and C are excluded from fitting.
+
+This tests whether the mechanism can predict an unseen experimental condition within a known material.
+
+### LOMO — leave one material out
+
+Hold out one material/composition entirely.
+
+This directly tests whether `linear_xAg` energetics generalize to an unseen alloy composition. Ag10Pd90 is a particularly informative target because it is currently poorly described by the composition fit.
+
+Grouped summaries of existing pointwise ELPD are not a current priority because the pointwise ELPD plots already resolve the behavior by condition and replicate. LOCO/LOMO answer stronger predictive questions.
 
 ## Permanent postprocessing
 
-Per-model canonical command:
+Individual-material command:
 
 ```powershell
-python scripts/postprocess_agpd_posterior.py BF_LH --likelihood setup_intercept
+python scripts/postprocess_agpd_posterior.py BF_LH --likelihood iid
+```
+
+Composition command:
+
+```powershell
+python scripts/postprocess_agpd_composition_posterior.py CO_BF_ER_LH --composition-model linear_xAg --likelihood iid
 ```
 
 Persistent products include:
 
-- parameter posterior plots and contraction tables
-- trace/rank/energy/pair diagnostics
+- sampler diagnostics
+- posterior parameter summaries and contraction tables
 - posterior predictive rate grids
-- conditional residual grids
-- shared-vs-replicate residual tables
+- residual grids and residual-structure summaries
 - coverages and pathway fractions
 - alpha/OH-order/CO-order comparisons
 - pointwise PSIS-LOO
 - Pareto-k
-- LOO-PIT ECDF/coverage/condition grids
+- LOO-PIT diagnostics
 - machine-readable tables and parquet products
 
-Single-model LOO/calibration products belong with the model.
-
-Multi-model products belong under the model-comparison directory.
-
-## PSIS-LOO and model comparison
-
-Individual observation-wise ELPD:
-
-- BF: -824.71; SE 18.54; \(p_{\mathrm{loo}}=10.67\); max \(k=0.319\)
-- BF_LH: -811.54; SE 17.71; \(p_{\mathrm{loo}}=11.06\); max \(k=0.175\)
-- CO_BF_ER_LH: -807.39; SE 17.75; \(p_{\mathrm{loo}}=12.09\); max \(k=0.154\)
-
-All 1431 Pareto-k values are below 0.5.
-
-Approximate differences:
-
-- BF_LH - BF: +13.17
-- CO_BF_ER_LH - BF_LH: +4.15
-- CO_BF_ER_LH - BF: +17.32
-
-Predictive ranking:
-
-1. `CO_BF_ER_LH`
-2. `BF_LH`
-3. `BF`
-
-Stacking weights are predictive mixture weights, not mechanism probabilities.
-
-LOO scope:
-
-- observation-wise conditional prediction
-- other observations from the same setup remain available
-- not leave-one-setup-out prediction
-
-### BF_LH LOO-PIT checkpoint
-
-- mean: 0.4979
-- median: 0.4682
-- SD: 0.3113
-- Uniform reference SD: 0.2887
-- outside 0.05–0.95: 7.41%
-
-These scalar values do not override the strong condition-resolved residual/PIT structure.
+For composition fits, `posterior_parameter_summary.csv` includes the fitted reference parameters and composition slopes.
 
 ## Transition-state DRC
 
-Definition:
+Current definition:
 
 \[
 X_{\mathrm{TS},j}
 =
--k_BT
-\frac{\partial\ln r}{\partial G^\ddagger_j}.
+-k_BT\frac{\partial\ln r}{\partial G^\ddagger_j}.
 \]
 
-Calculation:
+The current DRC implementation is transition-state-only and was validated for the individual-material mechanisms using sum rules and finite-difference step checks.
 
-- central finite differences in transition-state energy
-- all current thermodynamic relationships preserved by the existing mechanism parameterization
-- posterior-draw and model-point resolved
-- draws saved before plotting
-
-### BF validation
-
-- one control
-- \(X_{\mathrm{BF}}=1\)
-- max sum-rule error approximately \(2.7\times10^{-13}\)
-- half-step difference approximately \(4.5\times10^{-13}\)
-
-### BF_LH validation
-
-- BF and LH controls
-- sum-rule max error approximately \(4.4\times10^{-13}\)
-- max half-step difference approximately \(1.9\times10^{-7}\)
-
-### CO_BF_ER_LH validation
-
-Controls:
-
-- CO adsorption/desorption transition state
-- BF
-- ER
-- LH
-
-Results:
-
-- max sum-rule error approximately \(5.8\times10^{-7}\)
-- max half-step difference approximately \(2.5\times10^{-7}\)
-- observed DRC range approximately -0.00244 to 0.99998
-- no non-finite values
-
-The small negative DRC values exceed the finite-difference error scale and are mathematically possible in the coupled SSA mechanism.
-
-Only transition-state DRC is currently implemented.
-
-Intermediate thermodynamic rate control is deferred until the held-fixed state/transition-state energy convention is explicitly defined.
+Composition-specific DRC is not yet implemented. For `linear_xAg`, the correct future workflow is to construct the effective transition-state energy at each composition and perturb that composition-specific transition state.
 
 ## Scientific interpretation
 
@@ -460,61 +308,48 @@ Intermediate thermodynamic rate control is deferred until the held-fixed state/t
 - preprocessing and normalization contracts
 - paired CO-order calculation
 - nonrectangular model indexing
-- QEA balances
+- QEA site balances
 - analytic CO-SSA solution
-- zero-sum setup likelihood
-- posterior coverage/site/pathway balances
-- stable PSIS diagnostics
-- transition-state DRC sum rules and step convergence
+- exact forward/reverse thermodynamic relationship for CO adsorption/desorption
+- stable log-space pathway combination
+- composition transformation \(p(x)=p_{0.5}+s_p(x-0.5)\)
 
 ### Supported statistical conclusions
 
-- persistent A/B/C setup effects exist and are modeled correctly
-- BF is predictively worse than BF_LH and the larger model
-- the large model has only a modest ELPD advantage over BF_LH
-- most residual discrepancy is shared across replicates
-- residual scale should not be interpreted as pure experimental noise
+- the current five-slope linear composition fit is numerically converged
+- shared energetics create substantial material-dependent mismatch
+- composition-dependent energetics improve the description of several materials
+- Ag10Pd90 remains poorly described
+- residual correlation along potential is strong and violates the ideal IID-error picture
 
 ### Supported mechanistic interpretation
 
-- pure BF is inadequate for the Ag10Pd90 rate surface
-- extra pathway flexibility improves some potential/OH behavior
-- the current ideal mean-field mechanism family fails the measured CO-pressure dependence
+- pure BF is inadequate for the full AgPd problem
+- ER-containing chemistry is needed to describe Pd100 within the current mechanism family
+- energetic quantities vary systematically with composition within the current model
 
 ### Plausible but unresolved
 
-- lateral/nonideal interactions may contribute to the CO-order behavior
-- BF/ER partition remains only partially identifiable
-- multiple transition states may control different condition regions
+- whether the approximately linear energetic trends extrapolate predictively to an unseen composition
+- detailed BF/ER/LH partitioning
+- causes of the persistent CO-order mismatch
+- whether a future correlated likelihood materially changes parameter uncertainty
 
 ### Insufficient information to conclude
 
 - that the largest model is the true mechanism
-- that ER is mechanistically established
-- that formal narrow parameter intervals are fully calibrated physical uncertainty
-- that Ag10Pd90 conclusions generalize across AgPd compositions
+- that narrow IID HDIs represent calibrated physical uncertainty
+- that observation-wise LOO demonstrates prediction of new curves or materials
 
-## Current organizational bottlenecks
+## Current development priorities
 
-1. canonical scripts hard-code `Ag10Pd90`
-2. path/config/context construction is duplicated across scripts
-3. posterior orchestration remains approximately 457 lines
-4. plotting remains a single approximately 634-line module
-5. pointwise outputs, balances, and DRC controls are not centralized in model metadata
-6. fit provenance/run manifests are not yet written
-7. generated-results versioning policy is not explicit
-8. CLI integration coverage remains limited
-9. only Ag10Pd90 prior profiles are rebuilt
-
-## Immediate plan
-
-1. adopt the reviewed `pyproject.toml` and `environment.yml`
-2. centralize paths and AgPd run context
-3. add `--material` to canonical scripts
-4. add run metadata/config/data hashes to fits
-5. split posterior workflow orchestration
-6. split plotting by domain
-7. centralize model metadata
-8. add CLI integration tests
-9. perform prior-sensitivity analysis
-10. extract/rebuild prior profiles for remaining AgPd materials
+1. ensure multi-material sampler diagnostics include all material-specific noise parameters
+2. update documentation to the IID/composition workflow
+3. allow direct `shared` versus `linear_xAg` model comparison
+4. remove silent legacy posterior-path fallback
+5. add composition-aware prior predictive checks
+6. add posterior energy-vs-composition products
+7. add composition-specific transition-state DRC
+8. implement LOCO and LOMO validation workflows
+9. consolidate model-comparison LOO handling
+10. split composition postprocessing orchestration after correctness changes

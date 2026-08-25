@@ -2,24 +2,29 @@
 
 Bayesian microkinetic modeling of electrochemical CO oxidation.
 
-The rebuilt workflow is currently most developed for AgPd catalysts in basic media, with Ag10Pd90 used as the first complete posterior-analysis case. The package architecture is intended to support the remaining AgPd compositions and later PtRu acid/basic models without returning to notebook-specific implementations.
+The rebuilt workflow is currently most developed for AgPd catalysts in basic media. All six AgPd compositions are represented in the processed dataset, individual-material and shared-composition posterior workflows are implemented, and the current composition model supports selected energetic parameters that vary linearly with Ag fraction.
 
 ## Current status
 
 - Active development branch: `rebuild/from-scratch`
-- Validated local checkpoint: **192 tests passed**
-- Known warnings: **7** environment/runtime warnings, currently treated as non-failing
-- Current fitted Ag10Pd90 models:
+- Current scientific system: AgPd CO oxidation in basic media
+- Registered AgPd mechanisms:
   - `BF`
   - `BF_LH`
   - `CO_BF_ER_LH`
 - Current working likelihood:
-  - zero-sum setup-intercept Normal likelihood in log-rate space
+  - material-specific IID Normal residuals in log-rate space
+- Retained alternative likelihood:
+  - zero-sum setup-intercept likelihood, currently not the default scientific workflow
+- Composition parameterizations:
+  - `shared`
+  - `linear_xAg`
 - Permanent posterior postprocessing, PSIS-LOO, LOO-PIT, model comparison, and transition-state DRC are implemented.
+- Composition-specific DRC and grouped cross-validation are not yet implemented.
 
 See:
 
-- [`CURRENT_STATE.md`](CURRENT_STATE.md) for scientific and development status
+- [`CURRENT_STATE.md`](CURRENT_STATE.md) for the scientific/development checkpoint
 - [`REPO_MAP.md`](REPO_MAP.md) for the code/workflow map
 - [`scripts/README.md`](scripts/README.md) for script ownership and usage
 
@@ -65,7 +70,7 @@ pyproject.toml           package metadata, dependencies, and tool configuration
 ## Architecture principle
 
 - `src/mkm/mechanisms/` contains mathematical/chemical mechanism implementations.
-- `src/mkm/models/` binds mechanism evaluators and parameter dataclasses to configured prior profiles.
+- `src/mkm/models/` binds mechanism evaluators and parameter dataclasses to configured prior profiles and composition parameterizations.
 - `src/mkm/inference/` assembles and samples chemistry-independent PyMC models.
 - `src/mkm/postprocessing/` calculates posterior diagnostics, predictive validation, model comparison, and DRC.
 - `scripts/` should remain thin workflow entry points; reusable calculations belong in `src/mkm/`.
@@ -79,58 +84,86 @@ python scripts/process_agpd_basic.py
 python scripts/plot_agpd_basic.py
 ```
 
-### Prior predictive checks
+### Individual-material prior predictive checks
 
 ```powershell
 python scripts/check_agpd_prior_predictive.py
 ```
 
-### Fit a posterior
+A composition-aware prior-predictive workflow is still to be added.
+
+### Fit an individual-material posterior
+
+Use the likelihood explicitly rather than relying on defaults:
 
 ```powershell
-python scripts/fit_agpd_posterior.py BF_LH --likelihood setup_intercept
+python scripts/fit_agpd_posterior.py BF_LH --likelihood iid
 ```
 
-### Generate all single-model posterior products
+### Fit a shared-composition posterior
 
 ```powershell
-python scripts/postprocess_agpd_posterior.py BF_LH --likelihood setup_intercept
+python scripts/fit_agpd_composition_posterior.py CO_BF_ER_LH --composition-model shared --likelihood iid
 ```
 
-This creates persistent:
+### Fit linear Ag-composition energetics
 
-- sampler diagnostics
-- parameter/posterior summaries
-- posterior predictive and residual products
-- coverages and pathway fractions
-- experimental alpha/OH-order/CO-order comparisons
-- pointwise PSIS-LOO and Pareto-k
-- LOO-PIT calibration diagnostics
+```powershell
+python scripts/fit_agpd_composition_posterior.py CO_BF_ER_LH --composition-model linear_xAg --likelihood iid
+```
+
+The current parameterization is
+
+\[
+p(x_{\mathrm{Ag}})=p_{0.5}+s_p(x_{\mathrm{Ag}}-0.5).
+\]
+
+Only parameters listed under `composition_parameterizations.linear_xAg` in `config/models/agpd_basic.yaml` receive composition slopes.
+
+### Postprocess an individual-material posterior
+
+```powershell
+python scripts/postprocess_agpd_posterior.py BF_LH --likelihood iid
+```
+
+### Postprocess a composition posterior
+
+```powershell
+python scripts/postprocess_agpd_composition_posterior.py CO_BF_ER_LH --composition-model linear_xAg --likelihood iid
+```
+
+Persistent products include sampler diagnostics, parameter summaries, posterior rate/residual products, physical variables, experimental observable comparisons, pointwise PSIS-LOO, Pareto-k, and LOO-PIT diagnostics.
 
 ### Compare models
 
+Individual-material comparison:
+
 ```powershell
-python scripts/compare_agpd_models.py --likelihood setup_intercept
+python scripts/compare_agpd_models.py --likelihood iid
 ```
 
-This contains only genuinely multi-model products:
-
-- `az.compare` / stacking
-- aggregate ELPD differences
-- pointwise ELPD differences
+Composition-model comparison exists, but direct `shared` versus `linear_xAg` comparison still needs a small CLI update. Always specify the likelihood explicitly.
 
 ### Compute transition-state DRC
 
 ```powershell
-python scripts/postprocess_agpd_drc.py BF_LH --likelihood setup_intercept --check-half-step
+python scripts/postprocess_agpd_drc.py BF_LH --likelihood iid --check-half-step
 ```
+
+Current DRC is transition-state-only. Composition-specific effective transition-state energies are not yet wired into the DRC workflow.
 
 ## Output convention
 
-Canonical posterior outputs follow:
+Individual-material posterior outputs:
 
 ```text
 results/AgPd_COOx_basic/posterior/<material>/<likelihood>/<model>/
+```
+
+Composition posterior outputs:
+
+```text
+results/AgPd_COOx_basic/posterior/composition/<composition_model>/<likelihood>/<model>/
 ```
 
 Per-model postprocessing follows:
@@ -142,17 +175,23 @@ postprocessing/
 └── figures/
 ```
 
-Historical output paths are retained for provenance; new scripts use the likelihood-aware hierarchy.
-
 ## Scientific interpretation boundary
 
-Statistical fit, LOO ranking, or posterior convergence do not by themselves establish a mechanism.
+Statistical fit, posterior convergence, narrow HDIs, or LOO ranking do not establish a mechanism by themselves.
 
-The current Ag10Pd90 results support that:
+Current evidence supports that:
 
-- BF alone is predictively inadequate;
-- added pathway complexity improves some behavior;
-- all current ideal mean-field mechanisms retain a severe CO-order mismatch;
-- most residual structure is shared across replicates and represents model discrepancy rather than simple experimental noise.
+- pure BF is insufficient for the full AgPd problem;
+- ER-containing chemistry is required to describe Pd100 within the current model family;
+- shared energetics are inadequate across the alloy series;
+- a linear-in-Ag energetic parameterization can be sampled cleanly after excluding implausible remote prior modes;
+- strong residual correlation along potential remains under the IID likelihood;
+- CO reaction-order behavior remains an important model-data mismatch;
+- Ag10Pd90 remains notably difficult for the current shared/composition model family.
 
-See `CURRENT_STATE.md` for the evidence hierarchy and unresolved hypotheses.
+Future predictive validation should distinguish:
+
+- **LOCO:** leave one material-specific `(KOH, CO)` condition out, including all three replicates;
+- **LOMO:** leave one material/composition out entirely.
+
+These tests answer stronger scientific questions than observation-wise PSIS-LOO.

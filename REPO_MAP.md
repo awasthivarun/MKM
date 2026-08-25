@@ -41,28 +41,21 @@ src/mkm/models/agpd_basic.py     src/mkm/mechanisms/agpd_basic.py
                         v
           src/mkm/inference/likelihoods.py
                         |
-                        v
-            scripts/fit_agpd_posterior.py
+             +----------+----------+
+             |                     |
+             v                     v
+fit_agpd_posterior.py   fit_agpd_composition_posterior.py
+             |                     |
+             v                     v
+       posterior.nc            posterior.nc
+             |                     |
+             v                     v
+postprocess_agpd_posterior.py   postprocess_agpd_composition_posterior.py
+             |                     |
+             +----------+----------+
                         |
                         v
-                   posterior.nc
-                        |
-        +---------------+----------------+
-        |                                |
-        v                                v
-scripts/postprocess_agpd_posterior.py   scripts/postprocess_agpd_drc.py
-        |                                |
-        v                                v
-src/mkm/postprocessing/*               TS-DRC draws/summaries/checks
-        |
-        v
-single-model tables / derived data / figures
-        |
-        v
-scripts/compare_agpd_models.py
-        |
-        v
-multi-model ELPD differences / stacking
+              src/mkm/postprocessing/*
 ```
 
 ## Core directories
@@ -78,8 +71,9 @@ multi-model ELPD differences / stacking
 - `config/models/agpd_basic.yaml`
   - gas/electrolyte/model conventions
   - surface-composition assumptions
-  - likelihood priors and setup grouping
+  - likelihood priors
   - material/model prior profiles
+  - composition parameterizations and slope priors
 
 These files intentionally describe different concerns and should not be merged.
 
@@ -95,7 +89,7 @@ Builds canonical:
 - `model_points`
 - `observations`
 
-This is the stable boundary between dataset-specific preprocessing and generic modeling.
+Only actually observed combinations are represented.
 
 ### `src/mkm/model_inputs.py`
 
@@ -103,8 +97,7 @@ Converts canonical tables into indexed NumPy arrays for PyMC/PyTensor, including
 
 - material/condition/model-point indices
 - observation-to-model-point indices
-- setup indices
-- zero-sum setup-experiment indices
+- setup indices retained for the optional setup-intercept likelihood
 - model-point mechanism inputs
 
 ### `src/mkm/mechanisms/`
@@ -116,28 +109,39 @@ Mathematical/chemical kernels:
 - QEA coverages
 - CO SSA
 - pathway rates
+- detailed-balance relationship for reversible CO adsorption/desorption
 - mechanism parameter/result dataclasses
 
 ### `src/mkm/models/`
 
-Fit-ready model registry:
+Fit-ready model registry and composition wrapper:
 
 - parameter dataclass
 - mechanism evaluator
 - prior-profile compatibility
-- material/model binding
+- individual-material binding
+- shared-composition binding
+- `linear_xAg` effective-parameter construction
+
+The current linear composition convention is
+
+\[
+p(x_{\mathrm{Ag}})=p_{0.5}+s_p(x_{\mathrm{Ag}}-0.5).
+\]
 
 ### `src/mkm/inference/`
 
 Generic Bayesian machinery:
 
 - prior creation
-- log-rate likelihoods
+- IID and setup-intercept log-rate likelihoods
 - PyMC model assembly
 - posterior sampling
 - deterministic reconstruction
 - log-likelihood calculation
 - prior predictive calculations
+
+The current working likelihood is material-specific IID Normal noise in log-rate space. `setup_intercept` is retained but is not the current default scientific workflow.
 
 ### `src/mkm/observable_maps.py`
 
@@ -165,6 +169,8 @@ Numerical posterior products:
 
 ## Canonical scripts
 
+Individual-material workflow:
+
 - `process_agpd_basic.py`
 - `plot_agpd_basic.py`
 - `check_agpd_prior_predictive.py`
@@ -173,11 +179,17 @@ Numerical posterior products:
 - `compare_agpd_models.py`
 - `postprocess_agpd_drc.py`
 
-See `scripts/README.md` for exact ownership.
+Composition workflow:
+
+- `fit_agpd_composition_posterior.py`
+- `postprocess_agpd_composition_posterior.py`
+- `compare_agpd_composition_models.py`
+
+See `scripts/README.md` for ownership and limitations.
 
 ## Single-model versus multi-model ownership
 
-### Single-model posterior postprocessing
+### Individual-material posterior postprocessing
 
 Owned by:
 
@@ -185,17 +197,15 @@ Owned by:
 scripts/postprocess_agpd_posterior.py
 ```
 
-Includes:
+### Composition posterior postprocessing
 
-- sampler diagnostics
-- posterior parameter plots/contraction
-- predictions/residuals
-- physical checks
-- alpha/reaction-order comparisons
-- pointwise PSIS-LOO
-- Pareto-k
-- LOO-PIT and calibration
-- coverages/pathway fractions
+Owned by:
+
+```text
+scripts/postprocess_agpd_composition_posterior.py
+```
+
+Includes material-resolved predictions, residuals, observables, physical variables, and pointwise LOO contributions from a shared/composition-dependent fit.
 
 ### Multi-model comparison
 
@@ -203,14 +213,10 @@ Owned by:
 
 ```text
 scripts/compare_agpd_models.py
+scripts/compare_agpd_composition_models.py
 ```
 
-Includes only quantities that require multiple posteriors:
-
-- model comparison table
-- stacking weights
-- aggregate ELPD differences
-- pointwise ELPD differences
+Comparison outputs are predictive summaries, not mechanism probabilities.
 
 ### Transition-state DRC
 
@@ -220,13 +226,7 @@ Owned by:
 scripts/postprocess_agpd_drc.py
 ```
 
-Persists:
-
-- posterior DRC draws
-- condition-resolved summaries
-- sum-rule checks
-- finite-difference step-convergence checks
-- DRC figures
+The current implementation is individual-material oriented. Composition-specific effective transition-state energies still need to be added before DRC is applied to `linear_xAg` fits.
 
 ## Where do I change...?
 
@@ -235,103 +235,71 @@ Persists:
 - **Interpolation/grid rules:** `src/mkm/preprocessing/agpd_basic.py`, `potential.py`
 - **Experimental reaction orders:** `src/mkm/preprocessing/observables.py`
 - **A mechanism equation:** `src/mkm/mechanisms/agpd_basic.py`
-- **Registered models:** `src/mkm/models/agpd_basic.py`
-- **Priors:** `config/models/agpd_basic.yaml`, `src/mkm/inference/priors.py`
+- **Registered models/composition parameterization:** `src/mkm/models/agpd_basic.py`
+- **Priors/slopes:** `config/models/agpd_basic.yaml`, `src/mkm/inference/priors.py`
 - **Likelihood:** `src/mkm/inference/likelihoods.py`
 - **Full PyMC assembly:** `src/mkm/inference/model.py`
 - **Posterior sampler:** `src/mkm/inference/posterior.py`
 - **Alpha/order maps:** `src/mkm/observable_maps.py`
-- **Posterior diagnostic calculation:** `src/mkm/postprocessing/`
+- **Posterior diagnostics:** `src/mkm/postprocessing/`
 - **Plotting:** `src/mkm/postprocessing/plotting.py`
-- **Transition-state DRC definitions:** `src/mkm/postprocessing/drc.py`
+- **Transition-state DRC:** `src/mkm/postprocessing/drc.py`
 - **Canonical CLI behavior:** `scripts/`
 
-## Adding a new AgPd model
+## AgPd rate/composition convention
 
-### Existing evaluator, new fit-ready model
+Processed rates are normalized per Pd-ECSA-equivalent site. Explicit `Ag_fraction` and `Pd_fraction` factors in the BF/LH pathways represent random-mixing ensemble/neighbor probabilities relative to that Pd-centered normalization; they are not a second ECSA normalization.
 
-1. register it in `src/mkm/models/agpd_basic.py`
-2. add material/model priors in `config/models/agpd_basic.yaml`
-3. add tests
-4. reuse the generic fit/postprocessing infrastructure
+The assumptions
 
-### New mathematical mechanism
+```text
+surface_composition_equals_bulk: true
+random_mixing: true
+```
 
-1. add parameter/result dataclasses and evaluator in `src/mkm/mechanisms/`
-2. register the model
-3. add prior profiles
-4. add mechanism/limit/physicality tests
-5. declare its pointwise outputs and DRC controls
-6. reuse generic inference and observable maps
-
-Normally this should not require changes to:
-
-- preprocessing
-- model-data construction
-- generic likelihood assembly
-- generic PyMC assembly
-- posterior sampling
-- alpha/OH-order/CO-order maps
-
-## Current extensibility bottleneck
-
-The inference core is modular, but model-specific postprocessing metadata is currently spread across:
-
-- model registry
-- pointwise-variable lists
-- physical-balance lists
-- DRC control registry
-
-The next extensibility refactor should introduce one model metadata contract for:
-
-- pointwise variables
-- pathway fractions
-- site balances
-- transition-state controls
+are fixed model assumptions.
 
 ## Result hierarchy
 
-Canonical:
+Individual-material posterior:
 
 ```text
 results/AgPd_COOx_basic/posterior/<material>/<likelihood>/<model>/
-├── posterior_free.nc
-├── posterior.nc
-├── sampler_diagnostics.csv
-└── postprocessing/
-    ├── tables/
-    ├── derived/
-    └── figures/
 ```
 
-Multi-model comparison:
+Composition posterior:
 
 ```text
-results/AgPd_COOx_basic/posterior/<material>/<likelihood>/model_comparison/
+results/AgPd_COOx_basic/posterior/composition/<composition_model>/<likelihood>/<model>/
 ```
 
-Historical pre-likelihood paths remain for provenance and should be migrated deliberately, not deleted ad hoc.
+Per-model postprocessing:
 
-## Environment
-
-- `pyproject.toml`: package metadata, direct Python dependencies, tool configuration
-- `environment.yml`: validated Conda development/scientific stack
-
-Recommended setup:
-
-```powershell
-conda env create -f environment.yml
-conda activate mkm
-python -m pip install -e . --no-deps
+```text
+postprocessing/
+├── tables/
+├── derived/
+└── figures/
 ```
+
+## Predictive-validation roadmap
+
+Observation-wise PSIS-LOO remains useful for locating where a fit succeeds or fails along measured curves.
+
+Two stronger refit-based validation levels are planned:
+
+- **LOCO:** hold out one `(material, KOH, CO)` experimental condition and all three A/B/C replicate curves;
+- **LOMO:** hold out one material/composition entirely.
+
+LOCO tests interpolation/generalization across experimental conditions within a known material. LOMO tests whether composition-dependent energetics generalize to an unseen alloy composition.
 
 ## Current refactor priorities
 
-1. centralize paths/config/material context
-2. add `--material` to canonical scripts
-3. move posterior orchestration into package-level workflow functions
-4. split postprocessing plotting by domain
-5. centralize model metadata
-6. add run metadata/provenance
-7. define generated-results policy
-8. add CLI integration tests
+1. keep sampler diagnostics complete for multi-material nuisance parameters
+2. update model-comparison CLI to compare `shared` and `linear_xAg` directly
+3. add composition-aware prior predictive checks
+4. add energy-vs-composition posterior products
+5. add composition-specific transition-state DRC
+6. add LOCO/LOMO validation workflows
+7. split composition postprocessing orchestration after correctness changes
+8. define generated-results versioning policy

@@ -85,22 +85,35 @@ def compute_loo_reff(inference_data):
     return reff
 
 
+def compute_loo_result(
+    inference_data,
+    var_name="ln_rate_observed",
+    pointwise=True,
+):
+    """Compute PSIS-LOO using the repository's finite-posterior reff convention."""
+    reff = compute_loo_reff(inference_data)
+
+    loo_kwargs = {
+        "var_name": var_name,
+        "pointwise": bool(pointwise),
+    }
+    if reff is not None:
+        loo_kwargs["reff"] = reff
+
+    return azs.loo(inference_data, **loo_kwargs), reff
+
+
 def compute_loo_diagnostics(
     inference_data,
     observations,
     model_name=None,
     var_name="ln_rate_observed",
 ):
-    reff = compute_loo_reff(inference_data)
-
-    loo_kwargs = {
-        "var_name": var_name,
-        "pointwise": True,
-    }
-    if reff is not None:
-        loo_kwargs["reff"] = reff
-
-    loo_result = azs.loo(inference_data, **loo_kwargs)
+    loo_result, reff = compute_loo_result(
+        inference_data=inference_data,
+        var_name=var_name,
+        pointwise=True,
+    )
     elpd_i = np.asarray(loo_result.elpd_i, dtype=float).reshape(-1)
     pareto_k = np.asarray(loo_result.pareto_k, dtype=float).reshape(-1)
 
