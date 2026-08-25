@@ -1,2 +1,0 @@
-has_diagnostic_errors,n_divergent,fraction_divergent,n_max_treedepth,fraction_max_treedepth,min_bfmi,max_rhat,min_ess_bulk,min_ess_tail
-False,0,0.0,0,0.0,0.9357207357060913,1.0058948862896517,621.0764842734916,881.4813152042507

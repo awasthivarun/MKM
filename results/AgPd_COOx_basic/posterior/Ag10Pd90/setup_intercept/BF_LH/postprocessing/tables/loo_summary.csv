@@ -1,2 +1,0 @@
-model,elpd,se,p,n_samples,n_data_points,good_k,max_pareto_k,n_pareto_k_above_good_k,warning
-BF_LH,-811.5350565697476,17.705359765765262,11.057650389241424,4000,1431,0.7,0.1750397894312756,0,False

@@ -1,2 +1,0 @@
-control_type,n_controls,step_eV,median_abs_sum_error,q999_abs_sum_error,max_abs_sum_error,minimum_X_TS,maximum_X_TS,fraction_nonfinite
-transition_state,2,0.0001,1.0103029524088925e-13,3.2529534621517087e-13,4.375388940047742e-13,1.017974849446827e-07,0.999999898202358,0.0

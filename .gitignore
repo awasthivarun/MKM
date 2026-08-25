@@ -36,3 +36,7 @@ Thumbs.db
 # Generated Bayesian inference outputs
 *.nc
 *.zarr/
+
+# Generated analysis outputs
+results/
+figures/
