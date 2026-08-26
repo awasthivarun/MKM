@@ -63,7 +63,7 @@ def build_agpd_inputs(model_data, config, likelihood_name: str):
             setup_zero_sum_columns=setup_config["zero_sum_within"],
         )
 
-    if likelihood_name == "iid":
+    if likelihood_name in {"iid", "mvn", "rate_normal"}:
         return build_model_input_arrays(model_data)
 
     raise ValueError(f"Unsupported likelihood '{likelihood_name}'.")

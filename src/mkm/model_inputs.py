@@ -17,6 +17,7 @@ class ModelInputArrays:
     model_point_E_V_SHE: np.ndarray
 
     observation_model_point_index: np.ndarray
+    observation_rate: np.ndarray
     observation_ln_rate: np.ndarray
     observation_replicate: np.ndarray
 
@@ -234,6 +235,7 @@ def build_model_input_arrays(
     model_point_E_V_SHE = model_points["E_V_SHE"].to_numpy(dtype=float)
 
     observation_model_point_index = observations["model_point_id"].to_numpy(dtype=np.int64)
+    observation_rate = observations["rate_s_inv"].to_numpy(dtype=float)
     observation_ln_rate = observations["ln_rate"].to_numpy(dtype=float)
     observation_replicate = observations["replicate"].astype(str).to_numpy()
 
@@ -259,6 +261,12 @@ def build_model_input_arrays(
     if not np.all(np.isfinite(model_point_E_V_SHE)):
         raise ValueError("Model-point potentials contain non-finite values.")
 
+    if not np.all(np.isfinite(observation_rate)):
+        raise ValueError("Observed rates contain non-finite values.")
+
+    if np.any(observation_rate <= 0):
+        raise ValueError("Observed rates must be positive.")
+
     if not np.all(np.isfinite(observation_ln_rate)):
         raise ValueError("Observed log rates contain non-finite values.")
 
@@ -276,6 +284,7 @@ def build_model_input_arrays(
         model_point_condition_index=model_point_condition_index,
         model_point_E_V_SHE=model_point_E_V_SHE,
         observation_model_point_index=observation_model_point_index,
+        observation_rate=observation_rate,
         observation_ln_rate=observation_ln_rate,
         observation_replicate=observation_replicate,
         setup_labels=setup_labels,

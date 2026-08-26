@@ -60,7 +60,7 @@ def parse_args():
     )
     parser.add_argument("--materials", nargs="+", default=None)
     parser.add_argument("--prior-material", default=DEFAULT_PRIOR_MATERIAL)
-    parser.add_argument("--likelihood", choices=["iid", "setup_intercept"], default="iid")
+    parser.add_argument("--likelihood", choices=["iid", "setup_intercept", "mvn", "rate_normal"], default="iid")
     parser.add_argument(
         "--resume-free",
         action="store_true",
@@ -96,7 +96,11 @@ def main():
     )
     likelihood_config = config["likelihood"]
     setup_config = likelihood_config["setup_intercept"]
+    mvn_config = likelihood_config["mvn"]
+    rate_normal_config = likelihood_config["rate_normal"]
     use_setup_intercept = likelihood_name == "setup_intercept"
+    use_correlated_potential = likelihood_name == "mvn"
+    use_rate_normal = likelihood_name == "rate_normal"
     built = build_pymc_model(
         inputs=inputs,
         mechanism=mechanism,
@@ -105,6 +109,14 @@ def main():
         setup_intercept=use_setup_intercept,
         setup_prior_median=setup_config["prior_median"],
         setup_prior_log_sd=setup_config["prior_log_sd"],
+        correlated_potential=use_correlated_potential,
+        correlation_length_prior_median_V=mvn_config["correlation_length_prior_median_V"],
+        correlation_length_prior_log_sd=mvn_config["correlation_length_prior_log_sd"],
+        rate_normal=use_rate_normal,
+        sigma_abs_prior_median_s_inv=rate_normal_config["sigma_abs_prior_median_s_inv"],
+        sigma_abs_prior_log_sd=rate_normal_config["sigma_abs_prior_log_sd"],
+        sigma_rel_prior_median=rate_normal_config["sigma_rel_prior_median"],
+        sigma_rel_prior_log_sd=rate_normal_config["sigma_rel_prior_log_sd"],
     )
     output_dir = paths.agpd_composition_posterior_output_dir(
         composition_model=composition_model,
@@ -134,6 +146,25 @@ def main():
     metadata["composition_model"] = composition_model
     metadata["materials"] = list(inputs.materials)
     metadata["prior_profile_material"] = args.prior_material
+    if use_correlated_potential:
+        metadata["residual_correlation"] = {
+            "axis": "E_V_SHE",
+            "kernel": "exponential",
+            "curve_grouping": ["condition_id", "replicate"],
+            "correlation_length_prior_median_V": float(mvn_config["correlation_length_prior_median_V"]),
+            "correlation_length_prior_log_sd": float(mvn_config["correlation_length_prior_log_sd"]),
+        }
+
+    if use_rate_normal:
+        metadata["rate_error_model"] = {
+            "distribution": "normal",
+            "observation_space": "rate_s_inv",
+            "sigma": "sigma_rate_abs + sigma_rate_rel * rate_model",
+            "sigma_abs_prior_median_s_inv": float(rate_normal_config["sigma_abs_prior_median_s_inv"]),
+            "sigma_abs_prior_log_sd": float(rate_normal_config["sigma_abs_prior_log_sd"]),
+            "sigma_rel_prior_median": float(rate_normal_config["sigma_rel_prior_median"]),
+            "sigma_rel_prior_log_sd": float(rate_normal_config["sigma_rel_prior_log_sd"]),
+        }
 
     if composition_model == "linear_xAg":
         linear_config = config["composition_parameterizations"]["linear_xAg"]
@@ -146,7 +177,12 @@ def main():
     print(f"Materials: {', '.join(inputs.materials)}")
     print(f"Prior profile source: {args.prior_material}")
     print(f"Likelihood: {likelihood_name}")
-    print(f"Material-specific noise terms: {len(inputs.materials)}")
+    if use_rate_normal:
+        print("Global rate-error terms: sigma_rate_abs, sigma_rate_rel")
+    else:
+        print(f"Material-specific marginal noise terms: {len(inputs.materials)}")
+    if use_correlated_potential:
+        print(f"Material-specific E-correlation length terms: {len(inputs.materials)}")
 
     if composition_model == "linear_xAg":
         print(f"x_Ag reference: {metadata['composition_x_reference']:.2f}")
@@ -196,8 +232,8 @@ def main():
     print(f"Minimum bulk ESS: {diagnostics['ess_bulk'].min():.1f}")
     print(f"Minimum tail ESS: {diagnostics['ess_tail'].min():.1f}")
 
-    deterministic_names = ["ln_rate_model", *built.mechanism_result.pointwise]
-    if built.likelihood.setup_offset is not None:
+    deterministic_names = ["ln_rate_model", "rate_model", *built.mechanism_result.pointwise]
+    if getattr(built.likelihood, "setup_offset", None) is not None:
         deterministic_names.append("ln_rate_setup_offset")
 
     posterior = compute_posterior_deterministics(

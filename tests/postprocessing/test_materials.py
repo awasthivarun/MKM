@@ -117,3 +117,24 @@ def test_summarize_pointwise_loo_by_material_is_explicitly_additive():
 
     assert result.loc["A", "elpd_loo_contribution"] == pytest.approx(-3.0)
     assert result.loc["B", "n_pareto_k_above_0p7"] == 1
+
+def test_summarize_material_noise_includes_mvn_correlation_length():
+    posterior = xr.Dataset(
+        {
+            "sigma_ln_rate_material": (
+                ("chain", "draw", "material"),
+                np.full((2, 2, 1), 0.4),
+            ),
+            "ell_E_V_material": (
+                ("chain", "draw", "material"),
+                np.full((2, 2, 1), 0.03),
+            ),
+        },
+        coords={"chain": [0, 1], "draw": [0, 1], "material": ["Ag50Pd50"]},
+    )
+
+    result = summarize_material_noise(posterior).set_index("variable")
+
+    assert result.loc["sigma_ln_rate_material", "median"] == pytest.approx(0.4)
+    assert result.loc["ell_E_V_material", "median"] == pytest.approx(0.03)
+

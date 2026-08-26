@@ -76,7 +76,7 @@ def summarize_setup_offsets(posterior, inputs, observations):
 def summarize_material_noise(posterior):
     records = []
 
-    for variable in ("sigma_ln_rate_material", "sigma_ln_rate_setup_material"):
+    for variable in ("sigma_ln_rate_material", "ell_E_V_material", "sigma_ln_rate_setup_material"):
         if variable not in posterior:
             continue
 

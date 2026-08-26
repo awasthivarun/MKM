@@ -21,7 +21,10 @@ PATHWAY_FRACTION_VARIABLES = (
 
 NOISE_VARIABLES = (
     "sigma_ln_rate_material",
+    "ell_E_V_material",
     "sigma_ln_rate_setup_material",
+    "sigma_rate_abs",
+    "sigma_rate_rel",
 )
 
 HDI_PROB = 0.95

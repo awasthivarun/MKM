@@ -61,3 +61,32 @@ def test_invalid_likelihood_is_rejected(tmp_path):
 
     with pytest.raises(ValueError, match="Unsupported likelihood"):
         paths.agpd_posterior_output_dir("Ag10Pd90", "BF", "unknown")
+
+def test_mvn_composition_path_uses_canonical_layout(tmp_path):
+    paths = ProjectPaths(root=tmp_path)
+
+    result = paths.agpd_composition_posterior_output_dir(
+        "linear_xAg",
+        "CO_BF_ER_LH",
+        "mvn",
+    )
+
+    assert result == (
+        tmp_path / "results" / "AgPd_COOx_basic" / "posterior"
+        / "composition" / "linear_xAg" / "mvn" / "CO_BF_ER_LH"
+    )
+
+def test_rate_normal_composition_path_uses_canonical_layout(tmp_path):
+    paths = ProjectPaths(root=tmp_path)
+
+    result = paths.agpd_composition_posterior_output_dir(
+        "linear_xAg",
+        "CO_BF_ER_LH",
+        "rate_normal",
+    )
+
+    assert result == (
+        tmp_path / "results" / "AgPd_COOx_basic" / "posterior"
+        / "composition" / "linear_xAg" / "rate_normal" / "CO_BF_ER_LH"
+    )
+

@@ -51,6 +51,7 @@ from mkm.postprocessing.residuals import summarize_residual_curves, summarize_sh
 from mkm.postprocessing.sampling import build_sampling_diagnostics, sampling_parameter_names
 from mkm.postprocessing.calibration import compute_normal_loo_pit
 from mkm.postprocessing.loo import compute_loo_diagnostics
+from mkm.postprocessing.materials import summarize_material_noise
 
 
 DEFAULT_MATERIAL = "Ag10Pd90"
@@ -71,7 +72,7 @@ def parse_args():
     parser = ArgumentParser()
     parser.add_argument("model", choices=available_agpd_models())
     parser.add_argument("--material", default=DEFAULT_MATERIAL)
-    parser.add_argument("--likelihood", choices=["iid", "setup_intercept"], default="iid")
+    parser.add_argument("--likelihood", choices=["iid", "setup_intercept", "mvn"], default="iid")
     return parser.parse_args()
 
 
@@ -265,6 +266,9 @@ def main():
     noise_summary = build_noise_summary(posterior)
     noise_summary.to_csv(tables_dir / "noise_summary.csv", index=False)
 
+    material_noise = summarize_material_noise(posterior)
+    material_noise.to_csv(tables_dir / "noise_summary_by_material.csv", index=False)
+
     observation_diagnostics = build_observation_diagnostics(
         inference_data=idata,
         model_data=model_data,
@@ -302,45 +306,57 @@ def main():
         distribution="conditional",
     )
 
-    loo = compute_loo_diagnostics(
-        inference_data=idata,
-        observations=model_data.observations,
-        model_name=model_name,
-        var_name="ln_rate_observed",
-    )
-    loo.summary.to_csv(tables_dir / "loo_summary.csv", index=False)
-    loo.pointwise.to_parquet(derived_dir / "loo_pointwise.parquet", index=False)
+    if likelihood_name == "mvn":
+        loo = None
+        calibration = None
+    else:
+        loo = compute_loo_diagnostics(
+            inference_data=idata,
+            observations=model_data.observations,
+            model_name=model_name,
+            var_name="ln_rate_observed",
+        )
+        loo.summary.to_csv(tables_dir / "loo_summary.csv", index=False)
+        loo.pointwise.to_parquet(derived_dir / "loo_pointwise.parquet", index=False)
 
-    calibration = compute_normal_loo_pit(
-        inference_data=idata,
-        loo_result=loo.loo_result,
-        observations=model_data.observations,
-        inputs=inputs,
-        likelihood_name=likelihood_name,
-        var_name="ln_rate_observed",
-    )
-    calibration.summary.to_csv(tables_dir / "loo_pit_summary.csv", index=False)
-    calibration.pointwise.to_parquet(derived_dir / "loo_pit.parquet", index=False)
+        calibration = compute_normal_loo_pit(
+            inference_data=idata,
+            loo_result=loo.loo_result,
+            observations=model_data.observations,
+            inputs=inputs,
+            likelihood_name=likelihood_name,
+            var_name="ln_rate_observed",
+        )
+        calibration.summary.to_csv(tables_dir / "loo_pit_summary.csv", index=False)
+        calibration.pointwise.to_parquet(derived_dir / "loo_pit.parquet", index=False)
 
-    plot_pointwise_loo(
-        pointwise=loo.pointwise,
-        model_name=model_name,
-        output_path=figures_dir / "pointwise_loo.png",
-    )
-    plot_pareto_k(
-        loo_result=loo.loo_result,
-        model_name=model_name,
-        output_path=figures_dir / "pareto_k.png",
-    )
+        plot_pointwise_loo(
+            pointwise=loo.pointwise,
+            model_name=model_name,
+            output_path=figures_dir / "pointwise_loo.png",
+        )
+        plot_pareto_k(
+            loo_result=loo.loo_result,
+            model_name=model_name,
+            output_path=figures_dir / "pareto_k.png",
+        )
 
-    pit = calibration.pointwise["loo_pit"].to_numpy(dtype=float)
-    plot_loo_pit_ecdf(loo_pit=pit, model_name=model_name, output_path=figures_dir / "loo_pit_ecdf.png")
-    plot_loo_pit_coverage(loo_pit=pit, model_name=model_name, output_path=figures_dir / "loo_pit_coverage.png")
-    plot_loo_pit_conditions(
-        pointwise=calibration.pointwise,
-        model_name=model_name,
-        output_path=figures_dir / "loo_pit_conditions.png",
-    )
+        pit = calibration.pointwise["loo_pit"].to_numpy(dtype=float)
+        plot_loo_pit_ecdf(
+            loo_pit=pit,
+            model_name=model_name,
+            output_path=figures_dir / "loo_pit_ecdf.png",
+        )
+        plot_loo_pit_coverage(
+            loo_pit=pit,
+            model_name=model_name,
+            output_path=figures_dir / "loo_pit_coverage.png",
+        )
+        plot_loo_pit_conditions(
+            pointwise=calibration.pointwise,
+            model_name=model_name,
+            output_path=figures_dir / "loo_pit_conditions.png",
+        )
 
     physical_summary = build_physical_summary(posterior)
     physical_summary.to_csv(tables_dir / "physical_summary.csv", index=False)
@@ -415,33 +431,81 @@ def main():
 
     print("\n=== NOISE ===")
     print(noise_summary.to_string(index=False))
+    if not material_noise.empty:
+        print("\nMaterial noise parameters:")
+        print(material_noise.to_string(index=False))
 
     print("\n=== RESIDUALS ===")
-    residual = observation_diagnostics["residual_conditional"]
+    mechanism_residual = observation_diagnostics["residual_mechanism"]
+    conditional_residual = observation_diagnostics["residual_conditional"]
     standardized = observation_diagnostics["standardized_residual_conditional"]
 
-    print(f"conditional residual mean: {residual.mean():.4f}")
-    print(f"conditional residual RMS: {np.sqrt(np.mean(residual.to_numpy() ** 2)):.4f}")
-    print(f"median |conditional standardized residual|: {np.median(np.abs(standardized)):.3f}")
+    print(f"mechanism residual mean: {mechanism_residual.mean():.4f}")
+    print(
+        "mechanism residual RMS: "
+        f"{np.sqrt(np.mean(mechanism_residual.to_numpy() ** 2)):.4f}"
+    )
+    print(f"conditional residual mean: {conditional_residual.mean():.4f}")
+    print(
+        "conditional residual RMS: "
+        f"{np.sqrt(np.mean(conditional_residual.to_numpy() ** 2)):.4f}"
+    )
+    print(
+        "median |conditional standardized residual|: "
+        f"{np.median(np.abs(standardized)):.3f}"
+    )
     print(
         "observations inside posterior predictive 95% HDI: "
         f"{observation_diagnostics['observed_inside_predictive_95_hdi'].mean():.1%}"
     )
-    print(f"median curve lag-1 residual correlation: {curve_residuals['lag1_residual_correlation'].median():.3f}")
-    print(f"median |residual slope| per V: {curve_residuals['residual_slope_per_V'].abs().median():.3f}")
+    print(
+        "median mechanism curve lag-1 residual correlation: "
+        f"{curve_residuals['mechanism_lag1_residual_correlation'].median():.3f}"
+    )
+    print(
+        "median conditional curve lag-1 residual correlation: "
+        f"{curve_residuals['conditional_lag1_residual_correlation'].median():.3f}"
+    )
+    print(
+        "median standardized conditional lag-1 residual correlation: "
+        f"{curve_residuals['standardized_conditional_lag1_residual_correlation'].median():.3f}"
+    )
+    print(
+        "median |mechanism residual slope| per V: "
+        f"{curve_residuals['mechanism_residual_slope_per_V'].abs().median():.3f}"
+    )
+    print(
+        "median |conditional residual slope| per V: "
+        f"{curve_residuals['conditional_residual_slope_per_V'].abs().median():.3f}"
+    )
 
     if not shared_residuals.empty:
         shared_fraction = shared_residuals["shared_fraction_squared_residual"].median()
-        print(f"median shared squared-residual fraction: {shared_fraction:.3f}")
+        print(
+            "median replicate-shared mechanism squared-residual fraction: "
+            f"{shared_fraction:.3f}"
+        )
 
     print("\n=== EXPERIMENTAL OBSERVABLES ===")
     print(observable_summary.to_string(index=False))
 
     print("\n=== PSIS-LOO ===")
-    print(loo.summary.to_string(index=False))
+    if loo is None:
+        print(
+            "Skipped for MVN likelihood: observation-wise PSIS-LOO is not valid when "
+            "potential points within a sweep are conditionally correlated."
+        )
+    else:
+        print(loo.summary.to_string(index=False))
 
     print("\n=== LOO-PIT CALIBRATION ===")
-    print(calibration.summary.to_string(index=False))
+    if calibration is None:
+        print(
+            "Skipped for MVN likelihood: the current LOO-PIT implementation assumes "
+            "observation-wise independent likelihood terms."
+        )
+    else:
+        print(calibration.summary.to_string(index=False))
 
     if likelihood_name == "setup_intercept":
         print(

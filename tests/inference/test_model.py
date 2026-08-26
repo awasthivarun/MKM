@@ -137,3 +137,59 @@ def test_model_requires_mechanism_result():
 
     with pytest.raises(TypeError, match="MechanismResult"):
         build_pymc_model(inputs=inputs, mechanism=bad_mechanism)
+
+def test_build_pymc_model_supports_potential_correlated_likelihood():
+    inputs = _build_test_inputs()
+
+    built = build_pymc_model(
+        inputs=inputs,
+        mechanism=_test_mechanism,
+        correlated_potential=True,
+        correlation_length_prior_median_V=0.02,
+        correlation_length_prior_log_sd=1.0,
+    )
+
+    assert "ell_E_V_material" in built.model.named_vars
+    assert "ln_rate_observation_rho" in built.model.named_vars
+    assert built.likelihood.correlation_length_material is not None
+
+    initial_point = built.model.initial_point()
+    logp = built.model.compile_logp()(initial_point)
+    assert np.isfinite(logp)
+
+
+
+def test_build_pymc_model_supports_rate_normal_likelihood():
+    inputs = _build_test_inputs()
+
+    built = build_pymc_model(
+        inputs=inputs,
+        mechanism=_test_mechanism,
+        rate_normal=True,
+        sigma_abs_prior_median_s_inv=2.0e-4,
+        sigma_abs_prior_log_sd=1.0,
+        sigma_rel_prior_median=0.18,
+        sigma_rel_prior_log_sd=0.75,
+    )
+
+    assert "rate_model" in built.model.named_vars
+    assert "sigma_rate_abs" in built.model.named_vars
+    assert "sigma_rate_rel" in built.model.named_vars
+    assert "rate_observation_sigma" in built.model.named_vars
+    assert "rate_observed" in built.model.named_vars
+
+    initial_point = built.model.initial_point()
+    logp = built.model.compile_logp()(initial_point)
+    assert np.isfinite(logp)
+
+
+def test_rate_normal_cannot_be_combined_with_other_error_models():
+    inputs = _build_test_inputs()
+
+    with pytest.raises(ValueError, match="cannot be enabled together"):
+        build_pymc_model(
+            inputs=inputs,
+            mechanism=_test_mechanism,
+            rate_normal=True,
+            correlated_potential=True,
+        )

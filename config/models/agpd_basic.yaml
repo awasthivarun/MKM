@@ -72,6 +72,16 @@ likelihood:
   sigma_prior_median: 0.20
   sigma_prior_log_sd: 0.75
 
+  rate_normal:
+    sigma_abs_prior_median_s_inv: 0.0002
+    sigma_abs_prior_log_sd: 1.0
+    sigma_rel_prior_median: 0.18
+    sigma_rel_prior_log_sd: 0.75
+
+  mvn:
+    correlation_length_prior_median_V: 0.020
+    correlation_length_prior_log_sd: 1.0
+
   setup_intercept:
     group_columns:
       - material

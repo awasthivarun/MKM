@@ -57,13 +57,21 @@ def compute_normal_loo_pit(
     likelihood_name,
     var_name="ln_rate_observed",
 ):
+    observed_ln_rate = None
+    if "ln_rate" in observations.columns:
+        observed_ln_rate = observations["ln_rate"].to_numpy(dtype=float)
+
     draws = build_observation_distribution_draws(
         inference_data=inference_data,
         inputs=inputs,
         likelihood_name=likelihood_name,
+        observed_ln_rate=observed_ln_rate,
     )
 
-    observed = observations["ln_rate"].to_numpy(dtype=float)
+    if likelihood_name == "rate_normal":
+        observed = observations["rate_s_inv"].to_numpy(dtype=float)
+    else:
+        observed = observations["ln_rate"].to_numpy(dtype=float)
 
     if draws.conditional_mu.shape[-1] != len(observed):
         raise ValueError(
@@ -71,7 +79,7 @@ def compute_normal_loo_pit(
             f"but observation table contains {len(observed)}."
         )
 
-    z = (observed[None, None, :] - draws.conditional_mu) / draws.sigma
+    z = (observed[None, None, :] - draws.conditional_mu) / draws.conditional_sigma
     conditional_cdf = ndtr(z)
 
     log_weights = _extract_loo_log_weights(

@@ -27,7 +27,7 @@ def parse_args():
         choices=available_agpd_composition_parameterizations(),
         default=DEFAULT_COMPOSITION_MODEL,
     )
-    parser.add_argument("--likelihood", choices=["iid", "setup_intercept"], default=DEFAULT_LIKELIHOOD)
+    parser.add_argument("--likelihood", choices=["iid", "setup_intercept", "mvn"], default=DEFAULT_LIKELIHOOD)
     return parser.parse_args()
 
 

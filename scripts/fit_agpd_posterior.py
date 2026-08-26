@@ -13,7 +13,6 @@ from mkm.inference.posterior import (
 )
 from mkm.models.agpd_basic import available_agpd_models, build_agpd_mechanism
 from mkm.project_paths import ProjectPaths
-from mkm.provenance import build_fit_metadata, write_run_metadata
 from mkm.workflows.agpd_basic import (
     build_agpd_inputs,
     build_agpd_model_data,
@@ -36,7 +35,7 @@ def parse_args():
     parser = ArgumentParser()
     parser.add_argument("model", choices=available_agpd_models())
     parser.add_argument("--material", default=DEFAULT_MATERIAL)
-    parser.add_argument("--likelihood", choices=["iid", "setup_intercept"], default="iid")
+    parser.add_argument("--likelihood", choices=["iid", "setup_intercept", "mvn"], default="iid")
     return parser.parse_args()
 
 
@@ -50,54 +49,55 @@ def main():
     config = load_agpd_model_config(paths)
     validate_agpd_material(config, material)
 
-    likelihood_config = config["likelihood"]
-    setup_config = likelihood_config["setup_intercept"]
-    use_setup_intercept = likelihood_name == "setup_intercept"
+    try:
+        config["prior_profiles"][material][model_name]
+    except KeyError as error:
+        raise ValueError(
+            f"No individual prior profile is defined for material '{material}' "
+            f"and model '{model_name}'."
+        ) from error
 
     model_data = build_agpd_model_data(paths, material)
     inputs = build_agpd_inputs(model_data, config, likelihood_name)
-    mechanism = build_agpd_mechanism(model_name=model_name, material=material, config=config)
+
+    mechanism = build_agpd_mechanism(
+        model_name=model_name,
+        material=material,
+        config=config,
+    )
+
+    likelihood_config = config["likelihood"]
+    setup_config = likelihood_config.get("setup_intercept", {})
+    mvn_config = likelihood_config.get("mvn", {})
 
     built = build_pymc_model(
         inputs=inputs,
         mechanism=mechanism,
         sigma_prior_median=likelihood_config["sigma_prior_median"],
         sigma_prior_log_sd=likelihood_config["sigma_prior_log_sd"],
-        setup_intercept=use_setup_intercept,
-        setup_prior_median=setup_config["prior_median"],
-        setup_prior_log_sd=setup_config["prior_log_sd"],
+        setup_intercept=likelihood_name == "setup_intercept",
+        setup_prior_median=setup_config.get("prior_median", 0.10),
+        setup_prior_log_sd=setup_config.get("prior_log_sd", 0.75),
+        correlated_potential=likelihood_name == "mvn",
+        correlation_length_prior_median_V=mvn_config.get(
+            "correlation_length_prior_median_V",
+            0.020,
+        ),
+        correlation_length_prior_log_sd=mvn_config.get(
+            "correlation_length_prior_log_sd",
+            1.0,
+        ),
     )
 
-    output_dir = paths.agpd_posterior_output_dir(material, model_name, likelihood_name)
+    output_dir = paths.agpd_posterior_output_dir(
+        material,
+        model_name,
+        likelihood_name,
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    sampler_settings = {
-        "nuts_sampler": "nutpie",
-        "backend": "numba",
-        "draws": DRAWS,
-        "tune": TUNE,
-        "chains": CHAINS,
-        "cores": CORES,
-        "target_accept": TARGET_ACCEPT,
-        "random_seed": RANDOM_SEED,
-    }
-    metadata = build_fit_metadata(
-        root=paths.root,
-        material=material,
-        model_name=model_name,
-        likelihood_name=likelihood_name,
-        data_path=paths.agpd_selected_path,
-        model_config_path=paths.agpd_model_config_path,
-        sampler=sampler_settings,
-    )
-    write_run_metadata(metadata, output_dir / "run_metadata.yaml")
 
     print(f"\n{material}: {model_name}")
     print(f"Likelihood: {likelihood_name}")
-
-    if use_setup_intercept:
-        print(f"Setups: {len(inputs.setup_labels)}")
-
     print("Sampler: nutpie / numba")
     print(f"Chains: {CHAINS}, tune: {TUNE}, draws: {DRAWS}, target_accept: {TARGET_ACCEPT}")
 
@@ -111,12 +111,13 @@ def main():
         cores=CORES,
         target_accept=TARGET_ACCEPT,
         random_seed=RANDOM_SEED,
-        nuts_sampler=sampler_settings["nuts_sampler"],
-        backend=sampler_settings["backend"],
+        nuts_sampler="nutpie",
+        backend="numba",
         compute_convergence_checks=False,
     )
 
     sampling_seconds = perf_counter() - start
+
     idata.to_netcdf(output_dir / "posterior_free.nc", engine="h5netcdf")
 
     health = summarize_sampler_health(idata)
@@ -128,6 +129,7 @@ def main():
         kind="diagnostics",
         round_to=None,
     )
+
     diagnostics.to_csv(output_dir / "sampler_diagnostics.csv")
 
     print(f"\nSampling wall time: {sampling_seconds:.2f} s")
@@ -139,9 +141,6 @@ def main():
     print(f"Minimum tail ESS: {diagnostics['ess_tail'].min():.1f}")
 
     deterministic_names = ["ln_rate_model", *built.mechanism_result.pointwise]
-
-    if built.likelihood.setup_offset is not None:
-        deterministic_names.append("ln_rate_setup_offset")
 
     posterior = compute_posterior_deterministics(
         idata,

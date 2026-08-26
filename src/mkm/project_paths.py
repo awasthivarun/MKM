@@ -70,7 +70,7 @@ class ProjectPaths:
 
     def agpd_posterior_output_dir(self, material: str, model_name: str, likelihood_name: str) -> Path:
         """Return the canonical write location for a posterior fit."""
-        if likelihood_name not in {"iid", "setup_intercept"}:
+        if likelihood_name not in {"iid", "setup_intercept", "mvn"}:
             raise ValueError(f"Unsupported likelihood '{likelihood_name}'.")
         return self.agpd_posterior_root / material / likelihood_name / model_name
 
@@ -97,11 +97,11 @@ class ProjectPaths:
         model_name: str,
         likelihood_name: str,
     ) -> Path:
-        if likelihood_name not in {"iid", "setup_intercept"}:
+        if likelihood_name not in {"iid", "setup_intercept", "mvn", "rate_normal"}:
             raise ValueError(f"Unsupported likelihood '{likelihood_name}'.")
         return self.agpd_posterior_root / "composition" / composition_model / likelihood_name / model_name
 
     def agpd_model_comparison_dir(self, material: str, likelihood_name: str) -> Path:
-        if likelihood_name not in {"iid", "setup_intercept"}:
+        if likelihood_name not in {"iid", "setup_intercept", "mvn"}:
             raise ValueError(f"Unsupported likelihood '{likelihood_name}'.")
         return self.agpd_posterior_root / material / likelihood_name / "model_comparison"

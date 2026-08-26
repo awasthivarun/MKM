@@ -38,7 +38,7 @@ def parse_args():
         choices=available_agpd_composition_parameterizations(),
         help="Use a saved multi-material composition posterior instead of an individual-material posterior.",
     )
-    parser.add_argument("--likelihood", choices=["iid", "setup_intercept"], default="iid")
+    parser.add_argument("--likelihood", choices=["iid", "setup_intercept", "mvn"], default="iid")
     parser.add_argument("--step-eV", type=float, default=1e-4)
     parser.add_argument("--check-half-step", action="store_true")
     return parser.parse_args()

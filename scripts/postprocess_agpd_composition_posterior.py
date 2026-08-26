@@ -83,7 +83,7 @@ def parse_args():
     parser = ArgumentParser()
     parser.add_argument("model", choices=available_agpd_composition_models())
     parser.add_argument("--composition-model", default=DEFAULT_COMPOSITION_MODEL)
-    parser.add_argument("--likelihood", choices=["iid", "setup_intercept"], default="iid")
+    parser.add_argument("--likelihood", choices=["iid", "setup_intercept", "mvn", "rate_normal"], default="iid")
     return parser.parse_args()
 
 
@@ -373,7 +373,8 @@ def main():
     noise_summary.to_csv(tables_dir / "noise_summary.csv", index=False)
 
     material_noise = summarize_material_noise(posterior)
-    material_noise.to_csv(tables_dir / "noise_summary_by_material.csv", index=False)
+    if not material_noise.empty:
+        material_noise.to_csv(tables_dir / "noise_summary_by_material.csv", index=False)
 
     if likelihood_name == "setup_intercept":
         setup_offsets = summarize_setup_offsets(
@@ -410,46 +411,52 @@ def main():
     )
     material_residual_summary.to_csv(tables_dir / "residual_summary_by_material.csv", index=False)
 
-    loo = compute_loo_diagnostics(
-        inference_data=idata,
-        observations=model_data.observations,
-        model_name=model_name,
-        var_name="ln_rate_observed",
-    )
-    loo.summary.to_csv(tables_dir / "loo_summary.csv", index=False)
-    loo.pointwise.to_parquet(derived_dir / "loo_pointwise.parquet", index=False)
+    if likelihood_name == "mvn":
+        loo = None
+        loo_by_material = pd.DataFrame()
+        calibration = None
+    else:
+        loo_var_name = "rate_observed" if likelihood_name == "rate_normal" else "ln_rate_observed"
+        loo = compute_loo_diagnostics(
+            inference_data=idata,
+            observations=model_data.observations,
+            model_name=model_name,
+            var_name=loo_var_name,
+        )
+        loo.summary.to_csv(tables_dir / "loo_summary.csv", index=False)
+        loo.pointwise.to_parquet(derived_dir / "loo_pointwise.parquet", index=False)
 
-    loo_by_material = summarize_pointwise_loo_by_material(loo.pointwise)
-    loo_by_material.to_csv(tables_dir / "loo_contribution_by_material.csv", index=False)
+        loo_by_material = summarize_pointwise_loo_by_material(loo.pointwise)
+        loo_by_material.to_csv(tables_dir / "loo_contribution_by_material.csv", index=False)
 
-    calibration = compute_normal_loo_pit(
-        inference_data=idata,
-        loo_result=loo.loo_result,
-        observations=model_data.observations,
-        inputs=inputs,
-        likelihood_name=likelihood_name,
-        var_name="ln_rate_observed",
-    )
-    calibration.summary.to_csv(tables_dir / "loo_pit_summary.csv", index=False)
-    calibration.pointwise.to_parquet(derived_dir / "loo_pit.parquet", index=False)
+        calibration = compute_normal_loo_pit(
+            inference_data=idata,
+            loo_result=loo.loo_result,
+            observations=model_data.observations,
+            inputs=inputs,
+            likelihood_name=likelihood_name,
+            var_name=loo_var_name,
+        )
+        calibration.summary.to_csv(tables_dir / "loo_pit_summary.csv", index=False)
+        calibration.pointwise.to_parquet(derived_dir / "loo_pit.parquet", index=False)
 
-    plot_pareto_k(
-        loo_result=loo.loo_result,
-        model_name=f"{model_name}, shared composition",
-        output_path=figures_dir / "pareto_k.png",
-    )
+        plot_pareto_k(
+            loo_result=loo.loo_result,
+            model_name=f"{model_name}, {composition_model} composition",
+            output_path=figures_dir / "pareto_k.png",
+        )
 
-    pit = calibration.pointwise["loo_pit"].to_numpy(dtype=float)
-    plot_loo_pit_ecdf(
-        loo_pit=pit,
-        model_name=f"{model_name}, shared composition",
-        output_path=figures_dir / "loo_pit_ecdf.png",
-    )
-    plot_loo_pit_coverage(
-        loo_pit=pit,
-        model_name=f"{model_name}, shared composition",
-        output_path=figures_dir / "loo_pit_coverage.png",
-    )
+        pit = calibration.pointwise["loo_pit"].to_numpy(dtype=float)
+        plot_loo_pit_ecdf(
+            loo_pit=pit,
+            model_name=f"{model_name}, {composition_model} composition",
+            output_path=figures_dir / "loo_pit_ecdf.png",
+        )
+        plot_loo_pit_coverage(
+            loo_pit=pit,
+            model_name=f"{model_name}, {composition_model} composition",
+            output_path=figures_dir / "loo_pit_coverage.png",
+        )
 
     physical_summary = build_physical_summary(posterior)
     physical_summary.to_csv(tables_dir / "physical_summary.csv", index=False)
@@ -505,22 +512,24 @@ def main():
                 distribution=distribution,
                 context_label=material,
             )
+            if not (likelihood_name == "rate_normal" and distribution == "predictive"):
+                plot_observation_grid(
+                    observations=observations,
+                    output_path=material_dir / f"posterior_{distribution}_rate_log.png",
+                    residual=False,
+                    y_scale="log",
+                    distribution=distribution,
+                    context_label=material,
+                )
+
+        if likelihood_name != "rate_normal":
             plot_observation_grid(
                 observations=observations,
-                output_path=material_dir / f"posterior_{distribution}_rate_log.png",
-                residual=False,
-                y_scale="log",
-                distribution=distribution,
+                output_path=material_dir / "conditional_log_rate_residuals.png",
+                residual=True,
+                distribution="conditional",
                 context_label=material,
             )
-
-        plot_observation_grid(
-            observations=observations,
-            output_path=material_dir / "conditional_log_rate_residuals.png",
-            residual=True,
-            distribution="conditional",
-            context_label=material,
-        )
 
         for variable_name, summary in pointwise_summaries.items():
             if not _pointwise_variable_is_applicable(variable_name, material, config):
@@ -537,31 +546,32 @@ def main():
                 context_label=material,
             )
 
-        material_loo = loo.pointwise.loc[loo.pointwise["material"] == material].copy()
-        plot_pointwise_loo(
-            pointwise=material_loo,
-            model_name=f"{model_name}, {material}",
-            output_path=material_dir / "pointwise_loo.png",
-        )
+        if loo is not None and calibration is not None:
+            material_loo = loo.pointwise.loc[loo.pointwise["material"] == material].copy()
+            plot_pointwise_loo(
+                pointwise=material_loo,
+                model_name=f"{model_name}, {material}",
+                output_path=material_dir / "pointwise_loo.png",
+            )
 
-        material_pit = calibration.pointwise.loc[
-            calibration.pointwise["material"] == material
-        ].copy()
-        plot_loo_pit_conditions(
-            pointwise=material_pit,
-            model_name=f"{model_name}, {material}",
-            output_path=material_dir / "loo_pit_conditions.png",
-        )
-        plot_loo_pit_ecdf(
-            loo_pit=material_pit["loo_pit"].to_numpy(dtype=float),
-            model_name=f"{model_name}, {material}",
-            output_path=material_dir / "loo_pit_ecdf.png",
-        )
-        plot_loo_pit_coverage(
-            loo_pit=material_pit["loo_pit"].to_numpy(dtype=float),
-            model_name=f"{model_name}, {material}",
-            output_path=material_dir / "loo_pit_coverage.png",
-        )
+            material_pit = calibration.pointwise.loc[
+                calibration.pointwise["material"] == material
+            ].copy()
+            plot_loo_pit_conditions(
+                pointwise=material_pit,
+                model_name=f"{model_name}, {material}",
+                output_path=material_dir / "loo_pit_conditions.png",
+            )
+            plot_loo_pit_ecdf(
+                loo_pit=material_pit["loo_pit"].to_numpy(dtype=float),
+                model_name=f"{model_name}, {material}",
+                output_path=material_dir / "loo_pit_ecdf.png",
+            )
+            plot_loo_pit_coverage(
+                loo_pit=material_pit["loo_pit"].to_numpy(dtype=float),
+                model_name=f"{model_name}, {material}",
+                output_path=material_dir / "loo_pit_coverage.png",
+            )
 
         alpha = _subset_comparison(observable_comparisons["alpha"], material)
         oh = _subset_comparison(observable_comparisons["delta_OH"], material)
@@ -590,8 +600,12 @@ def main():
     print("\n=== POSTERIOR PARAMETERS ===")
     print(posterior_parameter_summary.to_string(index=False))
 
-    print("\n=== MATERIAL NOISE ===")
-    print(material_noise.to_string(index=False))
+    if likelihood_name == "rate_normal":
+        print("\n=== GLOBAL RATE ERROR ===")
+        print(noise_summary.to_string(index=False))
+    else:
+        print("\n=== MATERIAL NOISE ===")
+        print(material_noise.to_string(index=False))
 
     if not setup_offsets.empty:
         print(f"\nSetup-offset table: {len(setup_offsets)} rows saved to setup_offset_summary.csv")
@@ -603,11 +617,17 @@ def main():
     print(observable_summary.to_string(index=False))
 
     print("\n=== PSIS-LOO ===")
-    print(loo.summary.to_string(index=False))
-    print(
-        "\nMaterial LOO rows below are contributions to observation-wise LOO, not leave-one-material-out validation."
-    )
-    print(loo_by_material.to_string(index=False))
+    if loo is None:
+        print(
+            "Skipped for MVN likelihood: observation-wise PSIS-LOO is not valid when "
+            "potential points within a sweep are conditionally correlated."
+        )
+    else:
+        print(loo.summary.to_string(index=False))
+        print(
+            "\nMaterial LOO rows below are contributions to observation-wise LOO, not leave-one-material-out validation."
+        )
+        print(loo_by_material.to_string(index=False))
 
     print("\n=== PHYSICAL VARIABLES ===")
     print(physical_summary.to_string(index=False))
