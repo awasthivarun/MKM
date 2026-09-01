@@ -1,8 +1,8 @@
+import arviz_stats as azs
 import numpy as np
 import pandas as pd
-import arviz_stats as azs
 import xarray as xr
-from scipy.stats import norm, truncnorm
+from scipy.stats import lognorm, norm, truncnorm
 
 
 COVERAGE_VARIABLES = (
@@ -19,10 +19,7 @@ PATHWAY_FRACTION_VARIABLES = (
     "rate_fraction_LH",
 )
 
-NOISE_VARIABLES = (
-    "sigma_ln_rate_material",
-    "ell_E_V_material",
-    "sigma_ln_rate_setup_material",
+ERROR_VARIABLES = (
     "sigma_rate_abs",
     "sigma_rate_rel",
 )
@@ -32,17 +29,14 @@ HDI_PROB = 0.95
 
 def flatten_posterior_samples(values):
     values = np.asarray(values)
-
     if values.ndim < 2:
         raise ValueError("Posterior variable must contain chain and draw dimensions.")
-
     return values.reshape((-1, *values.shape[2:]))
 
 
 def highest_density_interval(values, prob=HDI_PROB):
     """Return the HDI over the leading sample axis."""
     values = np.asarray(values, dtype=float)
-
     if values.ndim < 1 or values.shape[0] < 1:
         raise ValueError("HDI input must contain at least one sample.")
 
@@ -58,12 +52,14 @@ def highest_density_interval(values, prob=HDI_PROB):
 def summarize_samples(values):
     """Summarize draws over the leading sample axis using a 95% HDI."""
     values = np.asarray(values, dtype=float)
-
     if values.ndim < 1 or values.shape[0] < 1:
         raise ValueError("Posterior summary input must contain at least one sample.")
 
     hdi_lower, hdi_upper = highest_density_interval(values, prob=HDI_PROB)
-    sd = np.std(values, axis=0, ddof=1) if values.shape[0] > 1 else np.full(values.shape[1:], np.nan)
+    if values.shape[0] > 1:
+        sd = np.std(values, axis=0, ddof=1)
+    else:
+        sd = np.full(values.shape[1:], np.nan)
 
     return {
         "mean": np.mean(values, axis=0),
@@ -77,7 +73,6 @@ def summarize_samples(values):
 def summarize_scalar_samples(values):
     values = np.asarray(values, dtype=float).reshape(-1)
     summary = summarize_samples(values[:, None])
-
     return {
         "mean": float(summary["mean"][0]),
         "sd": float(summary["sd"][0]),
@@ -87,33 +82,12 @@ def summarize_scalar_samples(values):
     }
 
 
-def build_posterior_parameter_summary(posterior, parameter_specs):
-    """Summarize configured scalar physical parameters from posterior draws."""
-    records = []
-
-    for name in parameter_specs:
-        if name not in posterior:
-            raise ValueError(f"Posterior is missing configured parameter '{name}'.")
-
-        values = posterior[name].squeeze(drop=True)
-        extra_dims = set(values.dims) - {"chain", "draw"}
-        if extra_dims:
-            raise ValueError(
-                f"Physical parameter '{name}' is not scalar; remaining dimensions: {sorted(extra_dims)}."
-            )
-
-        records.append({"parameter": name, **summarize_scalar_samples(values)})
-
-    return pd.DataFrame(records)
-
-
 def prior_statistics(spec):
     distribution = spec["distribution"]
 
     if distribution == "normal":
         mu = float(spec["mu"])
         sigma = float(spec["sigma"])
-
         return {
             "prior_mean": mu,
             "prior_sd": sigma,
@@ -127,7 +101,6 @@ def prior_statistics(spec):
     if distribution == "uniform":
         lower = float(spec["lower"])
         upper = float(spec["upper"])
-
         return {
             "prior_mean": 0.5 * (lower + upper),
             "prior_sd": (upper - lower) / np.sqrt(12.0),
@@ -143,11 +116,12 @@ def prior_statistics(spec):
         sigma = float(spec["sigma"])
         lower = float(spec.get("lower", -np.inf))
         upper = float(spec.get("upper", np.inf))
-
-        a = (lower - mu) / sigma
-        b = (upper - mu) / sigma
-        rv = truncnorm(a=a, b=b, loc=mu, scale=sigma)
-
+        rv = truncnorm(
+            a=(lower - mu) / sigma,
+            b=(upper - mu) / sigma,
+            loc=mu,
+            scale=sigma,
+        )
         return {
             "prior_mean": float(rv.mean()),
             "prior_sd": float(rv.std()),
@@ -158,78 +132,176 @@ def prior_statistics(spec):
             "upper": upper,
         }
 
+    if distribution == "lognormal":
+        median = float(spec["median"])
+        log_sd = float(spec["log_sd"])
+        rv = lognorm(s=log_sd, scale=median)
+        return {
+            "prior_mean": float(rv.mean()),
+            "prior_sd": float(rv.std()),
+            "prior_q025": float(rv.ppf(0.025)),
+            "prior_q50": median,
+            "prior_q975": float(rv.ppf(0.975)),
+            "lower": 0.0,
+            "upper": np.inf,
+        }
+
     raise ValueError(f"Unsupported prior distribution '{distribution}'.")
 
 
-def build_parameter_contraction(posterior, config, material, model_name, parameter_specs=None):
-    if parameter_specs is None:
-        parameter_specs = config["prior_profiles"][material][model_name]["parameters"]
+def _coordinate_label(values, dim, index):
+    if dim in values.coords and values.coords[dim].ndim == 1:
+        return str(values.coords[dim].values[index])
+    return str(index)
 
-    records = []
 
-    for name, spec in parameter_specs.items():
-        if name not in posterior:
-            raise ValueError(f"Posterior is missing configured parameter '{name}'.")
-
-        prior = prior_statistics(spec)
-        post = summarize_scalar_samples(posterior[name])
-
-        prior_width = prior["prior_q975"] - prior["prior_q025"]
-        posterior_width = post["hdi95_upper"] - post["hdi95_lower"]
-
-        records.append(
-            {
-                "parameter": name,
-                **prior,
-                "posterior_mean": post["mean"],
-                "posterior_sd": post["sd"],
-                "posterior_median": post["median"],
-                "posterior_hdi95_lower": post["hdi95_lower"],
-                "posterior_hdi95_upper": post["hdi95_upper"],
-                "sd_ratio_posterior_over_prior": post["sd"] / prior["prior_sd"],
-                "interval95_width_ratio_posterior_hdi_over_prior_central": posterior_width / prior_width,
-            }
+def _parameter_components(posterior, name):
+    values = posterior[name]
+    missing_sample_dims = [dim for dim in ("chain", "draw") if dim not in values.dims]
+    if missing_sample_dims:
+        raise ValueError(
+            f"Posterior parameter '{name}' is missing sample dimensions: "
+            f"{missing_sample_dims}."
         )
 
-    return pd.DataFrame(records)
+    extra_dims = tuple(dim for dim in values.dims if dim not in {"chain", "draw"})
+    if not extra_dims:
+        yield name, values.transpose("chain", "draw")
+        return
+
+    shape = tuple(values.sizes[dim] for dim in extra_dims)
+    for index in np.ndindex(shape):
+        indexers = dict(zip(extra_dims, index, strict=True))
+        labels = [
+            f"{dim}={_coordinate_label(values, dim, dim_index)}"
+            for dim, dim_index in zip(extra_dims, index, strict=True)
+        ]
+        label = f"{name}[{','.join(labels)}]"
+        component = values.isel(indexers, drop=True).transpose("chain", "draw")
+        yield label, component
 
 
-def build_noise_summary(posterior):
+def _scalar_statistic(value):
+    array = np.asarray(value, dtype=float).reshape(-1)
+    if array.size != 1:
+        raise ValueError("Expected a scalar sampling diagnostic.")
+    return float(array[0])
+
+
+def build_posterior_parameter_summary(inference_data, parameter_specs):
+    """Combine posterior estimates, prior contraction, R-hat, and ESS in one table."""
+    posterior = inference_data.posterior
+    missing = [name for name in parameter_specs if name not in posterior]
+    if missing:
+        raise ValueError(f"Posterior is missing configured parameters: {missing}.")
+
     records = []
+    for name, spec in parameter_specs.items():
+        prior = prior_statistics(spec)
+        for label, component in _parameter_components(posterior, name):
+            chain_draw = np.asarray(component, dtype=float)
+            samples = chain_draw.reshape(-1)
+            posterior_summary = summarize_scalar_samples(samples)
 
-    for name in NOISE_VARIABLES:
-        if name not in posterior:
-            continue
+            if chain_draw.shape[0] >= 2:
+                rhat = _scalar_statistic(
+                    azs.rhat(chain_draw, chain_axis=0, draw_axis=1)
+                )
+            else:
+                rhat = np.nan
 
-        values = flatten_posterior_samples(posterior[name])
-
-        for index in np.ndindex(values.shape[1:]):
-            x = values[(slice(None), *index)]
-            summary = summarize_scalar_samples(x)
-
-            records.append(
-                {
-                    "variable": name,
-                    "index": str(index),
-                    **summary,
-                }
+            record = {
+                "parameter": label,
+                "variable": name,
+                "parameter_type": "error" if name in ERROR_VARIABLES else "physical",
+                **posterior_summary,
+                "mcse_mean": _scalar_statistic(
+                    azs.mcse(
+                        chain_draw,
+                        method="mean",
+                        chain_axis=0,
+                        draw_axis=1,
+                    )
+                ),
+                "mcse_sd": _scalar_statistic(
+                    azs.mcse(
+                        chain_draw,
+                        method="sd",
+                        chain_axis=0,
+                        draw_axis=1,
+                    )
+                ),
+                "ess_bulk": _scalar_statistic(
+                    azs.ess(
+                        chain_draw,
+                        method="bulk",
+                        chain_axis=0,
+                        draw_axis=1,
+                    )
+                ),
+                "ess_tail": _scalar_statistic(
+                    azs.ess(
+                        chain_draw,
+                        method="tail",
+                        prob=(0.05, 0.95),
+                        chain_axis=0,
+                        draw_axis=1,
+                    )
+                ),
+                "rhat": rhat,
+                **prior,
+            }
+            record["sd_ratio_posterior_over_prior"] = (
+                record["sd"] / record["prior_sd"]
             )
+            prior_width = record["prior_q975"] - record["prior_q025"]
+            record["interval95_width_ratio_posterior_hdi_over_prior_central"] = (
+                (record["hdi95_upper"] - record["hdi95_lower"]) / prior_width
+            )
+            records.append(record)
 
-    return pd.DataFrame(records)
+    preferred = [
+        "parameter",
+        "variable",
+        "parameter_type",
+        "mean",
+        "sd",
+        "median",
+        "hdi95_lower",
+        "hdi95_upper",
+        "mcse_mean",
+        "mcse_sd",
+        "ess_bulk",
+        "ess_tail",
+        "rhat",
+        "prior_mean",
+        "prior_sd",
+        "prior_q025",
+        "prior_q50",
+        "prior_q975",
+        "lower",
+        "upper",
+        "sd_ratio_posterior_over_prior",
+        "interval95_width_ratio_posterior_hdi_over_prior_central",
+    ]
+    summary = pd.DataFrame.from_records(records)
+    existing = [column for column in preferred if column in summary]
+    remainder = [column for column in summary if column not in existing]
+    return summary[existing + remainder]
+
 
 
 def build_physical_summary(posterior):
     records = []
-
     for name in (*COVERAGE_VARIABLES, *PATHWAY_FRACTION_VARIABLES):
         if name not in posterior:
             continue
 
         values = flatten_posterior_samples(posterior[name]).reshape(-1)
         summary = summarize_scalar_samples(values)
-
         records.append(
             {
+                "check_type": "bounded_variable",
                 "variable": name,
                 "minimum": float(np.min(values)),
                 "maximum": float(np.max(values)),
@@ -240,7 +312,6 @@ def build_physical_summary(posterior):
                 "fraction_above_one": float(np.mean(values > 1.0 + 1e-10)),
             }
         )
-
     return pd.DataFrame(records)
 
 
@@ -253,12 +324,11 @@ def build_balance_summary(posterior):
             + flatten_posterior_samples(posterior["theta_OH_Pd"])
             + flatten_posterior_samples(posterior["theta_empty_Pd"])
         )
-
         error = balance - 1.0
-
         records.append(
             {
-                "balance": "Pd",
+                "check_type": "balance",
+                "variable": "Pd_site_balance",
                 "max_abs_error": float(np.max(np.abs(error))),
                 "q999_abs_error": float(np.quantile(np.abs(error), 0.999)),
             }
@@ -269,29 +339,35 @@ def build_balance_summary(posterior):
             flatten_posterior_samples(posterior["theta_OH_Ag"])
             + flatten_posterior_samples(posterior["theta_empty_Ag"])
         )
-
         error = balance - 1.0
-
         records.append(
             {
-                "balance": "Ag",
+                "check_type": "balance",
+                "variable": "Ag_site_balance",
                 "max_abs_error": float(np.max(np.abs(error))),
                 "q999_abs_error": float(np.quantile(np.abs(error), 0.999)),
             }
         )
 
     fraction_names = [name for name in PATHWAY_FRACTION_VARIABLES if name in posterior]
-
     if fraction_names:
         total = sum(flatten_posterior_samples(posterior[name]) for name in fraction_names)
         error = total - 1.0
-
         records.append(
             {
-                "balance": "pathway_fraction_sum",
+                "check_type": "balance",
+                "variable": "pathway_fraction_sum",
                 "max_abs_error": float(np.max(np.abs(error))),
                 "q999_abs_error": float(np.quantile(np.abs(error), 0.999)),
             }
         )
 
     return pd.DataFrame(records)
+
+
+def build_physical_checks(posterior):
+    frames = [build_physical_summary(posterior), build_balance_summary(posterior)]
+    frames = [frame for frame in frames if not frame.empty]
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True, sort=False)

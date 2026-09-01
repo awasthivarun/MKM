@@ -16,7 +16,7 @@ class LOOModelComparison:
     difference_summary: pd.DataFrame
 
 
-def compute_loo_results(inference_data_by_model, var_name="ln_rate_observed"):
+def compute_loo_results(inference_data_by_model, var_name="rate_observed"):
     results = {}
 
     for model_name, inference_data in inference_data_by_model.items():
@@ -89,7 +89,7 @@ def summarize_pointwise_elpd_differences(pointwise_differences):
     return pd.DataFrame(records)
 
 
-def build_loo_model_comparison(inference_data_by_model, observations, var_name="ln_rate_observed"):
+def build_loo_model_comparison(inference_data_by_model, observations, var_name="rate_observed"):
     model_names = list(inference_data_by_model)
     loo_results = compute_loo_results(inference_data_by_model, var_name=var_name)
 

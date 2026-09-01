@@ -56,7 +56,7 @@ def test_compute_loo_reff_ignores_nonfinite_model_point_deterministics():
                     ]
                 ),
             ),
-            "sigma_ln_rate_material": (
+            "sigma_rate_abs": (
                 ("chain", "draw", "material"),
                 np.full((2, 4, 1), 0.4),
             ),
@@ -144,7 +144,7 @@ def test_compute_loo_reff_supports_datatree_posterior():
                     ]
                 ),
             ),
-            "sigma_ln_rate_material": (
+            "sigma_rate_abs": (
                 ("chain", "draw", "material"),
                 np.full((2, 4, 1), 0.4),
             ),

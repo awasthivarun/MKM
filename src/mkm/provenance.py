@@ -55,38 +55,54 @@ def git_commit(root: str | Path) -> str | None:
 
 def package_versions(packages=DEFAULT_VERSION_PACKAGES):
     versions = {}
-
     for package in packages:
         try:
             versions[package] = version(package)
         except PackageNotFoundError:
             versions[package] = None
-
     return versions
 
 
 def build_fit_metadata(
     *,
     root: str | Path,
-    material: str,
+    fit_scope: str,
+    materials,
     model_name: str,
-    likelihood_name: str,
+    error_structure: str,
     data_path: str | Path,
     model_config_path: str | Path,
     sampler: dict,
+    parameterization: str | None = None,
+    prior_material: str | None = None,
+    sampling_health: dict | None = None,
 ):
     root = Path(root)
     data_path = Path(data_path)
     model_config_path = Path(model_config_path)
+    materials = tuple(materials)
+
+    if fit_scope not in {"individual", "all_materials"}:
+        raise ValueError("fit_scope must be 'individual' or 'all_materials'.")
+    if not materials:
+        raise ValueError("At least one material is required for fit metadata.")
+    if fit_scope == "individual" and len(materials) != 1:
+        raise ValueError("Individual fit metadata must contain exactly one material.")
+    if fit_scope == "all_materials" and parameterization is None:
+        raise ValueError("All-material fit metadata require a parameterization.")
 
     return {
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "git_commit": git_commit(root),
         "python": platform.python_version(),
         "platform": platform.platform(),
-        "material": material,
+        "fit_scope": fit_scope,
+        "materials": list(materials),
         "model": model_name,
-        "likelihood": likelihood_name,
+        "likelihood": "rate_normal",
+        "error_structure": error_structure,
+        "parameterization": parameterization,
+        "prior_material": prior_material,
         "inputs": {
             "data_path": str(data_path.relative_to(root)),
             "data_sha256": sha256_file(data_path),
@@ -94,8 +110,22 @@ def build_fit_metadata(
             "model_config_sha256": sha256_file(model_config_path),
         },
         "sampler": dict(sampler),
+        "sampling_health": dict(sampling_health or {}),
         "package_versions": package_versions(),
     }
+
+
+def read_run_metadata(path: str | Path):
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"Run metadata not found: {path}")
+
+    with open(path, "r") as file:
+        metadata = yaml.safe_load(file)
+
+    if not isinstance(metadata, dict):
+        raise ValueError(f"Run metadata must contain a mapping: {path}")
+    return metadata
 
 
 def write_run_metadata(metadata: dict, output_path: str | Path):

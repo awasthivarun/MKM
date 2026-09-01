@@ -1,38 +1,9 @@
-from dataclasses import dataclass
-
+import arviz as az
 import arviz_stats as azs
 import numpy as np
-import pandas as pd
 import xarray as xr
 
-from mkm.postprocessing.diagnostics import NOISE_VARIABLES
-
-
-DIAGNOSTIC_NUISANCE_VARIABLES = (*NOISE_VARIABLES, "z_ln_rate_setup")
-
-
-@dataclass(frozen=True)
-class SamplingDiagnostics:
-    parameter_summary: pd.DataFrame
-    run_summary: pd.DataFrame
-    bfmi_by_chain: pd.DataFrame
-
-
-def sampling_parameter_names(posterior, parameter_specs):
-    """Return scalar parameters suitable for the standard sampler plots."""
-    names = list(parameter_specs)
-
-    for name in NOISE_VARIABLES:
-        if name not in posterior:
-            continue
-
-        values = posterior[name].squeeze(drop=True)
-        extra_dims = set(values.dims) - {"chain", "draw"}
-
-        if not extra_dims:
-            names.append(name)
-
-    return names
+from mkm.postprocessing.diagnostics import ERROR_VARIABLES
 
 
 def _component_label(values, dim, index):
@@ -41,58 +12,55 @@ def _component_label(values, dim, index):
     return str(index)
 
 
-def _expand_vector_nuisance_variables(posterior, existing_names):
-    """Expand vector nuisance variables into scalar components for diagnostics."""
+def _expand_variable(values, name):
+    values = values.squeeze(drop=True)
+    extra_dims = tuple(dim for dim in values.dims if dim not in {"chain", "draw"})
+    if not extra_dims:
+        return {name: values}
+
     variables = {}
-    existing_names = set(existing_names)
-
-    for name in DIAGNOSTIC_NUISANCE_VARIABLES:
-        if name not in posterior or name in existing_names:
-            continue
-
-        values = posterior[name].squeeze(drop=True)
-        extra_dims = tuple(dim for dim in values.dims if dim not in {"chain", "draw"})
-
-        if not extra_dims:
-            variables[name] = values
-            continue
-
-        shape = tuple(values.sizes[dim] for dim in extra_dims)
-        for index in np.ndindex(shape):
-            indexers = dict(zip(extra_dims, index, strict=True))
-            labels = [
-                f"{dim}={_component_label(values, dim, dim_index)}"
-                for dim, dim_index in zip(extra_dims, index, strict=True)
-            ]
-            component_name = f"{name}[{','.join(labels)}]"
-            variables[component_name] = values.isel(indexers, drop=True)
-
+    shape = tuple(values.sizes[dim] for dim in extra_dims)
+    for index in np.ndindex(shape):
+        indexers = dict(zip(extra_dims, index, strict=True))
+        labels = [
+            f"{dim}={_component_label(values, dim, dim_index)}"
+            for dim, dim_index in zip(extra_dims, index, strict=True)
+        ]
+        variables[f"{name}[{','.join(labels)}]"] = values.isel(indexers, drop=True)
     return variables
 
 
-def build_sampling_datatree(inference_data, parameter_names, include_vector_noise=False):
+def sampling_parameter_names(posterior, parameter_specs, exclude=ERROR_VARIABLES):
+    """Return configured scalar variable names, excluding pair-plot nuisances by default."""
+    excluded = set(exclude)
+    names = []
+    for name in parameter_specs:
+        if name in excluded:
+            continue
+        if name not in posterior:
+            raise ValueError(f"Posterior is missing sampling parameter '{name}'.")
+
+        values = posterior[name].squeeze(drop=True)
+        extra_dims = set(values.dims) - {"chain", "draw"}
+        if extra_dims:
+            raise ValueError(
+                f"Pair-plot parameter '{name}' is not scalar; remaining dimensions: "
+                f"{sorted(extra_dims)}."
+            )
+        names.append(name)
+    return tuple(names)
+
+
+def build_sampling_datatree(inference_data, parameter_names):
     posterior = inference_data.posterior
     variables = {}
 
     for name in parameter_names:
         if name not in posterior:
             raise ValueError(f"Posterior is missing sampling parameter '{name}'.")
-
-        values = posterior[name].squeeze(drop=True)
-        extra_dims = set(values.dims) - {"chain", "draw"}
-
-        if extra_dims:
-            raise ValueError(
-                f"Sampling parameter '{name}' is not scalar; remaining dimensions: {sorted(extra_dims)}"
-            )
-
-        variables[name] = values
-
-    if include_vector_noise:
-        variables.update(_expand_vector_nuisance_variables(posterior, variables))
+        variables.update(_expand_variable(posterior[name], name))
 
     groups = {"/posterior": xr.Dataset(variables)}
-
     if hasattr(inference_data, "sample_stats"):
         sample_stats = inference_data.sample_stats
         if not isinstance(sample_stats, xr.Dataset):
@@ -110,55 +78,55 @@ def build_sampling_datatree(inference_data, parameter_names, include_vector_nois
             for source, target in aliases.items()
             if source in sample_stats and target not in sample_stats
         }
-
         if rename:
             sample_stats = sample_stats.rename(rename)
-
         groups["/sample_stats"] = sample_stats
 
     return xr.DataTree.from_dict(groups)
 
 
-def build_sampling_diagnostics(inference_data, parameter_names):
-    data = build_sampling_datatree(inference_data, parameter_names, include_vector_noise=True)
-    diagnostic_names = list(data["posterior"].to_dataset().data_vars)
+def build_sampling_health(inference_data, parameter_names=None):
+    """Return run-level sampler health for metadata and console reporting."""
+    posterior = inference_data.posterior
+    if parameter_names is None:
+        parameter_names = tuple(posterior.data_vars)
 
-    parameter_summary = azs.summary(
-        data, var_names=diagnostic_names, group="posterior", kind="diagnostics", fmt="wide", round_to="none"
-    )
-    parameter_summary = parameter_summary.reset_index()
-    parameter_summary = parameter_summary.rename(columns={parameter_summary.columns[0]: "parameter"})
-
-    has_errors, diagnostics = azs.diagnose(
-        data, var_names=diagnostic_names, show_diagnostics=False, return_diagnostics=True
-    )
-
-    bfmi = np.asarray(diagnostics["bfmi"]["bfmi_values"], dtype=float).reshape(-1)
-    bfmi_by_chain = pd.DataFrame({"chain": np.arange(len(bfmi), dtype=int), "bfmi": bfmi})
-
-    sample_stats = data["sample_stats"].to_dataset()
-    reached_max = np.asarray(sample_stats["reached_max_treedepth"], dtype=bool)
-    n_max_treedepth = int(np.sum(reached_max))
-    fraction_max_treedepth = float(np.mean(reached_max))
-
-    run_summary = pd.DataFrame(
-        [
-            {
-                "has_diagnostic_errors": bool(has_errors),
-                "n_divergent": int(diagnostics["divergent"]["n_divergent"]),
-                "fraction_divergent": float(diagnostics["divergent"]["pct"]) / 100.0,
-                "n_max_treedepth": n_max_treedepth,
-                "fraction_max_treedepth": fraction_max_treedepth,
-                "min_bfmi": float(np.min(bfmi)),
-                "max_rhat": float(parameter_summary["r_hat"].max()),
-                "min_ess_bulk": float(parameter_summary["ess_bulk"].min()),
-                "min_ess_tail": float(parameter_summary["ess_tail"].min()),
-            }
-        ]
+    diagnostic = azs.summary(
+        inference_data,
+        var_names=list(parameter_names),
+        kind="diagnostics",
+        round_to="none",
     )
 
-    return SamplingDiagnostics(
-        parameter_summary=parameter_summary,
-        run_summary=run_summary,
-        bfmi_by_chain=bfmi_by_chain,
-    )
+    sample_stats = getattr(inference_data, "sample_stats", None)
+    n_divergent = 0
+    n_max_treedepth = 0
+    fraction_max_treedepth = np.nan
+
+    if sample_stats is not None:
+        if "diverging" in sample_stats:
+            n_divergent = int(np.asarray(sample_stats["diverging"], dtype=bool).sum())
+        reached_name = None
+        for candidate in ("reached_max_treedepth", "maxdepth_reached"):
+            if candidate in sample_stats:
+                reached_name = candidate
+                break
+        if reached_name is not None:
+            reached = np.asarray(sample_stats[reached_name], dtype=bool)
+            n_max_treedepth = int(reached.sum())
+            fraction_max_treedepth = float(reached.mean())
+
+    bfmi = np.asarray(az.bfmi(inference_data), dtype=float).reshape(-1)
+    return {
+        "n_divergent": n_divergent,
+        "n_max_treedepth": n_max_treedepth,
+        "fraction_max_treedepth": fraction_max_treedepth,
+        "min_bfmi": float(np.nanmin(bfmi)) if bfmi.size else np.nan,
+        "max_rhat": float(diagnostic["r_hat"].max()) if "r_hat" in diagnostic else np.nan,
+        "min_ess_bulk": (
+            float(diagnostic["ess_bulk"].min()) if "ess_bulk" in diagnostic else np.nan
+        ),
+        "min_ess_tail": (
+            float(diagnostic["ess_tail"].min()) if "ess_tail" in diagnostic else np.nan
+        ),
+    }

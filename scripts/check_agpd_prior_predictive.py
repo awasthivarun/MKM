@@ -1,184 +1,94 @@
-from pathlib import Path
+"""Run prior-predictive checks for an individual or all-material AgPd model."""
 
-import pandas as pd
-import yaml
+from argparse import ArgumentParser
 
-from mkm.inference.model import build_pymc_model
 from mkm.inference.prior_predictive import (
     sample_prior_predictive,
-    summarize_prior_linear_observable,
     summarize_prior_predictive,
 )
-from mkm.observable_maps import (
-    build_adjacent_log_order_map,
-    build_alpha_map,
-    build_log_slope_order_map,
+from mkm.models.agpd_basic import available_agpd_models
+from mkm.project_paths import ProjectPaths
+from mkm.workflows.agpd_basic import build_agpd_model_data, load_agpd_model_config
+from mkm.workflows.agpd_fit import (
+    build_agpd_fit_model,
+    fit_materials,
+    resolve_agpd_fit_specification,
 )
-from mkm.model_data import build_model_data
-from mkm.model_inputs import build_model_input_arrays
-from mkm.models.agpd_basic import build_agpd_mechanism
 
 
-ROOT = Path(__file__).resolve().parents[1]
-
-DATA_PATH = ROOT / "data" / "processed" / "AgPd_COOx_basic" / "analysis" / "AgPd_COOx_basic_selected.parquet"
-CONFIG_PATH = ROOT / "config" / "models" / "agpd_basic.yaml"
-OUTPUT_ROOT = ROOT / "results" / "AgPd_COOx_basic" / "prior_predictive"
-PREPROCESSING_CONFIG_PATH = ROOT / "config" / "preprocessing" / "agpd_basic.yaml"
-
-MATERIAL = "Ag10Pd90"
-MODELS = ["BF", "BF_LH", "CO_BF_ER_LH"]
-
-DRAWS = 2000
-RANDOM_SEED = 20260820
+def parse_args():
+    parser = ArgumentParser()
+    parser.add_argument("model", choices=available_agpd_models())
+    parser.add_argument("--material", default="Ag10Pd90")
+    parser.add_argument("--all-materials", action="store_true")
+    parser.add_argument("--parameterization", default="shared")
+    parser.add_argument(
+        "--error-structure",
+        choices=("shared", "material"),
+        default="material",
+    )
+    parser.add_argument("--prior-material", default="Ag10Pd90")
+    parser.add_argument("--draws", type=int, default=1000)
+    parser.add_argument("--random-seed", type=int, default=20260826)
+    parser.add_argument("--save-draws", action="store_true")
+    return parser.parse_args()
 
 
 def main():
-    with open(CONFIG_PATH, "r") as file:
-        config = yaml.safe_load(file)
-
-    with open(PREPROCESSING_CONFIG_PATH, "r") as file:
-        preprocessing_config = yaml.safe_load(file)
-
-    selected = pd.read_parquet(DATA_PATH)
-    selected = selected.loc[selected["material"] == MATERIAL].copy()
-
-    model_data = build_model_data(
-        selected_replicates=selected,
-        electrolyte_concentration_column="C_KOH_M",
-    )
-    inputs = build_model_input_arrays(model_data)
-
-    alpha_map = build_alpha_map(
-        model_points=model_data.model_points,
-        temperature_K=config["temperature_K"],
+    args = parse_args()
+    paths = ProjectPaths.discover(__file__)
+    config = load_agpd_model_config(paths)
+    specification = resolve_agpd_fit_specification(
+        config,
+        model_name=args.model,
+        all_materials=args.all_materials,
+        material=args.material,
+        parameterization=args.parameterization,
+        error_structure=args.error_structure,
+        prior_material=args.prior_material,
     )
 
-    delta_oh_map = build_log_slope_order_map(
-        model_points=model_data.model_points,
-        varying_column="electrolyte_concentration_M",
-        varying_values=preprocessing_config["KOH_concentrations_M"],
-        group_columns=["material", "CO_mole_fraction"],
+    model_data = build_agpd_model_data(paths, fit_materials(specification, config))
+    fit = build_agpd_fit_model(specification, model_data, config)
+    prior_predictive = sample_prior_predictive(
+        fit.built_model,
+        draws=args.draws,
+        random_seed=args.random_seed,
+    )
+    parameter_names = tuple(variable.name for variable in fit.built_model.model.free_RVs)
+    summary = summarize_prior_predictive(
+        prior_predictive,
+        model_data,
+        parameter_names=parameter_names,
     )
 
-    delta_co_map = build_adjacent_log_order_map(
-        model_points=model_data.model_points,
-        varying_column="CO_mole_fraction",
-        varying_values=preprocessing_config["CO_mole_fractions"],
-        group_columns=["material", "electrolyte_concentration_M"],
-        lower_value_column="lower_CO_mole_fraction",
-        upper_value_column="upper_CO_mole_fraction",
+    output_dir = paths.agpd_prior_predictive_output_dir(
+        fit_scope=specification.fit_scope,
+        model_name=specification.model_name,
+        material=specification.material,
+        parameterization=specification.parameterization,
+        error_structure=specification.error_structure,
     )
-
-    for model_name in MODELS:
-        print(f"\n{MATERIAL}: {model_name}")
-
-        mechanism = build_agpd_mechanism(model_name=model_name, material=MATERIAL, config=config)
-
-        built = build_pymc_model(
-            inputs=inputs,
-            mechanism=mechanism,
-            sigma_prior_median=config["likelihood"]["sigma_prior_median"],
-            sigma_prior_log_sd=config["likelihood"]["sigma_prior_log_sd"],
+    output_dir.mkdir(parents=True, exist_ok=True)
+    summary.parameter_summary.to_csv(
+        output_dir / "prior_parameters.csv",
+        index=False,
+    )
+    summary.model_point_summary.to_parquet(
+        output_dir / "prior_model_points.parquet",
+        index=False,
+    )
+    summary.observation_summary.to_parquet(
+        output_dir / "prior_observations.parquet",
+        index=False,
+    )
+    if args.save_draws:
+        prior_predictive.to_netcdf(
+            output_dir / "prior_predictive.nc",
+            engine="h5netcdf",
         )
 
-        prior = sample_prior_predictive(built_model=built, draws=DRAWS, random_seed=RANDOM_SEED)
-        summary = summarize_prior_predictive(prior_predictive=prior, model_data=model_data)
-        alpha_summary = summarize_prior_linear_observable(prior, alpha_map)
-        delta_oh_summary = summarize_prior_linear_observable(prior, delta_oh_map)
-        delta_co_summary = summarize_prior_linear_observable(prior, delta_co_map)
-
-        output_dir = OUTPUT_ROOT / MATERIAL / model_name
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        summary.parameter_summary.to_csv(output_dir / "parameters.csv", index=False)
-        summary.model_point_summary.to_parquet(output_dir / "model_points.parquet", index=False)
-        summary.observation_summary.to_parquet(output_dir / "observations.parquet", index=False)
-        alpha_summary.to_parquet(output_dir / "alpha.parquet", index=False)
-        delta_oh_summary.to_parquet(output_dir / "delta_OH.parquet", index=False)
-        delta_co_summary.to_parquet(output_dir / "delta_CO.parquet", index=False)
-
-        print(summary.parameter_summary.to_string(index=False))
-        print_model_point_diagnostics(summary.model_point_summary)
-        print_observable_diagnostics("alpha", alpha_summary)
-        print_observable_diagnostics("delta_OH", delta_oh_summary)
-        print_observable_diagnostics("delta_CO", delta_co_summary)
-
-        prior.to_netcdf(output_dir / "prior_predictive.nc", engine="h5netcdf")
-
-
-def print_model_point_diagnostics(model_point_summary):
-    print("\nLatent ln(rate) prior envelope:")
-
-    print(
-        "  median:"
-        f" {model_point_summary['ln_rate_model_q50'].min():.3f}"
-        " to"
-        f" {model_point_summary['ln_rate_model_q50'].max():.3f}"
-    )
-    print(
-        "  95% lower-bound range:"
-        f" {model_point_summary['ln_rate_model_q025'].min():.3f}"
-        " to"
-        f" {model_point_summary['ln_rate_model_q025'].max():.3f}"
-    )
-    print(
-        "  95% upper-bound range:"
-        f" {model_point_summary['ln_rate_model_q975'].min():.3f}"
-        " to"
-        f" {model_point_summary['ln_rate_model_q975'].max():.3f}"
-    )
-
-    coverage_names = ["theta_CO", "theta_OH_Pd", "theta_empty_Pd", "theta_OH_Ag", "theta_empty_Ag"]
-    available_coverages = [name for name in coverage_names if f"{name}_q50" in model_point_summary.columns]
-
-    if available_coverages:
-        print("\nCoverage prior ranges:")
-
-        for name in available_coverages:
-            q025 = model_point_summary[f"{name}_q025"]
-            q50 = model_point_summary[f"{name}_q50"]
-            q975 = model_point_summary[f"{name}_q975"]
-
-            print(
-                f"  {name}:"
-                f" median {q50.min():.3g}"
-                f" to {q50.max():.3g};"
-                f" overall 95% envelope"
-                f" {q025.min():.3g}"
-                f" to {q975.max():.3g}"
-            )
-
-    fraction_names = ["rate_fraction_BF", "rate_fraction_ER", "rate_fraction_LH"]
-    available_fractions = [name for name in fraction_names if f"{name}_q50" in model_point_summary.columns]
-
-    if available_fractions:
-        print("\nPathway-fraction prior ranges:")
-
-        for name in available_fractions:
-            q025 = model_point_summary[f"{name}_q025"]
-            q50 = model_point_summary[f"{name}_q50"]
-            q975 = model_point_summary[f"{name}_q975"]
-
-            print(
-                f"  {name}:"
-                f" median {q50.min():.3g}"
-                f" to {q50.max():.3g};"
-                f" overall 95% envelope"
-                f" {q025.min():.3g}"
-                f" to {q975.max():.3g}"
-            )
-
-
-def print_observable_diagnostics(name, summary):
-
-    print(f"\n{name} prior ranges:")
-    print(
-        f"  median: {summary['q50'].min():.3f} to {summary['q50'].max():.3f}"
-    )
-    print(
-        f"  overall 95% envelope: {summary['q025'].min():.3f} to {summary['q975'].max():.3f}"
-    )
+    print(f"Prior-predictive summaries saved to: {output_dir}")
 
 
 if __name__ == "__main__":

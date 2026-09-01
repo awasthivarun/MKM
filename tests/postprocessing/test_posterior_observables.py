@@ -70,17 +70,6 @@ def test_posterior_linear_observable_preserves_chain_information():
     np.testing.assert_allclose(summary.pooled.loc[0, "hdi95_upper"], 3.0)
 
 
-def test_inference_posterior_diagnostics_remains_compatible():
-    from mkm.inference.posterior_diagnostics import (
-        summarize_posterior_linear_observable as old_import,
-    )
-    from mkm.postprocessing.observables import (
-        summarize_posterior_linear_observable as new_import,
-    )
-
-    assert old_import is new_import
-
-
 def test_pointwise_summary_uses_generic_statistic_columns():
     posterior = xr.Dataset(
         {

@@ -202,7 +202,7 @@ def test_linear_xag_transition_state_drc_uses_effective_pointwise_barriers():
         point_inputs=point_inputs,
         model_points=model_points,
         config=config,
-        composition_model="linear_xAg",
+        parameterization="linear_xAg",
         step_eV=1e-4,
     )
 
@@ -211,5 +211,5 @@ def test_linear_xag_transition_state_drc_uses_effective_pointwise_barriers():
 
     bf = result.summary.loc[result.summary["control"] == "BF"].sort_values("material")
     assert bf["median"].nunique() == 2
-    assert result.draws.attrs["composition_model"] == "linear_xAg"
+    assert result.draws.attrs["parameterization"] == "linear_xAg"
     assert result.draws.attrs["x_reference"] == pytest.approx(0.5)

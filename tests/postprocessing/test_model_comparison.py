@@ -64,9 +64,9 @@ def test_compute_loo_results_uses_canonical_loo_helper(monkeypatch):
     )
 
     inputs = {"A": object(), "B": object()}
-    results = compute_loo_results(inputs, var_name="ln_rate_observed")
+    results = compute_loo_results(inputs, var_name="rate_observed")
 
     assert list(results) == ["A", "B"]
     assert len(calls) == 2
-    assert all(var_name == "ln_rate_observed" for _, var_name, _ in calls)
+    assert all(var_name == "rate_observed" for _, var_name, _ in calls)
     assert all(pointwise is True for _, _, pointwise in calls)

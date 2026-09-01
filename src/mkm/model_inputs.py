@@ -18,14 +18,6 @@ class ModelInputArrays:
 
     observation_model_point_index: np.ndarray
     observation_rate: np.ndarray
-    observation_ln_rate: np.ndarray
-    observation_replicate: np.ndarray
-
-    setup_labels: tuple[str, ...] | None
-    setup_material_index: np.ndarray | None
-    observation_setup_index: np.ndarray | None
-    setup_experiment_index: np.ndarray | None
-    setup_experiment_size: np.ndarray | None
 
 
 @dataclass(frozen=True)
@@ -47,166 +39,7 @@ def _validate_contiguous_ids(data, column):
         raise ValueError(f"'{column}' must be contiguous and aligned with row position.")
 
 
-def _build_setup_arrays(
-    observations,
-    material_to_index,
-    setup_group_columns,
-    setup_zero_sum_columns,
-):
-    if setup_group_columns is None:
-        if setup_zero_sum_columns is not None:
-            raise ValueError("Zero-sum setup grouping requires setup grouping columns.")
-
-        return None, None, None, None, None
-
-    setup_group_columns = list(setup_group_columns)
-
-    if not setup_group_columns:
-        raise ValueError("Setup grouping columns must not be empty.")
-
-    missing = [
-        column
-        for column in setup_group_columns
-        if column not in observations.columns
-    ]
-
-    if missing:
-        raise ValueError(
-            f"Setup grouping columns are missing from observations: {missing}"
-        )
-
-    if "material" not in setup_group_columns:
-        raise ValueError("Setup grouping must include 'material'.")
-
-    if observations[setup_group_columns].isna().any().any():
-        raise ValueError("Setup grouping columns contain missing values.")
-
-    setups = (
-        observations[setup_group_columns]
-        .drop_duplicates()
-        .sort_values(setup_group_columns)
-        .reset_index(drop=True)
-    )
-
-    setups.insert(
-        0,
-        "setup_id",
-        np.arange(len(setups), dtype=np.int64),
-    )
-
-    observation_setups = (
-        observations[["observation_id", *setup_group_columns]]
-        .merge(
-            setups,
-            on=setup_group_columns,
-            how="left",
-            validate="many_to_one",
-            sort=False,
-        )
-        .sort_values("observation_id")
-    )
-
-    observation_setup_index = observation_setups["setup_id"].to_numpy(
-        dtype=np.int64
-    )
-
-    setup_material_index = (
-        setups["material"]
-        .map(material_to_index)
-        .to_numpy(dtype=np.int64)
-    )
-
-    setup_labels = tuple(
-        " | ".join(
-            f"{column}={row[column]}"
-            for column in setup_group_columns
-        )
-        for _, row in setups.iterrows()
-    )
-
-    if setup_zero_sum_columns is None:
-        return (
-            setup_labels,
-            setup_material_index,
-            observation_setup_index,
-            None,
-            None,
-        )
-
-    setup_zero_sum_columns = list(setup_zero_sum_columns)
-
-    if not setup_zero_sum_columns:
-        raise ValueError("Zero-sum setup grouping columns must not be empty.")
-
-    missing = [
-        column
-        for column in setup_zero_sum_columns
-        if column not in setups.columns
-    ]
-
-    if missing:
-        raise ValueError(
-            f"Zero-sum setup grouping columns are missing from setups: {missing}"
-        )
-
-    experiments = (
-        setups[setup_zero_sum_columns]
-        .drop_duplicates()
-        .sort_values(setup_zero_sum_columns)
-        .reset_index(drop=True)
-    )
-
-    experiments.insert(
-        0,
-        "setup_experiment_id",
-        np.arange(len(experiments), dtype=np.int64),
-    )
-
-    setups_with_experiment = (
-        setups.merge(
-            experiments,
-            on=setup_zero_sum_columns,
-            how="left",
-            validate="many_to_one",
-            sort=False,
-        )
-        .sort_values("setup_id")
-        .reset_index(drop=True)
-    )
-
-    setup_experiment_index = setups_with_experiment[
-        "setup_experiment_id"
-    ].to_numpy(dtype=np.int64)
-
-    setup_experiment_size = (
-        setups_with_experiment.groupby(
-            "setup_experiment_id",
-            sort=True,
-        )
-        .size()
-        .reindex(np.arange(len(experiments)))
-        .to_numpy(dtype=np.int64)
-    )
-
-    if np.any(setup_experiment_size < 2):
-        raise ValueError(
-            "Every zero-sum setup experiment must contain at least two setups."
-        )
-
-    return (
-        setup_labels,
-        setup_material_index,
-        observation_setup_index,
-        setup_experiment_index,
-        setup_experiment_size,
-    )
-
-
-def build_model_input_arrays(
-    model_data: ModelDataTables,
-    setup_group_columns=None,
-    setup_zero_sum_columns=None,
-):
+def build_model_input_arrays(model_data: ModelDataTables):
     conditions = model_data.conditions.sort_values("condition_id").reset_index(drop=True)
     model_points = model_data.model_points.sort_values("model_point_id").reset_index(drop=True)
     observations = model_data.observations.sort_values("observation_id").reset_index(drop=True)
@@ -236,21 +69,6 @@ def build_model_input_arrays(
 
     observation_model_point_index = observations["model_point_id"].to_numpy(dtype=np.int64)
     observation_rate = observations["rate_s_inv"].to_numpy(dtype=float)
-    observation_ln_rate = observations["ln_rate"].to_numpy(dtype=float)
-    observation_replicate = observations["replicate"].astype(str).to_numpy()
-
-    (
-        setup_labels,
-        setup_material_index,
-        observation_setup_index,
-        setup_experiment_index,
-        setup_experiment_size,
-    ) = _build_setup_arrays(
-        observations=observations,
-        material_to_index=material_to_index,
-        setup_group_columns=setup_group_columns,
-        setup_zero_sum_columns=setup_zero_sum_columns,
-    )
 
     if not np.all(np.isfinite(condition_ln_electrolyte_concentration)):
         raise ValueError("Log electrolyte concentrations contain non-finite values.")
@@ -267,9 +85,6 @@ def build_model_input_arrays(
     if np.any(observation_rate <= 0):
         raise ValueError("Observed rates must be positive.")
 
-    if not np.all(np.isfinite(observation_ln_rate)):
-        raise ValueError("Observed log rates contain non-finite values.")
-
     if np.any(model_point_condition_index < 0) or np.any(model_point_condition_index >= len(conditions)):
         raise ValueError("Model points contain invalid condition indices.")
 
@@ -285,13 +100,6 @@ def build_model_input_arrays(
         model_point_E_V_SHE=model_point_E_V_SHE,
         observation_model_point_index=observation_model_point_index,
         observation_rate=observation_rate,
-        observation_ln_rate=observation_ln_rate,
-        observation_replicate=observation_replicate,
-        setup_labels=setup_labels,
-        setup_material_index=setup_material_index,
-        observation_setup_index=observation_setup_index,
-        setup_experiment_index=setup_experiment_index,
-        setup_experiment_size=setup_experiment_size,
     )
 
 
@@ -334,14 +142,9 @@ def build_model_point_inputs(inputs: ModelInputArrays):
 
 
 def build_model_coords(inputs: ModelInputArrays):
-    coords = {
+    return {
         "material": list(inputs.materials),
         "condition": np.arange(len(inputs.condition_material_index)),
         "model_point": np.arange(len(inputs.model_point_E_V_SHE)),
-        "observation": np.arange(len(inputs.observation_ln_rate)),
+        "observation": np.arange(len(inputs.observation_rate)),
     }
-
-    if inputs.setup_labels is not None:
-        coords["setup"] = list(inputs.setup_labels)
-
-    return coords

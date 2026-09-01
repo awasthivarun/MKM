@@ -10,7 +10,7 @@ import xarray as xr
 
 from mkm.constants import K_B_EV_K
 from mkm.mechanisms.agpd_basic import build_agpd_point_state
-from mkm.models.agpd_basic import get_agpd_composition_parameterization, get_agpd_model_definition
+from mkm.models.agpd_basic import get_agpd_parameterization, get_agpd_model_definition
 from mkm.postprocessing.diagnostics import summarize_samples
 
 
@@ -271,7 +271,7 @@ def compute_composition_transition_state_drc(
     point_inputs,
     model_points,
     config,
-    composition_model,
+    parameterization,
     step_eV=1e-4,
 ):
     """Compute TS DRCs using the effective transition-state energy at each composition.
@@ -285,7 +285,7 @@ def compute_composition_transition_state_drc(
     energy at every model point. The reported DRC remains the conventional local TS-energy DRC,
     not a sensitivity with respect to the fitted slope.
     """
-    if composition_model == "shared":
+    if parameterization == "shared":
         return compute_transition_state_drc(
             inference_data=inference_data,
             model_name=model_name,
@@ -299,14 +299,14 @@ def compute_composition_transition_state_drc(
     if not np.isfinite(step_eV) or step_eV <= 0:
         raise ValueError("DRC perturbation step must be finite and positive.")
 
-    x_reference, slope_specs = get_agpd_composition_parameterization(
+    x_reference, slope_specs = get_agpd_parameterization(
         config=config,
         model_name=model_name,
-        composition_model=composition_model,
+        parameterization=parameterization,
     )
     if not slope_specs:
         raise ValueError(
-            f"Composition parameterization '{composition_model}' does not define slopes for '{model_name}'."
+            f"Composition parameterization '{parameterization}' does not define slopes for '{model_name}'."
         )
 
     controls = transition_state_controls(model_name)
@@ -369,7 +369,7 @@ def compute_composition_transition_state_drc(
         coords=coords,
         attrs={
             "model_name": model_name,
-            "composition_model": composition_model,
+            "parameterization": parameterization,
             "x_reference": float(x_reference),
             "temperature_K": float(config["temperature_K"]),
             "step_eV": step_eV,
@@ -379,7 +379,7 @@ def compute_composition_transition_state_drc(
 
     summary = _summarize_transition_state_draws(dataset, model_points=model_points)
     checks = _build_transition_state_checks(dataset, step_eV=step_eV)
-    checks.insert(1, "composition_model", composition_model)
+    checks.insert(1, "parameterization", parameterization)
     return TransitionStateDRC(draws=dataset, summary=summary, checks=checks)
 
 

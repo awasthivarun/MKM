@@ -3,12 +3,15 @@ from types import SimpleNamespace
 import numpy as np
 import pymc as pm
 import pytest
+import xarray as xr
 
 from mkm.inference.posterior import (
     add_log_likelihood,
     compute_posterior_deterministics,
+    load_inference_data,
     sample_posterior,
     summarize_sampler_health,
+    write_inference_data,
 )
 
 
@@ -51,7 +54,12 @@ def test_posterior_deterministics_can_be_reconstructed():
         compute_convergence_checks=False,
     )
 
-    posterior = compute_posterior_deterministics(idata, built, var_names=["twice_x"], progressbar=False)
+    posterior = compute_posterior_deterministics(
+        idata,
+        built,
+        var_names=["twice_x"],
+        progressbar=False,
+    )
 
     assert "twice_x" in posterior
     np.testing.assert_allclose(posterior["twice_x"], 2 * posterior["x"])
@@ -101,3 +109,22 @@ def test_sampler_health_reports_divergences():
     health = summarize_sampler_health(idata)
 
     assert health.divergences >= 0
+
+
+def test_inference_data_checkpoint_can_be_loaded_and_atomically_replaced(tmp_path):
+    inference_data = xr.DataTree.from_dict(
+        {
+            "/posterior": xr.Dataset(
+                {"x": (("chain", "draw"), np.array([[1.0, 2.0]]))}
+            )
+        }
+    )
+    posterior_path = tmp_path / "posterior.nc"
+
+    write_inference_data(inference_data, posterior_path)
+    loaded = load_inference_data(posterior_path)
+    write_inference_data(loaded, posterior_path)
+    reloaded = load_inference_data(posterior_path)
+
+    np.testing.assert_allclose(reloaded.posterior["x"], [[1.0, 2.0]])
+    assert not (tmp_path / ".posterior.nc.tmp").exists()

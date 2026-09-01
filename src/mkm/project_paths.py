@@ -4,13 +4,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+FIT_SCOPES = ("individual", "all_materials")
+ERROR_STRUCTURES = ("shared", "material")
+
+
 @dataclass(frozen=True)
 class ProjectPaths:
     root: Path
 
     @classmethod
     def discover(cls, anchor: str | Path) -> "ProjectPaths":
-        """Find the repository root by walking upward to pyproject.toml."""
         path = Path(anchor).resolve()
         start = path if path.is_dir() else path.parent
 
@@ -65,43 +68,126 @@ class ProjectPaths:
         return self.config_dir / "preprocessing" / "agpd_basic.yaml"
 
     @property
+    def agpd_results_root(self) -> Path:
+        return self.results_dir / "AgPd_COOx_basic"
+
+    @property
     def agpd_posterior_root(self) -> Path:
-        return self.results_dir / "AgPd_COOx_basic" / "posterior"
+        return self.agpd_results_root / "posterior"
 
-    def agpd_posterior_output_dir(self, material: str, model_name: str, likelihood_name: str) -> Path:
-        """Return the canonical write location for a posterior fit."""
-        if likelihood_name not in {"iid", "setup_intercept", "mvn"}:
-            raise ValueError(f"Unsupported likelihood '{likelihood_name}'.")
-        return self.agpd_posterior_root / material / likelihood_name / model_name
+    @property
+    def agpd_prior_predictive_root(self) -> Path:
+        return self.agpd_results_root / "prior_predictive"
 
-    def agpd_posterior_dir(
+    @property
+    def agpd_validation_root(self) -> Path:
+        return self.agpd_results_root / "validation"
+
+    @staticmethod
+    def _validate_fit_scope(fit_scope: str):
+        if fit_scope not in FIT_SCOPES:
+            raise ValueError(
+                f"Unknown fit scope '{fit_scope}'. Available scopes: {FIT_SCOPES}."
+            )
+
+    @staticmethod
+    def _validate_error_structure(error_structure: str):
+        if error_structure not in ERROR_STRUCTURES:
+            raise ValueError(
+                f"Unsupported error structure '{error_structure}'. "
+                f"Available structures: {ERROR_STRUCTURES}."
+            )
+
+    def _agpd_fit_relative_dir(
         self,
-        material: str,
-        model_name: str,
-        likelihood_name: str,
         *,
-        require_posterior: bool = True,
-    ) -> Path:
-        """Resolve the canonical posterior directory."""
-        canonical = self.agpd_posterior_output_dir(material, model_name, likelihood_name)
-
-        if require_posterior and not (canonical / "posterior.nc").exists():
-            raise FileNotFoundError(f"Posterior not found: {canonical / 'posterior.nc'}")
-
-        return canonical
-
-
-    def agpd_composition_posterior_output_dir(
-        self,
-        composition_model: str,
+        fit_scope: str,
         model_name: str,
-        likelihood_name: str,
+        material: str | None = None,
+        parameterization: str | None = None,
+        error_structure: str | None = None,
     ) -> Path:
-        if likelihood_name not in {"iid", "setup_intercept", "mvn", "rate_normal"}:
-            raise ValueError(f"Unsupported likelihood '{likelihood_name}'.")
-        return self.agpd_posterior_root / "composition" / composition_model / likelihood_name / model_name
+        self._validate_fit_scope(fit_scope)
 
-    def agpd_model_comparison_dir(self, material: str, likelihood_name: str) -> Path:
-        if likelihood_name not in {"iid", "setup_intercept", "mvn"}:
-            raise ValueError(f"Unsupported likelihood '{likelihood_name}'.")
-        return self.agpd_posterior_root / material / likelihood_name / "model_comparison"
+        if fit_scope == "individual":
+            if material is None:
+                raise ValueError("Individual fit paths require a material.")
+            return Path("individual") / material / model_name
+
+        if parameterization is None or error_structure is None:
+            raise ValueError(
+                "All-material fit paths require parameterization and error structure."
+            )
+        self._validate_error_structure(error_structure)
+        return Path("all_materials") / parameterization / error_structure / model_name
+
+    def agpd_posterior_output_dir(self, **fit_specification) -> Path:
+        return self.agpd_posterior_root / self._agpd_fit_relative_dir(**fit_specification)
+
+    def agpd_posterior_dir(self, *, require_posterior=True, **fit_specification) -> Path:
+        directory = self.agpd_posterior_output_dir(**fit_specification)
+        posterior_path = directory / "posterior.nc"
+
+        if require_posterior and not posterior_path.exists():
+            raise FileNotFoundError(f"Posterior not found: {posterior_path}")
+
+        return directory
+
+    def agpd_prior_predictive_output_dir(self, **fit_specification) -> Path:
+        return self.agpd_prior_predictive_root / self._agpd_fit_relative_dir(**fit_specification)
+
+    def agpd_model_comparison_dir(
+        self,
+        *,
+        fit_scope: str,
+        comparison_name: str,
+        material: str | None = None,
+    ) -> Path:
+        self._validate_fit_scope(fit_scope)
+        comparison_name = str(comparison_name).strip()
+        if not comparison_name:
+            raise ValueError("Model comparisons require a non-empty comparison name.")
+
+        if fit_scope == "individual":
+            if material is None:
+                raise ValueError("Individual model-comparison paths require a material.")
+            base = self.agpd_posterior_root / "individual" / material
+        else:
+            base = self.agpd_posterior_root / "all_materials"
+
+        return base / "model_comparison" / comparison_name
+
+    def agpd_validation_output_dir(
+        self,
+        *,
+        scheme: str,
+        model_name: str,
+        parameterization: str,
+        error_structure: str,
+        material: str,
+        koh_M: float | None = None,
+        co_mole_fraction: float | None = None,
+    ) -> Path:
+        if scheme not in {"loco", "lomo"}:
+            raise ValueError("Validation scheme must be 'loco' or 'lomo'.")
+        self._validate_error_structure(error_structure)
+
+        base = (
+            self.agpd_validation_root
+            / "all_materials"
+            / parameterization
+            / error_structure
+            / model_name
+            / scheme
+            / material
+        )
+
+        if scheme == "lomo":
+            if koh_M is not None or co_mole_fraction is not None:
+                raise ValueError("LOMO paths do not use KOH or CO condition labels.")
+            return base
+
+        if koh_M is None or co_mole_fraction is None:
+            raise ValueError("LOCO paths require KOH and CO condition labels.")
+
+        return base / f"KOH_{koh_M:g}_CO_{co_mole_fraction:g}"

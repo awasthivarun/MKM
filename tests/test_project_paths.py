@@ -6,87 +6,106 @@ from mkm.project_paths import ProjectPaths
 
 
 def test_discover_finds_repository_root(tmp_path):
-    (tmp_path / "pyproject.toml").write_text("[project]\nname = \"test\"\nversion = \"0.0.0\"\n")
-    script_dir = tmp_path / "scripts"
-    script_dir.mkdir()
-    script = script_dir / "run.py"
-    script.touch()
+    root = tmp_path / "repo"
+    nested = root / "a" / "b"
+    nested.mkdir(parents=True)
+    (root / "pyproject.toml").write_text("[project]\nname='x'\n")
 
-    assert ProjectPaths.discover(script).root == tmp_path
+    assert ProjectPaths.discover(nested).root == root
 
 
-def test_agpd_paths_are_centralized_under_root(tmp_path):
+def test_individual_posterior_path_is_compact_and_unambiguous(tmp_path):
     paths = ProjectPaths(root=tmp_path)
-
-    assert paths.agpd_analysis_dir == tmp_path / "data" / "processed" / "AgPd_COOx_basic" / "analysis"
-    assert paths.agpd_selected_path.name == "AgPd_COOx_basic_selected.parquet"
-    assert paths.agpd_model_config_path == tmp_path / "config" / "models" / "agpd_basic.yaml"
-    assert paths.agpd_preprocessing_config_path == tmp_path / "config" / "preprocessing" / "agpd_basic.yaml"
-    assert paths.agpd_posterior_root == tmp_path / "results" / "AgPd_COOx_basic" / "posterior"
-
-
-def test_posterior_output_path_always_uses_canonical_layout(tmp_path):
-    paths = ProjectPaths(root=tmp_path)
-
-    result = paths.agpd_posterior_output_dir("Ag10Pd90", "BF_LH", "setup_intercept")
-
+    result = paths.agpd_posterior_output_dir(
+        fit_scope="individual",
+        material="Ag10Pd90",
+        model_name="BF_LH",
+        parameterization=None,
+        error_structure="material",
+    )
     assert result == (
-        tmp_path / "results" / "AgPd_COOx_basic" / "posterior"
-        / "Ag10Pd90" / "setup_intercept" / "BF_LH"
+        tmp_path
+        / "results"
+        / "AgPd_COOx_basic"
+        / "posterior"
+        / "individual"
+        / "Ag10Pd90"
+        / "BF_LH"
     )
 
 
-def test_iid_reader_does_not_fallback_to_legacy_layout(tmp_path):
+def test_all_material_path_labels_parameterization_and_error_structure(tmp_path):
     paths = ProjectPaths(root=tmp_path)
-    legacy = tmp_path / "results" / "AgPd_COOx_basic" / "posterior" / "Ag10Pd90" / "BF"
-    legacy.mkdir(parents=True)
-    (legacy / "posterior.nc").touch()
-
-    with pytest.raises(FileNotFoundError, match="Posterior not found"):
-        paths.agpd_posterior_dir("Ag10Pd90", "BF", "iid")
-
-    canonical = paths.agpd_posterior_dir("Ag10Pd90", "BF", "iid", require_posterior=False)
-    assert canonical == paths.agpd_posterior_output_dir("Ag10Pd90", "BF", "iid")
-
-
-def test_missing_posterior_is_reported(tmp_path):
-    paths = ProjectPaths(root=tmp_path)
-
-    with pytest.raises(FileNotFoundError, match="Posterior not found"):
-        paths.agpd_posterior_dir("Ag10Pd90", "BF", "setup_intercept")
-
-
-def test_invalid_likelihood_is_rejected(tmp_path):
-    paths = ProjectPaths(root=tmp_path)
-
-    with pytest.raises(ValueError, match="Unsupported likelihood"):
-        paths.agpd_posterior_output_dir("Ag10Pd90", "BF", "unknown")
-
-def test_mvn_composition_path_uses_canonical_layout(tmp_path):
-    paths = ProjectPaths(root=tmp_path)
-
-    result = paths.agpd_composition_posterior_output_dir(
-        "linear_xAg",
-        "CO_BF_ER_LH",
-        "mvn",
+    result = paths.agpd_posterior_output_dir(
+        fit_scope="all_materials",
+        model_name="CO_BF_ER_LH",
+        parameterization="linear_beta_er",
+        error_structure="shared",
     )
-
     assert result == (
-        tmp_path / "results" / "AgPd_COOx_basic" / "posterior"
-        / "composition" / "linear_xAg" / "mvn" / "CO_BF_ER_LH"
+        tmp_path
+        / "results"
+        / "AgPd_COOx_basic"
+        / "posterior"
+        / "all_materials"
+        / "linear_beta_er"
+        / "shared"
+        / "CO_BF_ER_LH"
     )
 
-def test_rate_normal_composition_path_uses_canonical_layout(tmp_path):
+
+def test_posterior_reader_requires_single_posterior_file(tmp_path):
     paths = ProjectPaths(root=tmp_path)
+    kwargs = {
+        "fit_scope": "individual",
+        "material": "Ag10Pd90",
+        "model_name": "BF",
+        "parameterization": None,
+        "error_structure": "material",
+    }
+    with pytest.raises(FileNotFoundError, match="posterior.nc"):
+        paths.agpd_posterior_dir(**kwargs)
 
-    result = paths.agpd_composition_posterior_output_dir(
-        "linear_xAg",
-        "CO_BF_ER_LH",
-        "rate_normal",
+    directory = paths.agpd_posterior_output_dir(**kwargs)
+    directory.mkdir(parents=True)
+    (directory / "posterior.nc").touch()
+    assert paths.agpd_posterior_dir(**kwargs) == directory
+
+
+def test_validation_paths_distinguish_loco_and_lomo(tmp_path):
+    paths = ProjectPaths(root=tmp_path)
+    lomo = paths.agpd_validation_output_dir(
+        scheme="lomo",
+        model_name="CO_BF_ER_LH",
+        parameterization="shared",
+        error_structure="shared",
+        material="Pd100",
+    )
+    loco = paths.agpd_validation_output_dir(
+        scheme="loco",
+        model_name="CO_BF_ER_LH",
+        parameterization="linear_xAg",
+        error_structure="material",
+        material="Ag50Pd50",
+        koh_M=0.5,
+        co_mole_fraction=0.1,
     )
 
-    assert result == (
-        tmp_path / "results" / "AgPd_COOx_basic" / "posterior"
-        / "composition" / "linear_xAg" / "rate_normal" / "CO_BF_ER_LH"
-    )
+    assert lomo.name == "Pd100"
+    assert loco.name == "KOH_0.5_CO_0.1"
 
+
+def test_invalid_scope_or_error_structure_is_rejected(tmp_path):
+    paths = ProjectPaths(root=tmp_path)
+    with pytest.raises(ValueError, match="Unknown fit scope"):
+        paths.agpd_posterior_output_dir(
+            fit_scope="unknown",
+            model_name="BF",
+        )
+    with pytest.raises(ValueError, match="Unsupported error structure"):
+        paths.agpd_posterior_output_dir(
+            fit_scope="all_materials",
+            model_name="BF_LH",
+            parameterization="shared",
+            error_structure="unknown",
+        )

@@ -12,7 +12,7 @@ class LOOModelDiagnostics:
     pointwise: pd.DataFrame
 
 
-_LOO_REFF_EXCLUDED_DIMS = frozenset({"model_point", "observation", "setup"})
+_LOO_REFF_EXCLUDED_DIMS = frozenset({"model_point", "observation"})
 
 
 def _finite_reff_variable_names(posterior):
@@ -24,8 +24,8 @@ def _finite_reff_variable_names(posterior):
         if not {"chain", "draw"}.issubset(dims):
             continue
 
-        # Exclude large pointwise/conditional deterministics. In composition fits these can
-        # legitimately contain -inf for an impossible pathway, e.g. BF on Pd100.
+        # Exclude large pointwise deterministics. These can legitimately contain -inf
+        # for an impossible pathway, for example BF on Pd100.
         if dims & _LOO_REFF_EXCLUDED_DIMS:
             continue
 
@@ -87,7 +87,7 @@ def compute_loo_reff(inference_data):
 
 def compute_loo_result(
     inference_data,
-    var_name="ln_rate_observed",
+    var_name="rate_observed",
     pointwise=True,
 ):
     """Compute PSIS-LOO using the repository's finite-posterior reff convention."""
@@ -107,7 +107,7 @@ def compute_loo_diagnostics(
     inference_data,
     observations,
     model_name=None,
-    var_name="ln_rate_observed",
+    var_name="rate_observed",
 ):
     loo_result, reff = compute_loo_result(
         inference_data=inference_data,

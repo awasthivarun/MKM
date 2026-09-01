@@ -36,38 +36,6 @@ def validate_agpd_material(config, material: str):
         )
 
 
-def load_agpd_selected_material(paths: ProjectPaths, material: str):
-    selected = pd.read_parquet(paths.agpd_selected_path)
-    selected = selected.loc[selected["material"] == material].copy()
-
-    if selected.empty:
-        raise ValueError(f"No selected AgPd observations found for material '{material}'.")
-
-    return selected
-
-
-def build_agpd_model_data(paths: ProjectPaths, material: str):
-    selected = load_agpd_selected_material(paths, material)
-    return build_model_data(
-        selected_replicates=selected,
-        electrolyte_concentration_column="C_KOH_M",
-    )
-
-
-def build_agpd_inputs(model_data, config, likelihood_name: str):
-    if likelihood_name == "setup_intercept":
-        setup_config = config["likelihood"]["setup_intercept"]
-        return build_model_input_arrays(
-            model_data,
-            setup_group_columns=setup_config["group_columns"],
-            setup_zero_sum_columns=setup_config["zero_sum_within"],
-        )
-
-    if likelihood_name in {"iid", "mvn", "rate_normal"}:
-        return build_model_input_arrays(model_data)
-
-    raise ValueError(f"Unsupported likelihood '{likelihood_name}'.")
-
 def load_agpd_selected_materials(paths: ProjectPaths, materials):
     materials = tuple(materials)
     if not materials:
@@ -82,9 +50,20 @@ def load_agpd_selected_materials(paths: ProjectPaths, materials):
     return selected.loc[selected["material"].isin(materials)].copy()
 
 
-def build_agpd_composition_model_data(paths: ProjectPaths, materials):
+def load_agpd_selected_material(paths: ProjectPaths, material: str):
+    return load_agpd_selected_materials(paths, (material,))
+
+
+def build_agpd_model_data(paths: ProjectPaths, materials):
+    if isinstance(materials, str):
+        materials = (materials,)
+
     selected = load_agpd_selected_materials(paths, materials)
     return build_model_data(
         selected_replicates=selected,
         electrolyte_concentration_column="C_KOH_M",
     )
+
+
+def build_agpd_inputs(model_data):
+    return build_model_input_arrays(model_data)

@@ -7,9 +7,10 @@ import arviz_stats as azs
 import xarray as xr
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.stats import norm, truncnorm
+from scipy.stats import gaussian_kde, lognorm, norm, truncnorm
 
 from mkm.postprocessing.sampling import build_sampling_datatree
+
 
 def _prior_pdf(x, spec):
     distribution = spec["distribution"]
@@ -23,110 +24,122 @@ def _prior_pdf(x, spec):
 
     if distribution == "truncated_normal":
         mu, sigma = float(spec["mu"]), float(spec["sigma"])
-        lower, upper = float(spec.get("lower", -np.inf)), float(spec.get("upper", np.inf))
+        lower = float(spec.get("lower", -np.inf))
+        upper = float(spec.get("upper", np.inf))
         a, b = (lower - mu) / sigma, (upper - mu) / sigma
         return truncnorm.pdf(x, a=a, b=b, loc=mu, scale=sigma)
+
+    if distribution == "lognormal":
+        return lognorm.pdf(
+            x,
+            s=float(spec["log_sd"]),
+            scale=float(spec["median"]),
+        )
 
     raise ValueError(f"Unsupported prior distribution '{distribution}'.")
 
 
+def _posterior_components(posterior, parameter_specs):
+    components = []
+
+    for name, spec in parameter_specs.items():
+        if name not in posterior:
+            raise ValueError(f"Posterior is missing configured parameter '{name}'.")
+
+        data = posterior[name].squeeze(drop=True)
+        extra_dims = tuple(dim for dim in data.dims if dim not in {"chain", "draw"})
+        if not extra_dims:
+            components.append((name, np.asarray(data, dtype=float).reshape(-1), spec))
+            continue
+
+        shape = tuple(data.sizes[dim] for dim in extra_dims)
+        for index in np.ndindex(shape):
+            indexers = dict(zip(extra_dims, index, strict=True))
+            labels = []
+            for dim, dim_index in indexers.items():
+                if dim in data.coords and data.coords[dim].ndim == 1:
+                    value = data.coords[dim].values[dim_index]
+                else:
+                    value = dim_index
+                labels.append(f"{dim}={value}")
+            label = f"{name}[{','.join(labels)}]"
+            values = np.asarray(data.isel(indexers, drop=True), dtype=float).reshape(-1)
+            components.append((label, values, spec))
+
+    return components
+
+
 def plot_parameter_posteriors(posterior, parameter_specs, output_path: str | Path):
-    names = list(parameter_specs)
-    if not names:
+    """Plot physical and error parameters together, using coordinate labels for vectors."""
+    components = _posterior_components(posterior, parameter_specs)
+    if not components:
         raise ValueError("No parameter specifications were provided.")
 
-    missing = [name for name in names if name not in posterior]
-    if missing:
-        raise ValueError(f"Posterior is missing configured parameters: {missing}")
-
-    ncols = min(3, len(names))
-    nrows = math.ceil(len(names) / ncols)
-
-    # Modern ArviZ plotting operates on a DataTree with named groups.
-    data = xr.DataTree.from_dict({"/posterior": posterior})
-
-    pc = azp.plot_dist(
-        data,
-        var_names=names,
-        group="posterior",
-        kind="kde",
-        point_estimate="mean",
-        ci_kind="hdi",
-        ci_prob=0.95,
-        backend="matplotlib",
-        col_wrap=ncols,
-        figure_kwargs={"figsize": (4.2 * ncols, 3.1 * nrows)},
-        visuals={
-            "remove_axis": True,
-            "face": {"alpha": 0.12},
-            "point_estimate_text": False,
-        },
+    ncols = min(3, len(components))
+    nrows = math.ceil(len(components) / ncols)
+    fig, axes = plt.subplots(
+        nrows,
+        ncols,
+        figsize=(4.2 * ncols, 3.1 * nrows),
+        squeeze=False,
     )
 
-    for name in names:
-        ax = pc.get_target(name, {})
-        values = np.asarray(posterior[name], dtype=float).reshape(-1)
+    for ax, (label, values, spec) in zip(axes.flat, components):
+        if not np.all(np.isfinite(values)):
+            raise ValueError(f"Posterior parameter '{label}' contains non-finite values.")
+
+        lower, upper = np.quantile(values, [0.001, 0.999])
+        if np.isclose(lower, upper):
+            width = max(abs(float(lower)) * 0.05, 1e-9)
+            lower -= width
+            upper += width
+        x = np.linspace(lower, upper, 500)
+
+        if len(np.unique(values)) > 1:
+            posterior_density = gaussian_kde(values)(x)
+            ax.fill_between(x, 0.0, posterior_density, alpha=0.20)
+            ax.plot(x, posterior_density, linewidth=1.6, label="posterior")
+            density_max = float(np.max(posterior_density))
+        else:
+            ax.axvline(values[0], linewidth=1.6, label="posterior")
+            density_max = 1.0
+
+        prior = _prior_pdf(x, spec)
+        if np.any(np.isfinite(prior)) and np.nanmax(prior) > 0:
+            prior_scaled = prior / np.nanmax(prior) * 0.35 * density_max
+            ax.plot(x, prior_scaled, linestyle="--", linewidth=1.1, alpha=0.6, label="prior")
 
         mean = float(np.mean(values))
         hdi = np.asarray(azs.hdi(values, prob=0.95), dtype=float).reshape(-1)
-        hdi_lower, hdi_upper = float(hdi[0]), float(hdi[1])
-
-        # ArviZ chooses the posterior-focused x-range. Show only the local prior shape over that range.
-        x_min, x_max = ax.get_xlim()
-        x = np.linspace(x_min, x_max, 500)
-        prior = _prior_pdf(x, parameter_specs[name])
-
-        if np.any(np.isfinite(prior)) and np.nanmax(prior) > 0:
-            _, y_max = ax.get_ylim()
-            prior_scaled = prior / np.nanmax(prior) * 0.30 * y_max
-            ax.fill_between(x, 0.0, prior_scaled, alpha=0.06, linewidth=0, zorder=0)
-            ax.plot(x, prior_scaled, linestyle="--", linewidth=1.0, alpha=0.25, zorder=0.5)
-
-        _, y_max = ax.get_ylim()
-
-        # Keep the statistics explicit rather than relying on backend-specific annotation behavior.
-        ax.text(mean, 0.96 * y_max, f"mean = {mean:.4g}", ha="center", va="top", fontsize=8)
-        ax.text(hdi_lower, 0.06 * y_max, f"{hdi_lower:.4g}", ha="center", va="bottom", fontsize=8)
-        ax.text(hdi_upper, 0.06 * y_max, f"{hdi_upper:.4g}", ha="center", va="bottom", fontsize=8)
-        ax.text(
-            0.5 * (hdi_lower + hdi_upper),
-            0.14 * y_max,
-            "95% HDI",
-            ha="center",
-            va="bottom",
-            fontsize=8,
-        )
-
-        ax.set_title(name)
+        ax.axvline(mean, linewidth=1.0, alpha=0.7)
+        ax.axvspan(float(hdi[0]), float(hdi[1]), alpha=0.08)
+        ax.set_title(label)
+        ax.set_yticks([])
         ax.grid(axis="x", alpha=0.15)
 
-    pc.add_title("Posterior parameter distributions")
-    pc.savefig(output_path, dpi=220, bbox_inches="tight")
+    for ax in axes.flat[len(components):]:
+        ax.set_visible(False)
 
-    fig = pc.get_target(names[0], {}).figure
+    fig.suptitle("Posterior parameter distributions")
+    fig.tight_layout()
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close(fig)
 
 
 def _posterior_interval_columns(frame, prefix=None):
     base = "" if prefix is None else f"{prefix}_"
-
-    new = (
+    columns = (
         f"{base}median",
         f"{base}hdi95_lower",
         f"{base}hdi95_upper",
     )
-    if all(column in frame.columns for column in new):
-        return new
-
-    legacy = (
-        f"{base}q50",
-        f"{base}q025",
-        f"{base}q975",
+    if all(column in frame.columns for column in columns):
+        return columns
+    raise ValueError(
+        f"Could not find posterior median/95% interval columns for prefix '{prefix}'."
     )
-    if all(column in frame.columns for column in legacy):
-        return legacy
-
-    raise ValueError(f"Could not find posterior median/95% interval columns for prefix '{prefix}'.")
 
 
 def plot_observation_grid(
@@ -139,12 +152,11 @@ def plot_observation_grid(
 ):
     if y_scale not in {"linear", "log"}:
         raise ValueError("y_scale must be 'linear' or 'log'.")
-    if distribution not in {"mechanism", "conditional", "predictive"}:
-        raise ValueError("distribution must be 'mechanism', 'conditional', or 'predictive'.")
+    if distribution not in {"model", "predictive"}:
+        raise ValueError("distribution must be 'model' or 'predictive'.")
 
     KOH_values = sorted(observations["electrolyte_concentration_M"].unique())
     CO_values = sorted(observations["CO_mole_fraction"].unique())
-
     fig, axes = plt.subplots(
         len(CO_values),
         len(KOH_values),
@@ -153,11 +165,12 @@ def plot_observation_grid(
         squeeze=False,
     )
 
-    observed_column = "rate"
-
     if not residual:
         prefix = f"rate_{distribution}"
-        median_column, lower_column, upper_column = _posterior_interval_columns(observations, prefix)
+        median_column, lower_column, upper_column = _posterior_interval_columns(
+            observations,
+            prefix,
+        )
 
     for row, co_fraction in enumerate(CO_values):
         for col, c_koh in enumerate(KOH_values):
@@ -172,26 +185,26 @@ def plot_observation_grid(
                     curve = curve.sort_values("E_V_SHE")
                     ax.plot(
                         curve["E_V_SHE"],
-                        curve["residual_conditional"],
+                        curve["residual"],
                         linewidth=1.2,
                         alpha=0.65,
                         label=replicate,
                     )
+                ax.axhline(0.0, linestyle="--", linewidth=1.0, alpha=0.5)
             else:
                 for replicate, curve in condition.groupby("replicate", sort=True):
                     curve = curve.sort_values("E_V_SHE")
                     ax.plot(
                         curve["E_V_SHE"],
-                        curve[observed_column],
+                        curve["rate"],
                         linewidth=1.0,
                         alpha=0.45,
                         label=f"{replicate} observed",
                     )
 
-                if distribution == "mechanism":
-                    posterior_curve = (
-                        condition.sort_values("E_V_SHE")
-                        .drop_duplicates("model_point_id")
+                if distribution == "model":
+                    posterior_curve = condition.sort_values("E_V_SHE").drop_duplicates(
+                        "model_point_id"
                     )
                     ax.fill_between(
                         posterior_curve["E_V_SHE"],
@@ -204,7 +217,7 @@ def plot_observation_grid(
                         posterior_curve["E_V_SHE"],
                         posterior_curve[median_column],
                         linewidth=1.8,
-                        label="mechanism posterior",
+                        label="model posterior",
                     )
                 else:
                     for replicate, curve in condition.groupby("replicate", sort=True):
@@ -213,7 +226,7 @@ def plot_observation_grid(
                             curve["E_V_SHE"],
                             curve[median_column],
                             linewidth=1.5,
-                            label=f"{replicate} {distribution}",
+                            label=f"{replicate} predictive",
                         )
                         ax.fill_between(
                             curve["E_V_SHE"],
@@ -224,15 +237,10 @@ def plot_observation_grid(
                             linewidth=0,
                         )
 
-            if residual:
-                ax.axhline(0.0, linestyle="--", linewidth=1.0, alpha=0.5)
-
             if not residual and y_scale == "log":
                 ax.set_yscale("log")
-
             if row == 0:
                 ax.set_title(f"{c_koh:g} M KOH")
-
             if col == len(KOH_values) - 1:
                 ax.text(
                     1.04,
@@ -242,25 +250,25 @@ def plot_observation_grid(
                     rotation=-90,
                     va="center",
                 )
-
             ax.grid(alpha=0.20)
 
     prefix = f"{context_label}: " if context_label else ""
-
     if residual:
-        fig.suptitle(f"{prefix}Conditional log-rate residuals")
-        fig.supylabel("ln(rate) observed - posterior conditional median")
+        fig.suptitle(f"{prefix}Rate residuals")
+        fig.supylabel(r"observed rate - posterior model median / s$^{-1}$")
     else:
-        label = distribution.replace("_", " ")
         axis_label = "log y-axis" if y_scale == "log" else "linear y-axis"
-        fig.suptitle(f"{prefix}Posterior {label} rate: median and 95% HDI ({axis_label})")
-        fig.supylabel("rate / s$^{-1}$")
+        fig.suptitle(
+            f"{prefix}Posterior {distribution} rate: median and 95% HDI ({axis_label})"
+        )
+        fig.supylabel(r"rate / s$^{-1}$")
 
     fig.supxlabel("Potential (V vs SHE)")
     fig.tight_layout(rect=(0.04, 0.04, 0.96, 0.97))
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close(fig)
-
 def plot_pointwise_variable(summary, variable_name, output_path: str | Path, context_label=None):
     KOH_values = sorted(summary["electrolyte_concentration_M"].unique())
     CO_values = sorted(summary["CO_mole_fraction"].unique())
@@ -317,13 +325,15 @@ def plot_pointwise_variable(summary, variable_name, output_path: str | Path, con
     fig.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close(fig)
 
+
 def plot_sampling_trace(inference_data, parameter_names, output_path: str | Path):
     data = build_sampling_datatree(inference_data, parameter_names)
-    nrows = math.ceil(len(parameter_names) / 3)
+    plotted_names = list(data.posterior.data_vars)
+    nrows = math.ceil(len(plotted_names) / 3)
 
     pc = azp.plot_trace(
         data,
-        var_names=parameter_names,
+        var_names=plotted_names,
         group="posterior",
         backend="matplotlib",
         visuals={"divergence": True},
@@ -331,31 +341,44 @@ def plot_sampling_trace(inference_data, parameter_names, output_path: str | Path
         figure_kwargs={"figsize": (14, 3.8 * nrows), "layout": "none"},
     )
 
-    fig = pc.get_target(parameter_names[0], {}).figure
-    fig.subplots_adjust(left=0.06, right=0.98, bottom=0.06, top=0.92, hspace=0.55, wspace=0.20)
+    fig = pc.get_target(plotted_names[0], {}).figure
+    fig.subplots_adjust(
+        left=0.06,
+        right=0.98,
+        bottom=0.06,
+        top=0.92,
+        hspace=0.55,
+        wspace=0.20,
+    )
     fig.suptitle("MCMC sampling traces")
-
     fig.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close(fig)
 
 
 def plot_sampling_rank(inference_data, parameter_names, output_path: str | Path):
     data = build_sampling_datatree(inference_data, parameter_names)
-    nrows = math.ceil(len(parameter_names) / 3)
+    plotted_names = list(data.posterior.data_vars)
+    nrows = math.ceil(len(plotted_names) / 3)
 
     pc = azp.plot_rank(
         data,
-        var_names=parameter_names,
+        var_names=plotted_names,
         group="posterior",
         backend="matplotlib",
         col_wrap=3,
         figure_kwargs={"figsize": (14, 3.8 * nrows), "layout": "none"},
     )
 
-    fig = pc.get_target(parameter_names[0], {}).figure
-    fig.subplots_adjust(left=0.06, right=0.98, bottom=0.06, top=0.92, hspace=0.55, wspace=0.20)
+    fig = pc.get_target(plotted_names[0], {}).figure
+    fig.subplots_adjust(
+        left=0.06,
+        right=0.98,
+        bottom=0.06,
+        top=0.92,
+        hspace=0.55,
+        wspace=0.20,
+    )
     fig.suptitle("Chain rank diagnostics")
-
     fig.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close(fig)
 
@@ -618,7 +641,7 @@ def plot_loo_pit_ecdf(loo_pit, model_name, output_path: str | Path):
 
     pc = azp.plot_ecdf_pit(
         data,
-        var_names=["ln_rate_observed"],
+        var_names=["rate_observed"],
         group="loo_pit",
         sample_dims=["observation"],
         method="pot_c",
@@ -638,7 +661,7 @@ def plot_loo_pit_coverage(loo_pit, model_name, output_path: str | Path):
 
     pc = azp.plot_ecdf_pit(
         data,
-        var_names=["ln_rate_observed"],
+        var_names=["rate_observed"],
         group="loo_pit",
         sample_dims=["observation"],
         method="pot_c",

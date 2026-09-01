@@ -1,5 +1,7 @@
 from dataclasses import dataclass
+from pathlib import Path
 
+import arviz as az
 import numpy as np
 import pymc as pm
 
@@ -19,6 +21,38 @@ def _get_group(inference_data, group_name):
         return inference_data[group_name]
     except Exception as error:
         raise ValueError(f"Inference data does not contain group '{group_name}'.") from error
+
+
+def load_inference_data(path: str | Path):
+    """Load a NetCDF checkpoint fully into memory and release its file handles."""
+    path = Path(path)
+    inference_data = az.from_netcdf(path)
+
+    try:
+        inference_data.load()
+    finally:
+        close = getattr(inference_data, "close", None)
+        if close is not None:
+            close()
+
+    return inference_data
+
+
+def write_inference_data(inference_data, output_path: str | Path, *, engine="h5netcdf"):
+    """Atomically replace a NetCDF checkpoint without leaving a partial target file."""
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = output_path.with_name(f".{output_path.name}.tmp")
+
+    if temporary_path.exists():
+        temporary_path.unlink()
+
+    try:
+        inference_data.to_netcdf(temporary_path, engine=engine)
+        temporary_path.replace(output_path)
+    finally:
+        if temporary_path.exists():
+            temporary_path.unlink()
 
 
 def sample_posterior(
@@ -72,7 +106,13 @@ def sample_posterior(
         return pm.sample(**sample_kwargs)
 
 
-def compute_posterior_deterministics(inference_data, built_model, var_names=None, backend=None, progressbar=True):
+def compute_posterior_deterministics(
+    inference_data,
+    built_model,
+    var_names=None,
+    backend=None,
+    progressbar=True,
+):
     posterior = _get_group(inference_data, "posterior")
 
     with built_model.model:
@@ -100,7 +140,11 @@ def add_log_likelihood(inference_data, built_model, backend=None, progressbar=Tr
 def summarize_sampler_health(inference_data):
     sample_stats = _get_group(inference_data, "sample_stats")
 
-    divergences = int(np.asarray(sample_stats["diverging"]).sum()) if "diverging" in sample_stats else 0
+    divergences = (
+        int(np.asarray(sample_stats["diverging"]).sum())
+        if "diverging" in sample_stats
+        else 0
+    )
 
     tree_depth = None
     for name in ("tree_depth", "depth"):
@@ -109,7 +153,11 @@ def summarize_sampler_health(inference_data):
             break
 
     if tree_depth is None:
-        return SamplerHealth(divergences=divergences, mean_tree_depth=None, max_tree_depth=None)
+        return SamplerHealth(
+            divergences=divergences,
+            mean_tree_depth=None,
+            max_tree_depth=None,
+        )
 
     return SamplerHealth(
         divergences=divergences,

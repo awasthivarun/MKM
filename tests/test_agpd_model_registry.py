@@ -1,112 +1,120 @@
+from copy import deepcopy
+
 import numpy as np
-import pandas as pd
+import pymc as pm
 import pytest
 import yaml
 
-from mkm.inference.model import build_pymc_model
-from mkm.model_data import build_model_data
-from mkm.model_inputs import build_model_input_arrays
+from mkm.model_inputs import ModelPointInputs
 from mkm.models.agpd_basic import (
-    available_agpd_composition_parameterizations,
+    available_agpd_all_material_models,
     available_agpd_models,
-    build_agpd_composition_mechanism,
+    available_agpd_parameterizations,
+    build_agpd_all_material_mechanism,
     build_agpd_mechanism,
+    get_agpd_all_material_parameter_specs,
     get_agpd_model_definition,
+    get_agpd_parameterization,
 )
 
 
-def _load_config():
+def _config():
     with open("config/models/agpd_basic.yaml", "r") as file:
         return yaml.safe_load(file)
 
 
-def _make_inputs(materials=("Ag10Pd90",)):
-    records = []
-    for material in materials:
-        for replicate, offset in zip(["A", "B", "C"], [-0.05, 0.0, 0.05]):
-            for grid_index in range(3):
-                ln_rate = -2.0 + 3.0 * 0.01 * grid_index + offset
-                records.append(
-                    {
-                        "material": material,
-                        "C_KOH_M": 0.50,
-                        "CO_mole_fraction": 0.01,
-                        "replicate": replicate,
-                        "analysis_grid_index": grid_index,
-                        "E_V_SHE": 0.01 * grid_index,
-                        "rate_s_inv": np.exp(ln_rate),
-                        "ln_rate": ln_rate,
-                    }
-                )
-    data = pd.DataFrame(records)
-
-    model_data = build_model_data(selected_replicates=data, electrolyte_concentration_column="C_KOH_M")
-
-    return build_model_input_arrays(model_data)
-
-
-def test_agpd_registry_contains_models_of_interest():
-    assert set(available_agpd_models()) == {"BF", "BF_LH", "CO_BF_ER_LH"}
-
-
-def test_agpd_composition_parameterizations_include_linear_xag():
-    assert set(available_agpd_composition_parameterizations()) == {"shared", "linear_xAg"}
-
-
-def test_agpd_registry_rejects_unknown_model():
-    with pytest.raises(ValueError, match="Unknown AgPd model"):
-        get_agpd_model_definition("NOT_A_MODEL")
-
-
-@pytest.mark.parametrize("model_name", ["BF", "BF_LH", "CO_BF_ER_LH"])
-def test_ag10pd90_registered_models_build_with_finite_logp(model_name):
-    config = _load_config()
-    mechanism = build_agpd_mechanism(model_name=model_name, material="Ag10Pd90", config=config)
-
-    built = build_pymc_model(
-        inputs=_make_inputs(),
-        mechanism=mechanism,
-        sigma_prior_median=config["likelihood"]["sigma_prior_median"],
-        sigma_prior_log_sd=config["likelihood"]["sigma_prior_log_sd"],
-    )
-    logp = built.model.compile_logp()(built.model.initial_point())
-
-    assert np.isfinite(logp)
-
-
-def test_linear_xag_large_composition_model_builds_with_expected_slopes():
-    config = _load_config()
-    materials = ("Ag10Pd90", "Ag50Pd50", "Pd100")
-    inputs = _make_inputs(materials=materials)
-    mechanism = build_agpd_composition_mechanism(
-        model_name="CO_BF_ER_LH",
-        materials=materials,
-        config=config,
-        composition_model="linear_xAg",
+def _point_inputs(materials):
+    return ModelPointInputs(
+        materials=tuple(materials),
+        material_index=np.arange(len(materials), dtype=np.int64),
+        E_V_SHE=np.linspace(0.25, 0.35, len(materials)),
+        ln_electrolyte_concentration=np.log(np.full(len(materials), 0.5)),
+        ln_CO_mole_fraction=np.log(np.full(len(materials), 0.1)),
     )
 
-    built = build_pymc_model(
-        inputs=inputs,
-        mechanism=mechanism,
-        sigma_prior_median=config["likelihood"]["sigma_prior_median"],
-        sigma_prior_log_sd=config["likelihood"]["sigma_prior_log_sd"],
-    )
-    free_names = {rv.name for rv in built.model.free_RVs}
-    expected_slopes = {
-        "deltaG1_0_xAg_slope",
-        "deltaG4_0_xAg_slope",
-        "deltaG5_0_xAg_slope",
-        "Gact2_BF_0_xAg_slope",
-        "Gact2_ER_0_xAg_slope",
+
+def test_agpd_registry_keeps_all_chemical_mechanisms():
+    assert available_agpd_models() == ("BF", "BF_LH", "CO_BF_ER_LH")
+    assert available_agpd_all_material_models() == ("BF_LH", "CO_BF_ER_LH")
+    for name in available_agpd_models():
+        assert get_agpd_model_definition(name).parameter_class is not None
+
+
+def test_parameterization_profiles_are_configuration_driven():
+    config = _config()
+    assert available_agpd_parameterizations(config, "BF_LH") == ("shared",)
+    assert set(available_agpd_parameterizations(config, "CO_BF_ER_LH")) == {
+        "shared",
+        "linear_xAg",
     }
 
-    assert expected_slopes <= free_names
-    assert np.isfinite(built.model.compile_logp()(built.model.initial_point()))
+    x_reference, slopes = get_agpd_parameterization(
+        config,
+        "CO_BF_ER_LH",
+        "linear_xAg",
+    )
+    assert x_reference == pytest.approx(0.5)
+    assert set(slopes) == {
+        "deltaG1_0",
+        "deltaG4_0",
+        "deltaG5_0",
+        "Gact2_BF_0",
+        "Gact2_ER_0",
+    }
 
 
-def test_agpd_registered_model_rejects_multiple_materials():
-    config = _load_config()
-    mechanism = build_agpd_mechanism(model_name="BF", material="Ag10Pd90", config=config)
+def test_arbitrary_parameter_subset_can_receive_xag_slopes():
+    config = deepcopy(_config())
+    config["composition_parameterizations"]["linear_beta_er"] = {
+        "x_reference": 0.5,
+        "models": {
+            "CO_BF_ER_LH": {
+                "slopes": {
+                    "beta_2_ER": {
+                        "distribution": "normal",
+                        "mu": 0.0,
+                        "sigma": 0.25,
+                    }
+                }
+            }
+        },
+    }
 
-    with pytest.raises(ValueError, match="exactly that one material"):
-        build_pymc_model(inputs=_make_inputs(materials=("Ag10Pd90", "Ag25Pd75")), mechanism=mechanism)
+    specs = get_agpd_all_material_parameter_specs(
+        config,
+        prior_material="Ag10Pd90",
+        model_name="CO_BF_ER_LH",
+        parameterization="linear_beta_er",
+    )
+    assert "beta_2_ER_xAg_slope" in specs
+    assert not any(
+        name.endswith("_xAg_slope") and name != "beta_2_ER_xAg_slope"
+        for name in specs
+    )
+
+    mechanism = build_agpd_all_material_mechanism(
+        "CO_BF_ER_LH",
+        ("Ag10Pd90", "Pd100"),
+        config,
+        prior_material="Ag10Pd90",
+        parameterization="linear_beta_er",
+    )
+    with pm.Model() as model:
+        result = mechanism(_point_inputs(("Ag10Pd90", "Pd100")))
+
+    assert result.ln_rate.ndim == 1
+    assert "beta_2_ER_xAg_slope" in {variable.name for variable in model.free_RVs}
+
+
+def test_individual_mechanism_rejects_different_material_set():
+    mechanism = build_agpd_mechanism("BF_LH", "Ag10Pd90", _config())
+    with pm.Model(), pytest.raises(ValueError, match="exactly that one material"):
+        mechanism(_point_inputs(("Ag10Pd90", "Ag50Pd50")))
+
+
+def test_unknown_model_or_parameterization_is_rejected():
+    config = _config()
+    with pytest.raises(ValueError, match="Unknown AgPd model"):
+        get_agpd_model_definition("unknown")
+    with pytest.raises(ValueError, match="Unknown AgPd parameterization"):
+        get_agpd_parameterization(config, "CO_BF_ER_LH", "unknown")

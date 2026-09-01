@@ -13,19 +13,15 @@ surface_composition:
   Pd100:
     Ag_fraction: 0.00
     Pd_fraction: 1.00
-
   Ag10Pd90:
     Ag_fraction: 0.10
     Pd_fraction: 0.90
-
   Ag25Pd75:
     Ag_fraction: 0.25
     Pd_fraction: 0.75
-
   Ag50Pd50:
     Ag_fraction: 0.50
     Pd_fraction: 0.50
-
   Ag75Pd25:
     Ag_fraction: 0.75
     Pd_fraction: 0.25
@@ -38,6 +34,14 @@ surface_assumptions:
   random_mixing: true
 
 composition_parameterizations:
+  shared:
+    x_reference: 0.50
+    models:
+      BF_LH:
+        slopes: {}
+      CO_BF_ER_LH:
+        slopes: {}
+
   linear_xAg:
     x_reference: 0.50
     models:
@@ -55,7 +59,7 @@ composition_parameterizations:
             distribution: truncated_normal
             mu: 0.0
             sigma: 0.10
-            lower: -0.2
+            lower: -0.20
             upper: 0.40
           Gact2_BF_0:
             distribution: truncated_normal
@@ -69,34 +73,19 @@ composition_parameterizations:
             sigma: 0.10
 
 likelihood:
-  sigma_prior_median: 0.20
-  sigma_prior_log_sd: 0.75
+  name: rate_normal
+  sigma_form: sigma_abs + sigma_rel * model_rate
+  supported_error_structures:
+    - shared
+    - material
+  sigma_abs_prior_median_s_inv: 0.0002
+  sigma_abs_prior_log_sd: 1.0
+  sigma_rel_prior_median: 0.18
+  sigma_rel_prior_log_sd: 0.75
 
-  rate_normal:
-    sigma_abs_prior_median_s_inv: 0.0002
-    sigma_abs_prior_log_sd: 1.0
-    sigma_rel_prior_median: 0.18
-    sigma_rel_prior_log_sd: 0.75
-
-  mvn:
-    correlation_length_prior_median_V: 0.020
-    correlation_length_prior_log_sd: 1.0
-
-  setup_intercept:
-    group_columns:
-      - material
-      - electrolyte_concentration_M
-      - replicate
-
-    zero_sum_within:
-      - material
-      - electrolyte_concentration_M
-
-    prior_median: 0.10
-    prior_log_sd: 0.75
 prior_profiles:
   Ag10Pd90: &legacy_alloy_prior_profile
-    BF:
+    BF: &legacy_bf_prior
       provenance: legacy_tuned_for_multimodality
       parameters:
         deltaG1_0:
@@ -124,7 +113,8 @@ prior_profiles:
           mu: 0.7
           sigma: 0.2
           lower: 0.0
-    BF_LH:
+
+    BF_LH: &legacy_bf_lh_prior
       provenance: legacy_tuned_for_multimodality
       parameters:
         deltaG1_0:
@@ -157,7 +147,8 @@ prior_profiles:
           mu: 0.7
           sigma: 0.2
           lower: 0.0
-    CO_BF_ER_LH:
+
+    CO_BF_ER_LH: &legacy_co_bf_er_lh_prior
       provenance: legacy_tuned_for_multimodality
       parameters:
         deltaG1_0:
@@ -210,7 +201,12 @@ prior_profiles:
           sigma: 0.2
           lower: 0.5
           upper: 1.0
+
   Ag25Pd75: *legacy_alloy_prior_profile
   Ag50Pd50: *legacy_alloy_prior_profile
   Ag75Pd25: *legacy_alloy_prior_profile
   Ag90Pd10: *legacy_alloy_prior_profile
+
+  Pd100:
+    BF_LH: *legacy_bf_lh_prior
+    CO_BF_ER_LH: *legacy_co_bf_er_lh_prior

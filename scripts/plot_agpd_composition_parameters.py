@@ -1,33 +1,29 @@
-"""Plot posterior AgPd mechanism parameters as functions of Ag composition."""
+"""Plot effective physical-parameter trends from an all-material AgPd posterior."""
 
 from argparse import ArgumentParser
 
-import arviz as az
-
-from mkm.models.agpd_basic import available_agpd_composition_models, available_agpd_composition_parameterizations
+from mkm.models.agpd_basic import available_agpd_all_material_models
 from mkm.postprocessing.composition_parameters import (
     build_agpd_composition_parameter_trends,
-    build_agpd_material_noise_summary,
     plot_agpd_composition_parameter_overview,
 )
 from mkm.project_paths import ProjectPaths
 from mkm.workflows.agpd_basic import load_agpd_model_config
-
-
-DEFAULT_MODEL = "CO_BF_ER_LH"
-DEFAULT_COMPOSITION_MODEL = "linear_xAg"
-DEFAULT_LIKELIHOOD = "iid"
+from mkm.workflows.agpd_fit import resolve_agpd_fit_specification
+from mkm.workflows.agpd_posterior import load_agpd_posterior_run
 
 
 def parse_args():
     parser = ArgumentParser()
-    parser.add_argument("model", nargs="?", choices=available_agpd_composition_models(), default=DEFAULT_MODEL)
+    parser.add_argument("model", choices=available_agpd_all_material_models())
+    parser.add_argument("--parameterization", default="linear_xAg")
     parser.add_argument(
-        "--composition-model",
-        choices=available_agpd_composition_parameterizations(),
-        default=DEFAULT_COMPOSITION_MODEL,
+        "--error-structure",
+        choices=("shared", "material"),
+        default="material",
     )
-    parser.add_argument("--likelihood", choices=["iid", "setup_intercept", "mvn"], default=DEFAULT_LIKELIHOOD)
+    parser.add_argument("--prior-material", default="Ag10Pd90")
+    parser.add_argument("--n-grid", type=int, default=181)
     return parser.parse_args()
 
 
@@ -35,53 +31,43 @@ def main():
     args = parse_args()
     paths = ProjectPaths.discover(__file__)
     config = load_agpd_model_config(paths)
-
-    posterior_dir = paths.agpd_composition_posterior_output_dir(
-        composition_model=args.composition_model,
+    specification = resolve_agpd_fit_specification(
+        config,
         model_name=args.model,
-        likelihood_name=args.likelihood,
+        all_materials=True,
+        parameterization=args.parameterization,
+        error_structure=args.error_structure,
+        prior_material=args.prior_material,
     )
-    posterior_path = posterior_dir / "posterior.nc"
-    if not posterior_path.exists():
-        raise FileNotFoundError(f"Posterior not found: {posterior_path}")
+    run = load_agpd_posterior_run(
+        paths,
+        config,
+        specification,
+        reconstruct_pointwise=False,
+        progressbar=False,
+    )
 
-    idata = az.from_netcdf(posterior_path)
     trends = build_agpd_composition_parameter_trends(
-        inference_data=idata,
-        config=config,
-        model_name=args.model,
-        composition_model=args.composition_model,
+        run.inference_data,
+        config,
+        model_name=specification.model_name,
+        parameterization=specification.parameterization,
+        n_grid=args.n_grid,
     )
-    noise = build_agpd_material_noise_summary(idata, config)
+    trends_path = run.output_dir / "composition_parameter_trends.parquet"
+    trends.to_parquet(trends_path, index=False)
 
-    postprocessing_dir = posterior_dir / "postprocessing"
-    tables_dir = postprocessing_dir / "tables"
-    figures_dir = postprocessing_dir / "figures"
-    tables_dir.mkdir(parents=True, exist_ok=True)
-    figures_dir.mkdir(parents=True, exist_ok=True)
-
-    trends_path = tables_dir / "composition_parameter_trends.csv"
-    noise_path = tables_dir / "composition_noise_by_material.csv"
-    figure_path = figures_dir / "composition_parameter_trends.png"
-
-    trends.to_csv(trends_path, index=False)
-    noise.to_csv(noise_path, index=False)
+    figure_path = run.output_dir / "figures" / "composition_parameter_overview.png"
     plot_agpd_composition_parameter_overview(
-        trends=trends,
-        noise_summary=noise,
-        config=config,
-        model_name=args.model,
-        composition_model=args.composition_model,
+        trends,
+        config,
+        model_name=specification.model_name,
+        parameterization=specification.parameterization,
         output_path=figure_path,
     )
 
-    print(f"\nAgPd composition parameter plot: {args.model}")
-    print(f"Composition parameterization: {args.composition_model}")
-    print(f"Likelihood: {args.likelihood}")
-    print(f"Saved figure: {figure_path}")
-    print(f"Saved parameter trends: {trends_path}")
-    if not noise.empty:
-        print(f"Saved material residual scales: {noise_path}")
+    print(f"Composition parameter trends saved to: {trends_path}")
+    print(f"Composition parameter figure saved to: {figure_path}")
 
 
 if __name__ == "__main__":
