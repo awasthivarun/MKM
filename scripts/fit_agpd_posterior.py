@@ -10,6 +10,7 @@ from mkm.inference.posterior import (
     add_log_likelihood,
     compute_posterior_deterministics,
     load_inference_data,
+    retain_group_variables,
     sample_posterior,
     write_inference_data,
 )
@@ -229,7 +230,11 @@ def main():
             'Posterior log likelihood "rate_observed" contains non-finite values.'
         )
 
-    inference_data.posterior = inference_data.posterior[list(free_parameter_names)]
+    inference_data = retain_group_variables(
+        inference_data,
+        "posterior",
+        free_parameter_names,
+    )
     write_inference_data(inference_data, posterior_path)
 
     parameter_summary = build_posterior_parameter_summary(

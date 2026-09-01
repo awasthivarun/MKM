@@ -1,4 +1,3 @@
-import arviz as az
 import arviz_stats as azs
 import numpy as np
 import xarray as xr
@@ -116,7 +115,8 @@ def build_sampling_health(inference_data, parameter_names=None):
             n_max_treedepth = int(reached.sum())
             fraction_max_treedepth = float(reached.mean())
 
-    bfmi = np.asarray(az.bfmi(inference_data), dtype=float).reshape(-1)
+    bfmi_result = azs.bfmi(inference_data)
+    bfmi = np.asarray(bfmi_result["energy"], dtype=float).reshape(-1)
     return {
         "n_divergent": n_divergent,
         "n_max_treedepth": n_max_treedepth,

@@ -55,6 +55,25 @@ def write_inference_data(inference_data, output_path: str | Path, *, engine="h5n
             temporary_path.unlink()
 
 
+def retain_group_variables(inference_data, group_name, variable_names):
+    """Retain selected variables in one inference-data group without mutating other groups."""
+    variable_names = tuple(variable_names)
+    group = _get_group(inference_data, group_name)
+    missing = [name for name in variable_names if name not in group]
+    if missing:
+        raise ValueError(
+            f"Inference-data group {group_name!r} is missing variables: {missing}"
+        )
+
+    if hasattr(group, "to_dataset"):
+        dataset = group.to_dataset()
+        inference_data[group_name] = dataset[list(variable_names)]
+    else:
+        setattr(inference_data, group_name, group[list(variable_names)])
+
+    return inference_data
+
+
 def sample_posterior(
     built_model,
     draws=1000,

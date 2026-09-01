@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import numpy as np
+import pandas as pd
 import xarray as xr
 import yaml
 
@@ -14,6 +15,7 @@ from mkm.postprocessing.diagnostics import (
 )
 from mkm.postprocessing.sampling import (
     build_sampling_datatree,
+    build_sampling_health,
     sampling_parameter_names,
 )
 
@@ -98,6 +100,61 @@ def test_sampling_expands_material_errors_for_trace_and_excludes_them_from_pairs
         "sigma_rate_rel[material=Pd100]",
     }
     assert sampling_parameter_names(_posterior(), _specs()) == ("x",)
+
+
+def test_sampling_health_extracts_bfmi_from_datatree(monkeypatch):
+    posterior = xr.Dataset(
+        {
+            "x": (
+                ("chain", "draw"),
+                np.array([[0.0, 0.1, 0.2, 0.3], [0.1, 0.2, 0.3, 0.4]]),
+            )
+        }
+    )
+    sample_stats = xr.Dataset(
+        {
+            "diverging": (
+                ("chain", "draw"),
+                np.zeros((2, 4), dtype=bool),
+            ),
+            "energy": (
+                ("chain", "draw"),
+                np.array([[1.0, 1.1, 0.9, 1.2], [1.2, 1.0, 1.1, 0.8]]),
+            ),
+        }
+    )
+    inference_data = xr.DataTree.from_dict(
+        {
+            "/posterior": posterior,
+            "/sample_stats": sample_stats,
+        }
+    )
+
+    monkeypatch.setattr(
+        "mkm.postprocessing.sampling.azs.summary",
+        lambda *args, **kwargs: pd.DataFrame(
+            {
+                "ess_bulk": [500.0],
+                "ess_tail": [450.0],
+                "r_hat": [1.001],
+            },
+            index=["x"],
+        ),
+    )
+    monkeypatch.setattr(
+        "mkm.postprocessing.sampling.azs.bfmi",
+        lambda *args, **kwargs: xr.DataTree.from_dict(
+            {"/": xr.Dataset({"energy": ("chain", [0.72, 0.81])})}
+        ),
+    )
+
+    health = build_sampling_health(inference_data, parameter_names=("x",))
+
+    assert health["n_divergent"] == 0
+    assert health["min_bfmi"] == 0.72
+    assert health["max_rhat"] == 1.001
+    assert health["min_ess_bulk"] == 500.0
+    assert health["min_ess_tail"] == 450.0
 
 
 def test_lognormal_prior_statistics_use_median_parameterization():

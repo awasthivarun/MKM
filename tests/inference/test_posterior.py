@@ -9,6 +9,7 @@ from mkm.inference.posterior import (
     add_log_likelihood,
     compute_posterior_deterministics,
     load_inference_data,
+    retain_group_variables,
     sample_posterior,
     summarize_sampler_health,
     write_inference_data,
@@ -128,3 +129,42 @@ def test_inference_data_checkpoint_can_be_loaded_and_atomically_replaced(tmp_pat
 
     np.testing.assert_allclose(reloaded.posterior["x"], [[1.0, 2.0]])
     assert not (tmp_path / ".posterior.nc.tmp").exists()
+
+
+def test_retain_group_variables_subsets_datatree_group_and_preserves_other_groups():
+    inference_data = xr.DataTree.from_dict(
+        {
+            "/posterior": xr.Dataset(
+                {
+                    "x": (("chain", "draw"), np.array([[1.0, 2.0]])),
+                    "twice_x": (("chain", "draw"), np.array([[2.0, 4.0]])),
+                }
+            ),
+            "/log_likelihood": xr.Dataset(
+                {
+                    "observed": (
+                        ("chain", "draw", "observation"),
+                        np.array([[[-1.0], [-2.0]]]),
+                    )
+                }
+            ),
+        }
+    )
+
+    result = retain_group_variables(inference_data, "posterior", ["x"])
+
+    assert list(result.posterior.data_vars) == ["x"]
+    assert "observed" in result.log_likelihood
+
+
+def test_retain_group_variables_rejects_missing_variable():
+    inference_data = xr.DataTree.from_dict(
+        {
+            "/posterior": xr.Dataset(
+                {"x": (("chain", "draw"), np.array([[1.0, 2.0]]))}
+            )
+        }
+    )
+
+    with pytest.raises(ValueError, match="missing variables"):
+        retain_group_variables(inference_data, "posterior", ["x", "missing"])
