@@ -1,6 +1,7 @@
 """Load, validate, and reconstruct AgPd posterior runs."""
 
 from dataclasses import dataclass
+import warnings
 
 from mkm.inference.likelihoods import RATE_NORMAL
 from mkm.inference.posterior import (
@@ -14,11 +15,12 @@ from mkm.workflows.agpd_fit import (
     build_agpd_fit_model,
     fit_materials,
     fit_output_dir,
+    resolved_parameterization_metadata,
 )
-
-
-RUN_STATUS_SAMPLED = "sampled_free_variables"
-RUN_STATUS_COMPLETE = "complete"
+from mkm.workflows.posterior_lifecycle import (
+    RUN_STATUS_COMPLETE,
+    RUN_STATUS_SAMPLED,
+)
 
 
 @dataclass(frozen=True)
@@ -34,7 +36,7 @@ class AgPdPosteriorRun:
     free_parameter_names: tuple[str, ...]
 
 
-def expected_agpd_run_metadata(specification, materials):
+def expected_agpd_run_metadata(specification, materials, config):
     return {
         "fit_scope": specification.fit_scope,
         "materials": list(materials),
@@ -42,6 +44,10 @@ def expected_agpd_run_metadata(specification, materials):
         "likelihood": RATE_NORMAL,
         "error_structure": specification.error_structure,
         "parameterization": specification.parameterization,
+        "parameterization_specification": resolved_parameterization_metadata(
+            specification,
+            config,
+        ),
         "prior_material": specification.prior_material,
     }
 
@@ -51,10 +57,11 @@ def validate_agpd_run_metadata(
     paths,
     specification,
     materials,
+    config,
     *,
     allowed_statuses=(RUN_STATUS_COMPLETE,),
 ):
-    expected = expected_agpd_run_metadata(specification, materials)
+    expected = expected_agpd_run_metadata(specification, materials, config)
     mismatches = {
         key: (metadata.get(key), value)
         for key, value in expected.items()
@@ -62,13 +69,25 @@ def validate_agpd_run_metadata(
     }
 
     input_metadata = metadata.get("inputs", {})
-    current_hashes = {
-        "data_sha256": sha256_file(paths.agpd_selected_path),
-        "model_config_sha256": sha256_file(paths.agpd_model_config_path),
-    }
-    for key, value in current_hashes.items():
-        if input_metadata.get(key) != value:
-            mismatches[f"inputs.{key}"] = (input_metadata.get(key), value)
+
+    current_data_hash = sha256_file(paths.agpd_selected_path)
+    if input_metadata.get("data_sha256") != current_data_hash:
+        mismatches["inputs.data_sha256"] = (
+            input_metadata.get("data_sha256"),
+            current_data_hash,
+        )
+
+    current_config_hash = sha256_file(paths.agpd_model_config_path)
+    stored_config_hash = input_metadata.get("model_config_sha256")
+    if stored_config_hash != current_config_hash:
+        warnings.warn(
+            "Model config file hash differs from the hash stored for this posterior. "
+            "The requested run identity and resolved parameterization specification "
+            "still match, so loading will continue. Do not interpret this as proof "
+            "that other run-defining config entries, such as base priors, are unchanged.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
 
     status = metadata.get("status")
     if status not in allowed_statuses:
@@ -109,6 +128,7 @@ def load_agpd_posterior_run(
         paths,
         specification,
         fit.inputs.materials,
+        config,
         allowed_statuses=(RUN_STATUS_COMPLETE,),
     )
 

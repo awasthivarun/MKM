@@ -47,6 +47,9 @@ def main():
         progressbar=False,
     )
 
+    composition_dir = paths.fit_composition_dir(run.output_dir)
+    composition_dir.mkdir(parents=True, exist_ok=True)
+
     trends = build_agpd_composition_parameter_trends(
         run.inference_data,
         config,
@@ -54,10 +57,10 @@ def main():
         parameterization=specification.parameterization,
         n_grid=args.n_grid,
     )
-    trends_path = run.output_dir / "composition_parameter_trends.parquet"
+    trends_path = composition_dir / "composition_parameter_trends.parquet"
     trends.to_parquet(trends_path, index=False)
 
-    figure_path = run.output_dir / "figures" / "composition_parameter_overview.png"
+    figure_path = composition_dir / "composition_parameter_overview.png"
     plot_agpd_composition_parameter_overview(
         trends,
         config,

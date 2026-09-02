@@ -7,6 +7,7 @@ import pandas as pd
 import pymc as pm
 import pytensor.tensor as pt
 import xarray as xr
+from scipy.special import logsumexp, ndtr
 
 from mkm.inference.likelihoods import get_observation_material_index
 from mkm.mechanisms.base import MechanismResult, validate_mechanism_result
@@ -230,11 +231,27 @@ def compute_heldout_rate_predictions(
     if not np.all(np.isfinite(sigma_rate)) or np.any(sigma_rate <= 0):
         raise ValueError("Held-out posterior standard deviations must be finite and positive.")
 
+    observed_rate = heldout_data.observations["rate_s_inv"].to_numpy(dtype=float)
+    observed_rate_broadcast = observed_rate.reshape((1, 1, -1))
+    standardized_draws = (observed_rate_broadcast - model_rate) / sigma_rate
+    log_density_draws = (
+        -0.5 * standardized_draws**2
+        - np.log(sigma_rate)
+        - 0.5 * np.log(2.0 * np.pi)
+    )
+    flat_log_density = log_density_draws.reshape((-1, log_density_draws.shape[-1]))
+    heldout_log_predictive_density = (
+        logsumexp(flat_log_density, axis=0) - np.log(flat_log_density.shape[0])
+    )
+    heldout_pit = np.mean(ndtr(standardized_draws), axis=(0, 1))
+
     rng = np.random.default_rng(random_seed)
     predictive_rate = model_rate + sigma_rate * rng.standard_normal(model_rate.shape)
 
     pointwise = heldout_data.observations.copy()
-    pointwise["rate"] = pointwise["rate_s_inv"].to_numpy(dtype=float)
+    pointwise["rate"] = observed_rate
+    pointwise["heldout_log_predictive_density"] = heldout_log_predictive_density
+    pointwise["heldout_pit"] = heldout_pit
     _add_summary(pointwise, "rate_model", model_rate)
     _add_summary(pointwise, "sigma_rate", sigma_rate)
     _add_summary(pointwise, "rate_predictive", predictive_rate)
@@ -277,6 +294,13 @@ def compute_heldout_rate_predictions(
                     pointwise["observed_inside_predictive_95_hdi"].mean()
                 ),
                 "mean_predictive_95_hdi_width": float(np.mean(predictive_width)),
+                "heldout_log_predictive_density_sum": float(
+                    np.sum(heldout_log_predictive_density)
+                ),
+                "heldout_log_predictive_density_mean": float(
+                    np.mean(heldout_log_predictive_density)
+                ),
+                "heldout_pit_mean": float(np.mean(heldout_pit)),
             }
         ]
     )

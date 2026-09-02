@@ -1,29 +1,19 @@
 """Run one LOCO or LOMO validation fit for an all-material AgPd model."""
 
 from argparse import ArgumentParser
-from shutil import rmtree
-from time import perf_counter
 
 import numpy as np
 
-from mkm.inference.posterior import (
-    add_log_likelihood,
-    compute_posterior_deterministics,
-    load_inference_data,
-    sample_posterior,
-    write_inference_data,
-)
 from mkm.model_data import build_model_data
 from mkm.models.agpd_basic import available_agpd_all_material_models
-from mkm.postprocessing.diagnostics import build_posterior_parameter_summary
-from mkm.postprocessing.sampling import build_sampling_health
 from mkm.project_paths import ProjectPaths
-from mkm.provenance import (
-    build_fit_metadata,
-    read_run_metadata,
-    sha256_file,
-    write_run_metadata,
+from mkm.postprocessing.plotting import plot_observation_grid
+from mkm.postprocessing.validation import (
+    plot_heldout_pit_conditions,
+    plot_validation_parameter_posteriors,
+    summarize_validation_posterior_shift,
 )
+from mkm.provenance import build_fit_metadata
 from mkm.workflows.agpd_basic import (
     available_agpd_materials,
     build_agpd_inputs,
@@ -34,11 +24,12 @@ from mkm.workflows.agpd_fit import (
     all_parameter_specs,
     build_agpd_fit_model,
     build_fit_mechanism,
+    resolved_parameterization_metadata,
     resolve_agpd_fit_specification,
 )
 from mkm.workflows.agpd_posterior import (
-    RUN_STATUS_COMPLETE,
-    RUN_STATUS_SAMPLED,
+    load_agpd_posterior_run,
+    validate_agpd_run_metadata,
 )
 from mkm.workflows.agpd_validation import (
     build_mechanism_prediction_model,
@@ -47,6 +38,11 @@ from mkm.workflows.agpd_validation import (
     split_agpd_lomo,
     validate_heldout_error_support,
     validate_validation_error_structure,
+)
+from mkm.workflows.posterior_lifecycle import (
+    RUN_STATUS_COMPLETE,
+    RUN_STATUS_SAMPLED,
+    run_posterior_lifecycle,
 )
 
 
@@ -119,53 +115,6 @@ def _build_tables(selected):
     )
 
 
-def _validation_metadata_matches(
-    metadata,
-    paths,
-    specification,
-    args,
-    train_materials,
-):
-    expected = {
-        "status": (RUN_STATUS_SAMPLED, RUN_STATUS_COMPLETE),
-        "fit_scope": "all_materials",
-        "materials": list(train_materials),
-        "model": specification.model_name,
-        "likelihood": "rate_normal",
-        "error_structure": specification.error_structure,
-        "parameterization": specification.parameterization,
-        "prior_material": specification.prior_material,
-        "validation_scheme": args.scheme,
-        "holdout_material": args.holdout_material,
-        "holdout_koh_M": args.koh_M,
-        "holdout_co_mole_fraction": args.co_mole_fraction,
-    }
-    mismatches = {}
-    for key, value in expected.items():
-        stored = metadata.get(key)
-        if key == "status":
-            if stored not in value:
-                mismatches[key] = (stored, value)
-        elif stored != value:
-            mismatches[key] = (stored, value)
-
-    input_metadata = metadata.get("inputs", {})
-    current_hashes = {
-        "data_sha256": sha256_file(paths.agpd_selected_path),
-        "model_config_sha256": sha256_file(paths.agpd_model_config_path),
-    }
-    for key, value in current_hashes.items():
-        if input_metadata.get(key) != value:
-            mismatches[f"inputs.{key}"] = (input_metadata.get(key), value)
-
-    if mismatches:
-        details = "; ".join(
-            f"{key}: stored={stored!r}, expected={expected_value!r}"
-            for key, (stored, expected_value) in mismatches.items()
-        )
-        raise ValueError(f"Validation checkpoint does not match this request: {details}")
-
-
 def _composition_extrapolation(train_inputs, heldout_inputs, config):
     composition = config["surface_composition"]
     train_x = np.asarray(
@@ -201,13 +150,20 @@ def main():
             f"Configured materials: {materials}."
         )
 
+    source_run = load_agpd_posterior_run(
+        paths,
+        config,
+        specification,
+        reconstruct_pointwise=False,
+        progressbar=False,
+    )
+
     selected = load_agpd_selected_materials(paths, materials)
     train_selected, heldout_selected = _split_selected(selected, args)
     train_data = _build_tables(train_selected)
     heldout_data = _build_tables(heldout_selected)
 
     train_fit = build_agpd_fit_model(specification, train_data, config)
-    train_built = train_fit.built_model
     heldout_inputs = build_agpd_inputs(heldout_data)
     validate_heldout_error_support(
         specification.error_structure,
@@ -234,48 +190,14 @@ def main():
         koh_M=args.koh_M,
         co_mole_fraction=args.co_mole_fraction,
     )
-    posterior_path = output_dir / "posterior.nc"
-    metadata_path = output_dir / "run_metadata.yaml"
+    sampler = _sampler_settings(args)
+    composition_extrapolation = _composition_extrapolation(
+        train_fit.inputs,
+        heldout_inputs,
+        config,
+    )
 
-    if args.overwrite and output_dir.exists():
-        rmtree(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    sampling_seconds = None
-    if args.resume:
-        if not posterior_path.exists():
-            raise FileNotFoundError(f"Validation checkpoint not found: {posterior_path}")
-        metadata = read_run_metadata(metadata_path)
-        _validation_metadata_matches(
-            metadata,
-            paths,
-            specification,
-            args,
-            train_fit.inputs.materials,
-        )
-        inference_data = load_inference_data(posterior_path)
-    else:
-        if posterior_path.exists():
-            raise FileExistsError(
-                f"Validation posterior already exists: {posterior_path}. "
-                "Use --resume or --overwrite."
-            )
-        start = perf_counter()
-        inference_data = sample_posterior(
-            train_built,
-            draws=args.draws,
-            tune=args.tune,
-            chains=args.chains,
-            cores=args.cores,
-            target_accept=args.target_accept,
-            random_seed=args.random_seed,
-            nuts_sampler=args.nuts_sampler,
-            backend=args.backend,
-            compute_convergence_checks=False,
-        )
-        sampling_seconds = perf_counter() - start
-        write_inference_data(inference_data, posterior_path)
-
+    def metadata_factory():
         metadata = build_fit_metadata(
             root=paths.root,
             fit_scope="all_materials",
@@ -284,93 +206,70 @@ def main():
             error_structure=specification.error_structure,
             data_path=paths.agpd_selected_path,
             model_config_path=paths.agpd_model_config_path,
-            sampler=_sampler_settings(args),
+            sampler=sampler,
             parameterization=specification.parameterization,
+            parameterization_specification=resolved_parameterization_metadata(
+                specification,
+                config,
+            ),
             prior_material=specification.prior_material,
         )
         metadata.update(
             {
-                "status": RUN_STATUS_SAMPLED,
                 "validation_scheme": args.scheme,
                 "holdout_material": args.holdout_material,
                 "holdout_koh_M": args.koh_M,
                 "holdout_co_mole_fraction": args.co_mole_fraction,
                 "n_training_observations": len(train_data.observations),
                 "n_heldout_observations": len(heldout_data.observations),
-                "composition_extrapolation": _composition_extrapolation(
-                    train_fit.inputs,
-                    heldout_inputs,
-                    config,
-                ),
+                "composition_extrapolation": composition_extrapolation,
             }
         )
-        write_run_metadata(metadata, metadata_path)
+        return metadata
 
-    free_names = tuple(variable.name for variable in train_built.model.free_RVs)
-    missing = [name for name in free_names if name not in inference_data.posterior]
-    if missing:
-        raise ValueError(f"Validation checkpoint is missing fitted variables: {missing}")
+    def checkpoint_validator(metadata):
+        validate_agpd_run_metadata(
+            metadata,
+            paths,
+            specification,
+            train_fit.inputs.materials,
+            config,
+            allowed_statuses=(RUN_STATUS_SAMPLED, RUN_STATUS_COMPLETE),
+        )
+        expected = {
+            "validation_scheme": args.scheme,
+            "holdout_material": args.holdout_material,
+            "holdout_koh_M": args.koh_M,
+            "holdout_co_mole_fraction": args.co_mole_fraction,
+        }
+        mismatches = {
+            key: (metadata.get(key), value)
+            for key, value in expected.items()
+            if metadata.get(key) != value
+        }
+        if mismatches:
+            details = "; ".join(
+                f"{key}: stored={stored!r}, expected={expected_value!r}"
+                for key, (stored, expected_value) in mismatches.items()
+            )
+            raise ValueError(
+                f"Validation checkpoint does not match this request: {details}"
+            )
 
-    sampling_health = build_sampling_health(
-        inference_data,
-        parameter_names=free_names,
+    lifecycle = run_posterior_lifecycle(
+        built=train_fit.built_model,
+        output_dir=output_dir,
+        parameter_specs=all_parameter_specs(specification, config),
+        sampler=sampler,
+        resume=args.resume,
+        overwrite=args.overwrite,
+        metadata_factory=metadata_factory,
+        checkpoint_validator=checkpoint_validator,
+        progressbar=True,
     )
-    metadata["sampling_health"] = sampling_health
-    metadata["status"] = RUN_STATUS_SAMPLED
-    write_run_metadata(metadata, metadata_path)
-
-    if "ln_rate_model" not in inference_data.posterior:
-        posterior_for_check = compute_posterior_deterministics(
-            inference_data,
-            train_built,
-            var_names=["ln_rate_model"],
-            backend=args.backend,
-            progressbar=True,
-        )
-    else:
-        posterior_for_check = inference_data.posterior
-
-    if not np.all(
-        np.isfinite(np.asarray(posterior_for_check["ln_rate_model"], dtype=float))
-    ):
-        raise RuntimeError(
-            'Validation posterior deterministic "ln_rate_model" contains '
-            "non-finite values."
-        )
-
-    inference_data.posterior = posterior_for_check
-    if (
-        not hasattr(inference_data, "log_likelihood")
-        or "rate_observed" not in inference_data.log_likelihood
-    ):
-        inference_data = add_log_likelihood(
-            inference_data,
-            train_built,
-            backend=args.backend,
-            progressbar=True,
-        )
-
-    log_likelihood = np.asarray(
-        inference_data.log_likelihood["rate_observed"],
-        dtype=float,
-    )
-    if not np.all(np.isfinite(log_likelihood)):
-        raise RuntimeError(
-            'Validation posterior log likelihood "rate_observed" contains '
-            "non-finite values."
-        )
-
-    inference_data.posterior = inference_data.posterior[list(free_names)]
-    write_inference_data(inference_data, posterior_path)
-
-    parameter_summary = build_posterior_parameter_summary(
-        inference_data,
-        all_parameter_specs(specification, config),
-    )
-    parameter_summary.to_csv(output_dir / "posterior_parameters.csv", index=False)
 
     heldout = compute_heldout_rate_predictions(
-        inference_data,
+        lifecycle.inference_data,
         prediction_model,
         heldout_data,
         heldout_inputs,
@@ -385,14 +284,65 @@ def main():
     )
     heldout.summary.to_csv(output_dir / "validation_summary.csv", index=False)
 
-    metadata["status"] = RUN_STATUS_COMPLETE
-    metadata["stored_posterior_variables"] = list(inference_data.posterior.data_vars)
-    write_run_metadata(metadata, metadata_path)
+    parameter_specs = all_parameter_specs(specification, config)
+    posterior_shift = summarize_validation_posterior_shift(
+        source_run.inference_data,
+        lifecycle.inference_data,
+        parameter_specs,
+    )
+    posterior_shift.to_csv(output_dir / "posterior_shift.csv", index=False)
 
-    if sampling_seconds is not None:
-        print(f"Sampling wall time: {sampling_seconds:.2f} s")
+    figures_dir = output_dir / "figures"
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    context_label = (
+        f"{args.scheme.upper()} {args.holdout_material}"
+        if args.scheme == "lomo"
+        else (
+            f"LOCO {args.holdout_material}, "
+            f"{args.koh_M:g} M KOH, {100 * args.co_mole_fraction:g}% CO"
+        )
+    )
+    plot_validation_parameter_posteriors(
+        source_run.inference_data,
+        lifecycle.inference_data,
+        parameter_specs,
+        figures_dir / "posterior_vs_full.png",
+        context_label=context_label,
+    )
+
+    plot_frame = heldout.pointwise.copy()
+    plot_frame["residual"] = plot_frame["model_residual"]
+    plot_observation_grid(
+        plot_frame,
+        figures_dir / "heldout_rates_model.png",
+        distribution="model",
+        y_scale="log",
+        context_label=context_label,
+    )
+    plot_observation_grid(
+        plot_frame,
+        figures_dir / "heldout_rates_predictive.png",
+        distribution="predictive",
+        y_scale="linear",
+        context_label=context_label,
+    )
+    plot_observation_grid(
+        plot_frame,
+        figures_dir / "heldout_residuals.png",
+        residual=True,
+        y_scale="linear",
+        context_label=context_label,
+    )
+    plot_heldout_pit_conditions(
+        plot_frame,
+        figures_dir / "heldout_pit_conditions.png",
+        context_label=context_label,
+    )
+
+    if lifecycle.sampling_seconds is not None:
+        print(f"Sampling wall time: {lifecycle.sampling_seconds:.2f} s")
     print(heldout.summary.to_string(index=False))
-    print(f"Composition extrapolation: {metadata['composition_extrapolation']}")
+    print(f"Composition extrapolation: {composition_extrapolation}")
     print(f"Validation products saved to: {output_dir}")
 
 

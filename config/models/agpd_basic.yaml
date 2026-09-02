@@ -42,35 +42,207 @@ composition_parameterizations:
       CO_BF_ER_LH:
         slopes: {}
 
+  linear_selected_energies:
+    x_reference: 0.50
+    models:
+      CO_BF_ER_LH:
+        slopes:
+          deltaG1_0: &slope_deltaG1
+            distribution: normal
+            mu: 0.0
+            sigma: 0.10
+          deltaG4_0: &slope_deltaG4
+            distribution: normal
+            mu: 0.0
+            sigma: 0.10
+          deltaG5_0: &slope_deltaG5
+            distribution: truncated_normal
+            mu: 0.0
+            sigma: 0.10
+            lower: -0.20
+            upper: 0.40
+          Gact2_BF_0: &slope_Gact2_BF
+            distribution: truncated_normal
+            mu: 0.0
+            sigma: 0.10
+            lower: -0.20
+            upper: 0.40
+          Gact2_ER_0: &slope_Gact2_ER
+            distribution: normal
+            mu: 0.0
+            sigma: 0.10
+
+  linear_energies:
+      x_reference: 0.50
+      models:
+        CO_BF_ER_LH:
+          slopes:
+            deltaG1_0:
+              distribution: truncated_normal
+              mu: 0.0
+              sigma: 0.05
+              lower: -0.40
+              upper: 0.40
+            deltaG4_0:
+              distribution: truncated_normal
+              mu: 0.0
+              sigma: 0.05
+              lower: -0.40
+              upper: 0.40
+            deltaG5_0:
+              distribution: truncated_normal
+              mu: 0.0
+              sigma: 0.05
+              lower: -0.15
+              upper: 0.15
+            Gact1_0:
+              distribution: truncated_normal
+              mu: 0.0
+              sigma: 0.10
+              lower: -0.40
+              upper: 0.40
+            Gact2_BF_0:
+              distribution: truncated_normal
+              mu: 0.0
+              sigma: 0.05
+              lower: -0.40
+              upper: 0.40
+            Gact2_ER_0:
+              distribution: truncated_normal
+              mu: 0.0
+              sigma: 0.05
+              lower: -0.40
+              upper: 0.40
+            Gact2_LH_0:
+              distribution: truncated_normal
+              mu: 0.0
+              sigma: 0.05
+              lower: -0.40
+              upper: 0.40
+
   linear_xAg:
     x_reference: 0.50
     models:
       CO_BF_ER_LH:
         slopes:
           deltaG1_0:
-            distribution: normal
+            distribution: truncated_normal 
             mu: 0.0
-            sigma: 0.10
+            sigma: 1
+            lower: 0 # Ensemble effects, reducing binding strength of CO with increasing Ag content
+            upper: 1 
           deltaG4_0:
-            distribution: normal
+            distribution: truncated_normal
             mu: 0.0
-            sigma: 0.10
+            sigma: 1
+            lower: -1
+            upper: 1
           deltaG5_0:
             distribution: truncated_normal
             mu: 0.0
-            sigma: 0.10
-            lower: -0.20
+            sigma: 1
+            lower: -1
+            upper: 1
+          Gact1_0: # Activation energy of CO binding on Pd should not be a function of surface composition
+            distribution: truncated_normal
+            mu: 0.0
+            sigma: 1
+            lower: -1e-4
+            upper: 1e-4
+          Gact2_BF_0: # Large amount of change allowed in BF activation energy 
+            distribution: truncated_normal
+            mu: 0.0
+            sigma: 1
+            lower: -0.40
             upper: 0.40
-          Gact2_BF_0:
+          Gact2_ER_0: # Large amount of change allowed in ER activation energy (but if CO binds weaker, ER activation energy should decrease)
+            distribution: truncated_normal
+            mu: 0.0
+            sigma: 1
+            lower: -0.40
+            upper: 0.40 # Maybe set to 0? 
+          Gact2_LH_0: # Large amount of change allowed in LH activation energy
+            distribution: truncated_normal
+            mu: 0.0
+            sigma: 1
+            lower: -0.40
+            upper: 0.40
+          beta_2_BF: # Allowed to change 
+            distribution: truncated_normal
+            mu: 0.0
+            sigma: 1
+            lower: -1
+            upper: 1
+          beta_2_ER: # Allowed to change
+            distribution: truncated_normal
+            mu: 0.0
+            sigma: 1
+            lower: -1
+            upper: 1
+          q: # Allowed to change
+            distribution: truncated_normal
+            mu: 0.0
+            sigma: 1
+            lower: -1
+            upper: 1
+
+  linear_dG1:
+    x_reference: 0.50
+    models:
+      CO_BF_ER_LH:
+        slopes:
+          deltaG1_0: *slope_deltaG1
+
+  linear_dG4:
+    x_reference: 0.50
+    models:
+      CO_BF_ER_LH:
+        slopes:
+          deltaG4_0: *slope_deltaG4
+
+  linear_dG5:
+    x_reference: 0.50
+    models:
+      CO_BF_ER_LH:
+        slopes:
+          deltaG5_0: *slope_deltaG5
+
+  linear_thermo:
+    x_reference: 0.50
+    models:
+      CO_BF_ER_LH:
+        slopes:
+          deltaG1_0: *slope_deltaG1
+          deltaG4_0: *slope_deltaG4
+          deltaG5_0: *slope_deltaG5
+
+  linear_GactBF:
+    x_reference: 0.50
+    models:
+      CO_BF_ER_LH:
+        slopes:
+          Gact2_BF_0: *slope_Gact2_BF
+
+  linear_GactER:
+    x_reference: 0.50
+    models:
+      CO_BF_ER_LH:
+        slopes:
+          Gact2_ER_0: *slope_Gact2_ER
+
+  linear_oxidation_barriers:
+    x_reference: 0.50
+    models:
+      CO_BF_ER_LH:
+        slopes:
+          Gact2_BF_0: *slope_Gact2_BF
+          Gact2_ER_0: *slope_Gact2_ER
+          Gact2_LH_0:
             distribution: truncated_normal
             mu: 0.0
             sigma: 0.10
             lower: -0.20
             upper: 0.40
-          Gact2_ER_0:
-            distribution: normal
-            mu: 0.0
-            sigma: 0.10
 
 likelihood:
   name: rate_normal
@@ -114,6 +286,42 @@ prior_profiles:
           sigma: 0.2
           lower: 0.0
 
+    CO_ER_LH:
+      provenance: legacy_tuned_for_multimodality
+      parameters:
+        deltaG1_0:
+          distribution: truncated_normal
+          mu: -0.4
+          sigma: 0.2
+          lower: -0.4
+          upper: 0.0
+        deltaG4_0:
+          distribution: normal
+          mu: 0.0
+          sigma: 0.2
+        beta_2_ER:
+          distribution: uniform
+          lower: 0.0
+          upper: 1.0
+        Gact1_0:
+          distribution: truncated_normal
+          mu: 0.7
+          sigma: 0.2
+          lower: 0.0
+          upper: 1.0
+        Gact2_ER_0:
+          distribution: truncated_normal
+          mu: 0.7
+          sigma: 0.2
+          lower: 0.5
+          upper: 0.8
+        Gact2_LH_0:
+          distribution: truncated_normal
+          mu: 0.7
+          sigma: 0.2
+          lower: 0.5
+          upper: 1.0
+
     BF_LH: &legacy_bf_lh_prior
       provenance: legacy_tuned_for_multimodality
       parameters:
@@ -153,6 +361,76 @@ prior_profiles:
       parameters:
         deltaG1_0:
           distribution: truncated_normal
+          mu: 0.0
+          sigma: 2
+          lower: -2
+          upper: 1
+        deltaG4_0:
+          distribution: truncated_normal
+          mu: 0.0
+          sigma: 2
+          lower: -2
+          upper: 2
+        deltaG5_0:
+          distribution: truncated_normal
+          mu: 0.0
+          sigma: 2
+          lower: -2
+          upper: 2
+        beta_2_BF: # Bounded between 0 and 1
+          distribution: truncated_normal
+          mu: 0.5
+          sigma: 1
+          lower: 0.0
+          upper: 1.0
+        beta_2_ER: # Bounded between 0 and 1 
+          distribution: truncated_normal
+          mu: 0.5
+          sigma: 1
+          lower: 0.0
+          upper: 1.0
+        q: # Bounded between 0 and 1 
+          distribution: truncated_normal
+          mu: 0.5
+          sigma: 1
+          lower: 0.0
+          upper: 1.0
+        Gact1_0:
+          distribution: truncated_normal
+          mu: 0.5
+          sigma: 1
+          lower: 0.0 # Preventing values smaller than 0
+          upper: 1.0 # High enough for ~0 reaction rate
+        Gact2_BF_0:
+          distribution: truncated_normal
+          mu: 0.7
+          sigma: 1
+          lower: 0.0 # Preventing values smaller than 0
+          upper: 1.0 # High enough for ~0 reaction rate
+        Gact2_ER_0:
+          distribution: truncated_normal
+          mu: 0.7
+          sigma: 1
+          lower: 0.0 # Preventing values smaller than 0
+          upper: 1.0 # High enough for ~0 reaction rate
+        Gact2_LH_0:
+          distribution: truncated_normal
+          mu: 0.7
+          sigma: 1
+          lower: 0.0 # Preventing values smaller than 0 
+          upper: 1.0 # High enough for ~0 reaction rate 
+
+  Ag25Pd75: *legacy_alloy_prior_profile
+  Ag50Pd50: *legacy_alloy_prior_profile
+  Ag75Pd25: *legacy_alloy_prior_profile
+  Ag90Pd10: *legacy_alloy_prior_profile
+
+  Pd100:
+    CO_ER_LH:
+      provenance: legacy_tuned_for_multimodality
+      parameters:
+        deltaG1_0:
+          distribution: truncated_normal
           mu: -0.4
           sigma: 0.2
           lower: -0.4
@@ -161,19 +439,7 @@ prior_profiles:
           distribution: normal
           mu: 0.0
           sigma: 0.2
-        deltaG5_0:
-          distribution: normal
-          mu: 0.0
-          sigma: 0.2
-        beta_2_BF:
-          distribution: uniform
-          lower: 0.0
-          upper: 0.1
         beta_2_ER:
-          distribution: uniform
-          lower: 0.0
-          upper: 1.0
-        q:
           distribution: uniform
           lower: 0.0
           upper: 1.0
@@ -182,12 +448,6 @@ prior_profiles:
           mu: 0.7
           sigma: 0.2
           lower: 0.0
-          upper: 1.0
-        Gact2_BF_0:
-          distribution: truncated_normal
-          mu: 0.7
-          sigma: 0.2
-          lower: 0.5
           upper: 1.0
         Gact2_ER_0:
           distribution: truncated_normal
@@ -202,11 +462,5 @@ prior_profiles:
           lower: 0.5
           upper: 1.0
 
-  Ag25Pd75: *legacy_alloy_prior_profile
-  Ag50Pd50: *legacy_alloy_prior_profile
-  Ag75Pd25: *legacy_alloy_prior_profile
-  Ag90Pd10: *legacy_alloy_prior_profile
-
-  Pd100:
     BF_LH: *legacy_bf_lh_prior
     CO_BF_ER_LH: *legacy_co_bf_er_lh_prior

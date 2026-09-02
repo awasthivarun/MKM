@@ -74,6 +74,7 @@ def build_fit_metadata(
     model_config_path: str | Path,
     sampler: dict,
     parameterization: str | None = None,
+    parameterization_specification: dict | None = None,
     prior_material: str | None = None,
     sampling_health: dict | None = None,
 ):
@@ -90,6 +91,14 @@ def build_fit_metadata(
         raise ValueError("Individual fit metadata must contain exactly one material.")
     if fit_scope == "all_materials" and parameterization is None:
         raise ValueError("All-material fit metadata require a parameterization.")
+    if fit_scope == "all_materials" and parameterization_specification is None:
+        raise ValueError(
+            "All-material fit metadata require the resolved parameterization specification."
+        )
+    if fit_scope == "individual" and parameterization_specification is not None:
+        raise ValueError(
+            "Individual fit metadata must not contain a composition parameterization specification."
+        )
 
     return {
         "created_utc": datetime.now(timezone.utc).isoformat(),
@@ -102,6 +111,7 @@ def build_fit_metadata(
         "likelihood": "rate_normal",
         "error_structure": error_structure,
         "parameterization": parameterization,
+        "parameterization_specification": parameterization_specification,
         "prior_material": prior_material,
         "inputs": {
             "data_path": str(data_path.relative_to(root)),

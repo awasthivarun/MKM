@@ -213,3 +213,46 @@ def test_linear_xag_transition_state_drc_uses_effective_pointwise_barriers():
     assert bf["median"].nunique() == 2
     assert result.draws.attrs["parameterization"] == "linear_xAg"
     assert result.draws.attrs["x_reference"] == pytest.approx(0.5)
+
+
+def test_pure_pd_co_er_lh_transition_state_drcs_sum_to_one():
+    material = "Pd100"
+    config = {
+        **CONFIG,
+        "surface_composition": {
+            material: {"Ag_fraction": 0.0, "Pd_fraction": 1.0},
+        },
+    }
+    point_inputs = ModelPointInputs(
+        materials=(material,),
+        material_index=np.array([0, 0], dtype=np.int64),
+        E_V_SHE=np.array([0.30, 0.45]),
+        ln_electrolyte_concentration=np.log(np.array([0.5, 1.0])),
+        ln_CO_mole_fraction=np.log(np.array([0.01, 0.10])),
+    )
+    model_points = _model_points().copy()
+    model_points["material"] = material
+    idata = _idata(
+        {
+            "deltaG1_0": [-0.12, -0.13],
+            "deltaG4_0": [0.11, 0.12],
+            "beta_2_ER": [0.20, 0.25],
+            "Gact1_0": [0.58, 0.60],
+            "Gact2_ER_0": [0.70, 0.72],
+            "Gact2_LH_0": [0.76, 0.78],
+        }
+    )
+
+    result = compute_transition_state_drc(
+        inference_data=idata,
+        model_name="CO_ER_LH",
+        point_inputs=point_inputs,
+        model_points=model_points,
+        config=config,
+        step_eV=1e-4,
+    )
+
+    summed = result.draws["X_TS"].sum("control").values
+    np.testing.assert_allclose(summed, 1.0, rtol=0, atol=2e-6)
+    assert set(result.summary["control"]) == {"CO_adsorption", "ER", "LH"}
+    assert result.checks.loc[0, "max_abs_sum_error"] < 2e-6

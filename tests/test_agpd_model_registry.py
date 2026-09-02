@@ -1,10 +1,12 @@
 from copy import deepcopy
+from dataclasses import fields
 
 import numpy as np
 import pymc as pm
 import pytest
 import yaml
 
+from mkm.mechanisms.pd_basic import PdCOERLHParameters
 from mkm.model_inputs import ModelPointInputs
 from mkm.models.agpd_basic import (
     available_agpd_all_material_models,
@@ -15,6 +17,7 @@ from mkm.models.agpd_basic import (
     get_agpd_all_material_parameter_specs,
     get_agpd_model_definition,
     get_agpd_parameterization,
+    get_agpd_parameterization_metadata,
 )
 
 
@@ -33,11 +36,22 @@ def _point_inputs(materials):
     )
 
 
-def test_agpd_registry_keeps_all_chemical_mechanisms():
-    assert available_agpd_models() == ("BF", "BF_LH", "CO_BF_ER_LH")
+def test_agpd_registry_keeps_all_chemical_mechanisms_and_reduced_pd_model():
+    assert available_agpd_models() == ("BF", "BF_LH", "CO_BF_ER_LH", "CO_ER_LH")
     assert available_agpd_all_material_models() == ("BF_LH", "CO_BF_ER_LH")
     for name in available_agpd_models():
         assert get_agpd_model_definition(name).parameter_class is not None
+
+    pd_definition = get_agpd_model_definition("CO_ER_LH")
+    assert pd_definition.parameter_class is PdCOERLHParameters
+    assert {field.name for field in fields(PdCOERLHParameters)} == {
+        "deltaG1_0",
+        "deltaG4_0",
+        "beta_2_ER",
+        "Gact1_0",
+        "Gact2_ER_0",
+        "Gact2_LH_0",
+    }
 
 
 def test_parameterization_profiles_are_configuration_driven():
@@ -45,7 +59,29 @@ def test_parameterization_profiles_are_configuration_driven():
     assert available_agpd_parameterizations(config, "BF_LH") == ("shared",)
     assert set(available_agpd_parameterizations(config, "CO_BF_ER_LH")) == {
         "shared",
+        "linear_dG1",
+        "linear_dG4",
+        "linear_dG5",
+        "linear_thermo",
+        "linear_GactBF",
+        "linear_GactER",
+        "linear_oxidation_barriers",
+        "linear_selected_energies",
         "linear_xAg",
+    }
+
+    selected_x_reference, selected_slopes = get_agpd_parameterization(
+        config,
+        "CO_BF_ER_LH",
+        "linear_selected_energies",
+    )
+    assert selected_x_reference == pytest.approx(0.5)
+    assert set(selected_slopes) == {
+        "deltaG1_0",
+        "deltaG4_0",
+        "deltaG5_0",
+        "Gact2_BF_0",
+        "Gact2_ER_0",
     }
 
     x_reference, slopes = get_agpd_parameterization(
@@ -58,12 +94,26 @@ def test_parameterization_profiles_are_configuration_driven():
         "deltaG1_0",
         "deltaG4_0",
         "deltaG5_0",
+        "beta_2_BF",
+        "beta_2_ER",
+        "q",
+        "Gact1_0",
         "Gact2_BF_0",
         "Gact2_ER_0",
+        "Gact2_LH_0",
     }
 
+    metadata = get_agpd_parameterization_metadata(
+        config,
+        "CO_BF_ER_LH",
+        "linear_xAg",
+    )
+    assert metadata["name"] == "linear_xAg"
+    assert metadata["x_reference"] == pytest.approx(0.5)
+    assert metadata["slopes"] == slopes
 
-def test_arbitrary_parameter_subset_can_receive_xag_slopes():
+
+def test_arbitrary_parameter_subset_can_receive_xag_slopes_without_domain_enforcement():
     config = deepcopy(_config())
     config["composition_parameterizations"]["linear_beta_er"] = {
         "x_reference": 0.5,
@@ -104,6 +154,45 @@ def test_arbitrary_parameter_subset_can_receive_xag_slopes():
 
     assert result.ln_rate.ndim == 1
     assert "beta_2_ER_xAg_slope" in {variable.name for variable in model.free_RVs}
+
+
+def test_prediction_only_full_model_accepts_pure_pd_state():
+    config = _config()
+    mechanism = build_agpd_all_material_mechanism(
+        "CO_BF_ER_LH",
+        ("Pd100",),
+        config,
+        prior_material="Ag10Pd90",
+        parameterization="linear_xAg",
+        prediction_only=True,
+    )
+
+    with pm.Model() as model:
+        result = mechanism(_point_inputs(("Pd100",)))
+
+    assert result.ln_rate.ndim == 1
+    assert "rate_fraction_BF" not in result.pointwise
+    assert {"rate_fraction_ER", "rate_fraction_LH"}.issubset(result.pointwise)
+    free_names = {variable.name for variable in model.free_RVs}
+    assert "Gact2_BF_0" in free_names
+    assert "Gact2_BF_0_xAg_slope" in free_names
+
+
+def test_reduced_pd_individual_mechanism_contains_no_bf_parameters():
+    mechanism = build_agpd_mechanism("CO_ER_LH", "Pd100", _config())
+    with pm.Model() as model:
+        result = mechanism(_point_inputs(("Pd100",)))
+
+    free_names = {variable.name for variable in model.free_RVs}
+    assert result.ln_rate.ndim == 1
+    assert free_names == {
+        "deltaG1_0",
+        "deltaG4_0",
+        "beta_2_ER",
+        "Gact1_0",
+        "Gact2_ER_0",
+        "Gact2_LH_0",
+    }
 
 
 def test_individual_mechanism_rejects_different_material_set():

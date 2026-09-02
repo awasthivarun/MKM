@@ -14,6 +14,28 @@ def test_discover_finds_repository_root(tmp_path):
     assert ProjectPaths.discover(nested).root == root
 
 
+def test_preprocessing_paths_are_owned_by_project_paths(tmp_path):
+    paths = ProjectPaths(root=tmp_path)
+
+    assert paths.agpd_raw_dir == tmp_path / "data" / "raw" / "AgPd_COOx_basic"
+    assert paths.agpd_standardized_path == (
+        tmp_path
+        / "data"
+        / "processed"
+        / "AgPd_COOx_basic"
+        / "standardized"
+        / "AgPd_COOx_basic_replicates.parquet"
+    )
+    assert paths.agpd_full_path.name == "AgPd_COOx_basic_full.parquet"
+    assert paths.agpd_truncation_path.name == "AgPd_COOx_basic_truncation.parquet"
+    assert paths.agpd_delta_co_replicates_path.name == (
+        "AgPd_COOx_basic_delta_CO_replicates.parquet"
+    )
+    assert paths.agpd_preprocessing_figure_dir == (
+        tmp_path / "figures" / "preprocessing" / "AgPd_COOx_basic"
+    )
+
+
 def test_individual_posterior_path_is_compact_and_unambiguous(tmp_path):
     paths = ProjectPaths(root=tmp_path)
     result = paths.agpd_posterior_output_dir(
@@ -54,6 +76,17 @@ def test_all_material_path_labels_parameterization_and_error_structure(tmp_path)
     )
 
 
+def test_fit_analysis_directories_stay_inside_source_fit_leaf(tmp_path):
+    paths = ProjectPaths(root=tmp_path)
+    fit_dir = tmp_path / "run"
+
+    assert paths.fit_tables_dir(fit_dir) == fit_dir / "tables"
+    assert paths.fit_figures_dir(fit_dir) == fit_dir / "figures"
+    assert paths.fit_drc_dir(fit_dir) == fit_dir / "drc"
+    assert paths.fit_composition_dir(fit_dir) == fit_dir / "composition"
+    assert paths.fit_validation_dir(fit_dir) == fit_dir / "validation"
+
+
 def test_posterior_reader_requires_single_posterior_file(tmp_path):
     paths = ProjectPaths(root=tmp_path)
     kwargs = {
@@ -91,8 +124,32 @@ def test_validation_paths_distinguish_loco_and_lomo(tmp_path):
         co_mole_fraction=0.1,
     )
 
-    assert lomo.name == "Pd100"
-    assert loco.name == "KOH_0.5_CO_0.1"
+    expected_fit = (
+        tmp_path
+        / "results"
+        / "AgPd_COOx_basic"
+        / "posterior"
+        / "all_materials"
+    )
+    assert lomo == (
+        expected_fit
+        / "shared"
+        / "shared"
+        / "CO_BF_ER_LH"
+        / "validation"
+        / "lomo"
+        / "Pd100"
+    )
+    assert loco == (
+        expected_fit
+        / "linear_xAg"
+        / "material"
+        / "CO_BF_ER_LH"
+        / "validation"
+        / "loco"
+        / "Ag50Pd50"
+        / "KOH_0.5_CO_0.1"
+    )
 
 
 def test_invalid_scope_or_error_structure_is_rejected(tmp_path):

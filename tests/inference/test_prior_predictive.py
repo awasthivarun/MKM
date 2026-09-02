@@ -45,6 +45,22 @@ def test_parameter_summary_labels_material_error_components():
     }
 
 
+
+def test_parameter_summary_preserves_singleton_chain_dimension():
+    prior = xr.Dataset(
+        {
+            "x": (("chain", "draw"), np.array([[1.0, 2.0, 3.0]])),
+        }
+    )
+    result = summarize_prior_parameters(
+        SimpleNamespace(prior=prior),
+        parameter_names=("x",),
+    )
+
+    assert result.loc[0, "parameter"] == "x"
+    assert result.loc[0, "q50"] == 2.0
+
+
 def test_model_point_summary_reports_log_and_linear_rate():
     ln_rate = np.log(np.array([[[1.0, 2.0], [2.0, 4.0]]]))
     prior = xr.Dataset(

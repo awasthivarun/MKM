@@ -1,12 +1,23 @@
+import numpy as np
 import pandas as pd
+import pymc as pm
 import pytest
+import yaml
 
+from mkm.model_inputs import ModelInputArrays
+from mkm.workflows.agpd_fit import build_fit_mechanism, resolve_agpd_fit_specification
 from mkm.workflows.agpd_validation import (
+    build_mechanism_prediction_model,
     split_agpd_loco,
     split_agpd_lomo,
     validate_heldout_error_support,
     validate_validation_error_structure,
 )
+
+
+def _config():
+    with open("config/models/agpd_basic.yaml", "r") as file:
+        return yaml.safe_load(file)
 
 
 def _selected_frame():
@@ -24,6 +35,19 @@ def _selected_frame():
                         }
                     )
     return pd.DataFrame(rows)
+
+
+def _pd100_inputs():
+    return ModelInputArrays(
+        materials=("Pd100",),
+        condition_material_index=np.array([0], dtype=np.int64),
+        condition_ln_electrolyte_concentration=np.log(np.array([0.5])),
+        condition_ln_CO_mole_fraction=np.log(np.array([0.1])),
+        model_point_condition_index=np.array([0], dtype=np.int64),
+        model_point_E_V_SHE=np.array([0.3]),
+        observation_model_point_index=np.array([0], dtype=np.int64),
+        observation_rate=np.array([1.0e-3]),
+    )
 
 
 def test_loco_removes_all_replicates_for_one_condition():
@@ -67,3 +91,29 @@ def test_material_error_requires_every_heldout_material_in_training():
             training_materials=("Ag50Pd50",),
             heldout_materials=("Ag10Pd90",),
         )
+
+
+def test_lomo_prediction_model_can_evaluate_pd100_with_full_co_model():
+    config = _config()
+    specification = resolve_agpd_fit_specification(
+        config,
+        model_name="CO_BF_ER_LH",
+        all_materials=True,
+        parameterization="linear_xAg",
+        error_structure="shared",
+        prior_material="Ag10Pd90",
+    )
+    inputs = _pd100_inputs()
+    mechanism = build_fit_mechanism(
+        specification,
+        inputs,
+        config,
+        prediction_only=True,
+    )
+    prediction_model = build_mechanism_prediction_model(inputs, mechanism)
+
+    assert isinstance(prediction_model, pm.Model)
+    assert "ln_rate_model" in prediction_model.named_vars
+    free_names = {variable.name for variable in prediction_model.free_RVs}
+    assert "Gact2_BF_0" in free_names
+    assert "Gact2_BF_0_xAg_slope" in free_names

@@ -11,6 +11,7 @@ from mkm.models.agpd_basic import (
     build_agpd_all_material_mechanism,
     build_agpd_mechanism,
     get_agpd_all_material_parameter_specs,
+    get_agpd_parameterization_metadata,
     get_agpd_prior_profile,
 )
 from mkm.workflows.agpd_basic import (
@@ -18,6 +19,10 @@ from mkm.workflows.agpd_basic import (
     build_agpd_inputs,
     validate_agpd_material,
 )
+
+
+PURE_PD_MATERIAL = "Pd100"
+PURE_PD_INDIVIDUAL_MODELS = ("CO_ER_LH",)
 
 
 @dataclass(frozen=True)
@@ -106,6 +111,16 @@ def resolve_agpd_fit_specification(
             "Use error_structure='material'."
         )
 
+    if material == PURE_PD_MATERIAL:
+        if model_name not in PURE_PD_INDIVIDUAL_MODELS:
+            raise ValueError(
+                "Individual Pd100 fits must use the reduced Pd-only model 'CO_ER_LH'. "
+                "Full Ag/BF-bearing parameterizations contain structurally inactive "
+                "parameters on pure Pd."
+            )
+    elif model_name == "CO_ER_LH":
+        raise ValueError("CO_ER_LH is reserved for individual Pd100 fits.")
+
     get_agpd_prior_profile(config, material, model_name)
 
     return AgPdFitSpecification(
@@ -160,6 +175,16 @@ def fit_parameter_specs(specification, config):
             specification.material,
             specification.model_name,
         )["parameters"]
+    )
+
+
+def resolved_parameterization_metadata(specification, config):
+    if not specification.is_all_materials:
+        return None
+    return get_agpd_parameterization_metadata(
+        config,
+        specification.model_name,
+        specification.parameterization,
     )
 
 

@@ -12,6 +12,34 @@ from scipy.stats import gaussian_kde, lognorm, norm, truncnorm
 from mkm.postprocessing.sampling import build_sampling_datatree
 
 
+PATHWAY_COLORS = {
+    "CO_adsorption": "#CC79A7",
+    "BF": "#0072B2",
+    "ER": "#D55E00",
+    "LH": "#009E73",
+}
+
+COVERAGE_COLORS = {
+    "theta_CO": "#0072B2",
+    "theta_OH_Pd": "#D55E00",
+    "theta_empty_Pd": "#7F7F7F",
+    "theta_OH_Ag": "#009E73",
+    "theta_empty_Ag": "#7F7F7F",
+}
+
+POINTWISE_LABELS = {
+    "theta_CO": r"$\theta_{\mathrm{CO}}$",
+    "theta_OH_Pd": r"$\theta_{\mathrm{OH,Pd}}$",
+    "theta_empty_Pd": r"$\theta_{*,\mathrm{Pd}}$",
+    "theta_OH_Ag": r"$\theta_{\mathrm{OH,Ag}}$",
+    "theta_empty_Ag": r"$\theta_{*,\mathrm{Ag}}$",
+    "rate_fraction_BF": "BF",
+    "rate_fraction_ER": "ER",
+    "rate_fraction_LH": "LH",
+}
+
+
+
 def _prior_pdf(x, spec):
     distribution = spec["distribution"]
 
@@ -220,22 +248,24 @@ def plot_observation_grid(
                         label="model posterior",
                     )
                 else:
-                    for replicate, curve in condition.groupby("replicate", sort=True):
-                        curve = curve.sort_values("E_V_SHE")
-                        line, = ax.plot(
-                            curve["E_V_SHE"],
-                            curve[median_column],
-                            linewidth=1.5,
-                            label=f"{replicate} predictive",
-                        )
-                        ax.fill_between(
-                            curve["E_V_SHE"],
-                            curve[lower_column],
-                            curve[upper_column],
-                            color=line.get_color(),
-                            alpha=0.10,
-                            linewidth=0,
-                        )
+                    posterior_curve = condition.sort_values("E_V_SHE").drop_duplicates(
+                        "model_point_id"
+                    )
+                    line, = ax.plot(
+                        posterior_curve["E_V_SHE"],
+                        posterior_curve[median_column],
+                        linewidth=1.8,
+                        label="posterior predictive",
+                    )
+                    ax.fill_between(
+                        posterior_curve["E_V_SHE"],
+                        posterior_curve[lower_column],
+                        posterior_curve[upper_column],
+                        color=line.get_color(),
+                        alpha=0.16,
+                        linewidth=0,
+                    )
+                    ax.axhline(0.0, linestyle=":", linewidth=0.8, alpha=0.35)
 
             if not residual and y_scale == "log":
                 ax.set_yscale("log")
@@ -326,6 +356,105 @@ def plot_pointwise_variable(summary, variable_name, output_path: str | Path, con
     plt.close(fig)
 
 
+def plot_pointwise_variables(
+    summary,
+    variable_names,
+    output_path: str | Path,
+    *,
+    title,
+    ylabel,
+    colors=None,
+    labels=None,
+    context_label=None,
+    bounded=True,
+):
+    """Plot several pointwise posterior variables together on the same condition grid."""
+    variable_names = [
+        variable
+        for variable in variable_names
+        if f"{variable}_median" in summary.columns
+    ]
+    if not variable_names:
+        return False
+
+    colors = {} if colors is None else colors
+    labels = {} if labels is None else labels
+    KOH_values = sorted(summary["electrolyte_concentration_M"].unique())
+    CO_values = sorted(summary["CO_mole_fraction"].unique())
+
+    fig, axes = plt.subplots(
+        len(CO_values),
+        len(KOH_values),
+        figsize=(3.4 * len(KOH_values), 2.5 * len(CO_values)),
+        sharex=True,
+        sharey=True,
+        squeeze=False,
+    )
+
+    for row, co_fraction in enumerate(CO_values):
+        for col, c_koh in enumerate(KOH_values):
+            ax = axes[row, col]
+            condition = summary[
+                (summary["electrolyte_concentration_M"] == c_koh)
+                & (summary["CO_mole_fraction"] == co_fraction)
+            ].sort_values("E_V_SHE")
+
+            for variable in variable_names:
+                median_column = f"{variable}_median"
+                lower_column = f"{variable}_hdi95_lower"
+                upper_column = f"{variable}_hdi95_upper"
+                if not all(
+                    column in condition.columns
+                    for column in (median_column, lower_column, upper_column)
+                ):
+                    continue
+
+                color = colors.get(variable)
+                label = labels.get(variable, variable)
+                line, = ax.plot(
+                    condition["E_V_SHE"],
+                    condition[median_column],
+                    linewidth=1.8,
+                    color=color,
+                    label=label,
+                )
+                ax.fill_between(
+                    condition["E_V_SHE"],
+                    condition[lower_column],
+                    condition[upper_column],
+                    color=line.get_color(),
+                    alpha=0.14,
+                    linewidth=0,
+                )
+
+            if bounded:
+                ax.set_ylim(-0.02, 1.02)
+            if row == 0:
+                ax.set_title(f"{c_koh:g} M KOH")
+            if col == len(KOH_values) - 1:
+                ax.text(
+                    1.04,
+                    0.5,
+                    f"{100 * co_fraction:g}% CO",
+                    transform=ax.transAxes,
+                    rotation=-90,
+                    va="center",
+                )
+            ax.grid(alpha=0.20)
+
+    axes[0, 0].legend(fontsize=8)
+    prefix = f"{context_label}: " if context_label else ""
+    fig.suptitle(f"{prefix}{title}")
+    fig.supxlabel("Potential (V vs SHE)")
+    fig.supylabel(ylabel)
+    fig.tight_layout(rect=(0.04, 0.04, 0.96, 0.97))
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=220, bbox_inches="tight")
+    plt.close(fig)
+    return True
+
+
 def plot_sampling_trace(inference_data, parameter_names, output_path: str | Path):
     data = build_sampling_datatree(inference_data, parameter_names)
     plotted_names = list(data.posterior.data_vars)
@@ -401,7 +530,7 @@ def plot_sampling_pairs(inference_data, parameter_names, output_path: str | Path
     with azb.rc_context({"plot.max_subplots": max(40, n_parameters**2)}):
         pm = azp.plot_pair(
             data,
-            var_names=parameter_names,
+            var_names=list(parameter_names),
             group="posterior",
             marginal=True,
             marginal_kind="kde",
@@ -420,80 +549,173 @@ def plot_sampling_pairs(inference_data, parameter_names, output_path: str | Path
     pm.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close("all")
 
-def plot_alpha_comparison(comparison, output_dir: str | Path, material):
-    for c_koh, koh_data in comparison.groupby("C_KOH_M", sort=True):
-        fig, axes = plt.subplots(2, 2, figsize=(10, 8), sharex=True)
-        axes = axes.ravel()
+def plot_alpha_comparison(comparison, output_path: str | Path, material):
+    """Plot alpha for all KOH/CO conditions in one 4 x 3-style grid."""
+    koh_values = sorted(comparison["C_KOH_M"].unique())
+    co_values = sorted(comparison["CO_mole_fraction"].unique())
+    fig, axes = plt.subplots(
+        len(co_values),
+        len(koh_values),
+        figsize=(3.8 * len(koh_values), 2.7 * len(co_values)),
+        sharex=True,
+        sharey=True,
+        squeeze=False,
+    )
 
-        for ax, (co_fraction, data) in zip(axes, koh_data.groupby("CO_mole_fraction", sort=True)):
-            data = data.sort_values("E_V_SHE")
-            ax.fill_between(data["E_V_SHE"], data["hdi95_lower"], data["hdi95_upper"], alpha=0.20, linewidth=0)
-            ax.plot(data["E_V_SHE"], data["median"], linewidth=1.5, label="posterior")
-            ax.errorbar(
-                data["E_V_SHE"], data["alpha_mean"], yerr=data["alpha_sd"], fmt="o",
-                markersize=3, linewidth=0.8, label="experiment",
-            )
-            ax.set_title(f"CO = {100 * co_fraction:g}%")
-            ax.set_ylabel(r"$\alpha$")
+    for row, co_fraction in enumerate(co_values):
+        for col, c_koh in enumerate(koh_values):
+            ax = axes[row, col]
+            data = comparison[
+                (comparison["C_KOH_M"] == c_koh)
+                & (comparison["CO_mole_fraction"] == co_fraction)
+            ].sort_values("E_V_SHE")
+
+            if not data.empty:
+                ax.fill_between(
+                    data["E_V_SHE"],
+                    data["hdi95_lower"],
+                    data["hdi95_upper"],
+                    alpha=0.20,
+                    linewidth=0,
+                )
+                ax.plot(data["E_V_SHE"], data["median"], linewidth=1.5, label="posterior")
+                ax.errorbar(
+                    data["E_V_SHE"],
+                    data["alpha_mean"],
+                    yerr=data["alpha_sd"],
+                    fmt="o",
+                    markersize=3,
+                    linewidth=0.8,
+                    label="experiment",
+                )
+
+            if row == 0:
+                ax.set_title(f"{c_koh:g} M KOH")
+            if col == len(koh_values) - 1:
+                ax.text(
+                    1.04,
+                    0.5,
+                    f"{100 * co_fraction:g}% CO",
+                    transform=ax.transAxes,
+                    rotation=-90,
+                    va="center",
+                )
             ax.grid(alpha=0.20)
 
-        axes[-2].set_xlabel("Potential (V vs SHE)")
-        axes[-1].set_xlabel("Potential (V vs SHE)")
-        axes[0].legend()
-        fig.suptitle(f"{material}, {c_koh:g} M KOH")
-        fig.tight_layout()
-        fig.savefig(Path(output_dir) / f"alpha_KOH_{c_koh:g}.png", dpi=220, bbox_inches="tight")
-        plt.close(fig)
-
+    axes[0, 0].legend()
+    fig.supxlabel("Potential (V vs SHE)")
+    fig.supylabel(r"$\alpha$")
+    fig.suptitle(f"{material}: transfer coefficient")
+    fig.tight_layout(rect=(0.04, 0.04, 0.96, 0.97))
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=220, bbox_inches="tight")
+    plt.close(fig)
 
 def plot_delta_oh_comparison(comparison, output_path: str | Path, material):
-    fig, axes = plt.subplots(2, 2, figsize=(10, 8), sharex=True)
-    axes = axes.ravel()
+    """Plot OH reaction order as one vertical row per CO fraction."""
+    co_values = sorted(comparison["CO_mole_fraction"].unique())
+    fig, axes = plt.subplots(
+        len(co_values),
+        1,
+        figsize=(8.0, 2.5 * len(co_values)),
+        sharex=True,
+        sharey=True,
+        squeeze=False,
+    )
 
-    for ax, (co_fraction, data) in zip(axes, comparison.groupby("CO_mole_fraction", sort=True)):
-        data = data.sort_values("E_V_SHE")
-        ax.fill_between(data["E_V_SHE"], data["hdi95_lower"], data["hdi95_upper"], alpha=0.20, linewidth=0)
+    for row, co_fraction in enumerate(co_values):
+        ax = axes[row, 0]
+        data = comparison.loc[
+            comparison["CO_mole_fraction"] == co_fraction
+        ].sort_values("E_V_SHE")
+        ax.fill_between(
+            data["E_V_SHE"], data["hdi95_lower"], data["hdi95_upper"], alpha=0.20, linewidth=0
+        )
         ax.plot(data["E_V_SHE"], data["median"], linewidth=1.5, label="posterior")
         ax.errorbar(
             data["E_V_SHE"], data["delta_OH"], yerr=data["delta_OH_sd"], fmt="o",
             markersize=3, linewidth=0.8, label="experiment",
         )
-        ax.set_title(f"CO = {100 * co_fraction:g}%")
-        ax.set_ylabel(r"$\delta_{\mathrm{OH}}$")
+        ax.text(
+            1.01,
+            0.5,
+            f"{100 * co_fraction:g}% CO",
+            transform=ax.transAxes,
+            va="center",
+        )
         ax.grid(alpha=0.20)
 
-    axes[-2].set_xlabel("Potential (V vs SHE)")
-    axes[-1].set_xlabel("Potential (V vs SHE)")
-    axes[0].legend()
-    fig.suptitle(material)
-    fig.tight_layout()
+    axes[0, 0].legend()
+    fig.supxlabel("Potential (V vs SHE)")
+    fig.supylabel(r"$\delta_{\mathrm{OH}}$")
+    fig.suptitle(f"{material}: OH reaction order")
+    fig.tight_layout(rect=(0.06, 0.04, 0.94, 0.97))
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close(fig)
 
+def plot_delta_co_comparison(comparison, output_path: str | Path, material):
+    """Plot adjacent CO reaction orders as CO-interval rows by KOH columns."""
+    koh_values = sorted(comparison["C_KOH_M"].unique())
+    intervals = (
+        comparison[["CO_lower_mole_fraction", "CO_upper_mole_fraction"]]
+        .drop_duplicates()
+        .sort_values(["CO_lower_mole_fraction", "CO_upper_mole_fraction"])
+    )
+    interval_values = list(intervals.itertuples(index=False, name=None))
 
-def plot_delta_co_comparison(comparison, output_dir: str | Path, material):
-    for c_koh, koh_data in comparison.groupby("C_KOH_M", sort=True):
-        fig, axes = plt.subplots(1, 3, figsize=(12, 4), sharex=True)
+    fig, axes = plt.subplots(
+        len(interval_values),
+        len(koh_values),
+        figsize=(3.8 * len(koh_values), 2.7 * len(interval_values)),
+        sharex=True,
+        sharey=True,
+        squeeze=False,
+    )
 
-        grouped = koh_data.groupby(["CO_lower_mole_fraction", "CO_upper_mole_fraction"], sort=True)
-        for ax, ((lower_co, upper_co), data) in zip(axes, grouped):
-            data = data.sort_values("E_V_SHE")
-            ax.fill_between(data["E_V_SHE"], data["hdi95_lower"], data["hdi95_upper"], alpha=0.20, linewidth=0)
-            ax.plot(data["E_V_SHE"], data["median"], linewidth=1.5, label="posterior")
-            ax.errorbar(
-                data["E_V_SHE"], data["delta_CO"], yerr=data["delta_CO_sd"], fmt="o",
-                markersize=3, linewidth=0.8, label="experiment",
-            )
-            ax.set_title(f"{100 * lower_co:g}% -> {100 * upper_co:g}% CO")
-            ax.set_xlabel("Potential (V vs SHE)")
-            ax.set_ylabel(r"$\delta_{\mathrm{CO}}$")
+    for row, (lower_co, upper_co) in enumerate(interval_values):
+        for col, c_koh in enumerate(koh_values):
+            ax = axes[row, col]
+            data = comparison[
+                (comparison["C_KOH_M"] == c_koh)
+                & (comparison["CO_lower_mole_fraction"] == lower_co)
+                & (comparison["CO_upper_mole_fraction"] == upper_co)
+            ].sort_values("E_V_SHE")
+
+            if not data.empty:
+                ax.fill_between(
+                    data["E_V_SHE"], data["hdi95_lower"], data["hdi95_upper"], alpha=0.20, linewidth=0
+                )
+                ax.plot(data["E_V_SHE"], data["median"], linewidth=1.5, label="posterior")
+                ax.errorbar(
+                    data["E_V_SHE"], data["delta_CO"], yerr=data["delta_CO_sd"], fmt="o",
+                    markersize=3, linewidth=0.8, label="experiment",
+                )
+
+            if row == 0:
+                ax.set_title(f"{c_koh:g} M KOH")
+            if col == len(koh_values) - 1:
+                ax.text(
+                    1.04,
+                    0.5,
+                    f"{100 * lower_co:g}% -> {100 * upper_co:g}% CO",
+                    transform=ax.transAxes,
+                    rotation=-90,
+                    va="center",
+                )
             ax.grid(alpha=0.20)
 
-        axes[0].legend()
-        fig.suptitle(f"{material}, {c_koh:g} M KOH")
-        fig.tight_layout()
-        fig.savefig(Path(output_dir) / f"delta_CO_KOH_{c_koh:g}.png", dpi=220, bbox_inches="tight")
-        plt.close(fig)
+    axes[0, 0].legend()
+    fig.supxlabel("Potential (V vs SHE)")
+    fig.supylabel(r"$\delta_{\mathrm{CO}}$")
+    fig.suptitle(f"{material}: adjacent CO reaction order")
+    fig.tight_layout(rect=(0.04, 0.04, 0.96, 0.97))
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=220, bbox_inches="tight")
+    plt.close(fig)
 
 def plot_loo_comparison(compare_table, output_path: str | Path):
     frame = compare_table.set_index("model")
@@ -591,7 +813,8 @@ def plot_pointwise_elpd_difference(frame, numerator_model, denominator_model, ou
     plt.close(fig)
 
 
-def plot_pointwise_loo(pointwise, model_name, output_path: str | Path):
+def plot_pointwise_loo(pointwise, model_name, output_path: str | Path, context_label=None):
+    """Plot observation-level PSIS-LOO contributions for one material."""
     koh_values = sorted(pointwise["electrolyte_concentration_M"].unique())
     co_values = sorted(pointwise["CO_mole_fraction"].unique())
 
@@ -628,17 +851,18 @@ def plot_pointwise_loo(pointwise, model_name, output_path: str | Path):
     axes[0, 0].legend(title="replicate", fontsize=8)
     fig.supxlabel("Potential (V vs SHE)")
     fig.supylabel("Pointwise PSIS-LOO ELPD")
-    fig.suptitle(f"Pointwise PSIS-LOO: {model_name}")
+    prefix = f"{context_label}: " if context_label else ""
+    fig.suptitle(f"{prefix}Pointwise PSIS-LOO: {model_name}")
     fig.tight_layout(rect=(0.04, 0.04, 0.96, 0.97))
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close(fig)
 
-
-def plot_loo_pit_ecdf(loo_pit, model_name, output_path: str | Path):
+def plot_loo_pit_ecdf(loo_pit, model_name, output_path: str | Path, context_label=None):
     from mkm.postprocessing.calibration import build_loo_pit_datatree
 
     data = build_loo_pit_datatree(loo_pit)
-
     pc = azp.plot_ecdf_pit(
         data,
         var_names=["rate_observed"],
@@ -649,16 +873,15 @@ def plot_loo_pit_ecdf(loo_pit, model_name, output_path: str | Path):
         coverage=False,
         backend="matplotlib",
     )
-    pc.add_title(f"LOO-PIT calibration: {model_name}")
+    prefix = f"{context_label}: " if context_label else ""
+    pc.add_title(f"{prefix}LOO-PIT calibration: {model_name}")
     pc.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close("all")
 
-
-def plot_loo_pit_coverage(loo_pit, model_name, output_path: str | Path):
+def plot_loo_pit_coverage(loo_pit, model_name, output_path: str | Path, context_label=None):
     from mkm.postprocessing.calibration import build_loo_pit_datatree
 
     data = build_loo_pit_datatree(loo_pit)
-
     pc = azp.plot_ecdf_pit(
         data,
         var_names=["rate_observed"],
@@ -669,12 +892,13 @@ def plot_loo_pit_coverage(loo_pit, model_name, output_path: str | Path):
         coverage=True,
         backend="matplotlib",
     )
-    pc.add_title(f"LOO predictive coverage: {model_name}")
+    prefix = f"{context_label}: " if context_label else ""
+    pc.add_title(f"{prefix}LOO predictive coverage: {model_name}")
     pc.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close("all")
 
-
-def plot_loo_pit_conditions(pointwise, model_name, output_path: str | Path):
+def plot_loo_pit_conditions(pointwise, model_name, output_path: str | Path, context_label=None):
+    """Plot potential-resolved raw LOO-PIT values for one material."""
     koh_values = sorted(pointwise["electrolyte_concentration_M"].unique())
     co_values = sorted(pointwise["CO_mole_fraction"].unique())
 
@@ -702,7 +926,7 @@ def plot_loo_pit_conditions(pointwise, model_name, output_path: str | Path):
                     curve["loo_pit"],
                     marker="o",
                     markersize=2.5,
-                    linewidth=1.0,
+                    linewidth=0.8,
                     alpha=0.75,
                     label=replicate,
                 )
@@ -715,7 +939,6 @@ def plot_loo_pit_conditions(pointwise, model_name, output_path: str | Path):
 
             if row == 0:
                 ax.set_title(f"{c_koh:g} M KOH")
-
             if col == len(koh_values) - 1:
                 ax.text(
                     1.04,
@@ -729,11 +952,13 @@ def plot_loo_pit_conditions(pointwise, model_name, output_path: str | Path):
     axes[0, 0].legend(title="replicate", fontsize=8)
     fig.supxlabel("Potential (V vs SHE)")
     fig.supylabel("LOO-PIT")
-    fig.suptitle(f"Condition-resolved LOO-PIT: {model_name}")
+    prefix = f"{context_label}: " if context_label else ""
+    fig.suptitle(f"{prefix}Condition-resolved LOO-PIT: {model_name}")
     fig.tight_layout(rect=(0.04, 0.04, 0.96, 0.97))
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close(fig)
-
 
 def plot_transition_state_drc(summary, model_name, output_path: str | Path):
     koh_values = sorted(summary["electrolyte_concentration_M"].unique())
@@ -757,7 +982,14 @@ def plot_transition_state_drc(summary, model_name, output_path: str | Path):
                     & (control_data["CO_mole_fraction"] == co_fraction)
                 ].sort_values("E_V_SHE")
 
-                line, = ax.plot(condition["E_V_SHE"], condition["median"], linewidth=1.5, label=label)
+                color = PATHWAY_COLORS.get(control)
+                line, = ax.plot(
+                    condition["E_V_SHE"],
+                    condition["median"],
+                    linewidth=1.5,
+                    color=color,
+                    label=label,
+                )
                 ax.fill_between(
                     condition["E_V_SHE"], condition["hdi95_lower"], condition["hdi95_upper"],
                     color=line.get_color(), alpha=0.15, linewidth=0,

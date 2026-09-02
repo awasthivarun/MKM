@@ -1,6 +1,7 @@
 """Generate consolidated diagnostics for an AgPd posterior run."""
 
 from argparse import ArgumentParser
+import shutil
 
 import numpy as np
 import pandas as pd
@@ -14,7 +15,6 @@ from mkm.observable_maps import (
 from mkm.postprocessing.calibration import compute_normal_loo_pit
 from mkm.postprocessing.diagnostics import (
     build_physical_checks,
-    build_posterior_parameter_summary,
     flatten_posterior_samples,
     summarize_samples,
 )
@@ -30,9 +30,20 @@ from mkm.postprocessing.observable_comparison import (
 )
 from mkm.postprocessing.observables import summarize_posterior_linear_observable
 from mkm.postprocessing.plotting import (
+    COVERAGE_COLORS,
+    PATHWAY_COLORS,
+    POINTWISE_LABELS,
+    plot_alpha_comparison,
+    plot_delta_co_comparison,
+    plot_delta_oh_comparison,
+    plot_loo_pit_conditions,
+    plot_loo_pit_coverage,
+    plot_loo_pit_ecdf,
     plot_observation_grid,
     plot_parameter_posteriors,
-    plot_pointwise_variable,
+    plot_pareto_k,
+    plot_pointwise_loo,
+    plot_pointwise_variables,
     plot_sampling_energy,
     plot_sampling_pairs,
     plot_sampling_rank,
@@ -267,66 +278,181 @@ def _build_observable_outputs(run, config, preprocessing_config, paths):
     return pd.concat(pooled, ignore_index=True, sort=False), pd.DataFrame(summary)
 
 
-def _make_plots(run, observation_diagnostics, model_point_summary, figures_dir, level):
+def _make_plots(
+    run,
+    config,
+    observation_diagnostics,
+    model_point_summary,
+    figures_dir,
+    level,
+    *,
+    loo=None,
+    calibration=None,
+    observable_points=None,
+):
     if level == "none":
         return
 
+    if figures_dir.exists():
+        shutil.rmtree(figures_dir)
     figures_dir.mkdir(parents=True, exist_ok=True)
+
     plot_parameter_posteriors(
         run.inference_data.posterior,
         run.parameter_specs,
         figures_dir / "posterior_parameters.png",
     )
 
-    context = (
-        run.specification.material
-        if not run.specification.is_all_materials
-        else f"all materials / {run.specification.parameterization} / {run.specification.error_structure}"
-    )
+    pathway_colors = {
+        "rate_fraction_BF": PATHWAY_COLORS["BF"],
+        "rate_fraction_ER": PATHWAY_COLORS["ER"],
+        "rate_fraction_LH": PATHWAY_COLORS["LH"],
+    }
+
     for material in run.inputs.materials:
+        material_dir = figures_dir / material
+        material_dir.mkdir(parents=True, exist_ok=True)
         observations = observation_diagnostics.loc[
             observation_diagnostics["material"] == material
         ]
         points = model_point_summary.loc[model_point_summary["material"] == material]
+
+        if run.specification.is_all_materials:
+            material_context = (
+                f"{material} / {run.specification.parameterization} / "
+                f"{run.specification.error_structure}"
+            )
+        else:
+            material_context = material
+
         plot_observation_grid(
             observations,
-            figures_dir / f"{material}_rates_model.png",
+            material_dir / "rates_model.png",
             distribution="model",
-            context_label=context,
+            context_label=material_context,
         )
         plot_observation_grid(
             observations,
-            figures_dir / f"{material}_rates_predictive.png",
+            material_dir / "rates_predictive.png",
             distribution="predictive",
-            context_label=context,
+            y_scale="linear",
+            context_label=material_context,
         )
         plot_observation_grid(
             observations,
-            figures_dir / f"{material}_residuals.png",
+            material_dir / "residuals.png",
             residual=True,
             y_scale="linear",
-            context_label=context,
+            context_label=material_context,
         )
 
         if level == "full":
-            for variable in POINTWISE_VARIABLES:
-                if f"{variable}_median" not in points:
-                    continue
-                variable_frame = points.rename(
-                    columns={
-                        f"{variable}_mean": "mean",
-                        f"{variable}_sd": "sd",
-                        f"{variable}_median": "median",
-                        f"{variable}_hdi95_lower": "hdi95_lower",
-                        f"{variable}_hdi95_upper": "hdi95_upper",
-                    }
+            plot_pointwise_variables(
+                points,
+                ("theta_CO", "theta_OH_Pd", "theta_empty_Pd"),
+                material_dir / "coverages_Pd.png",
+                title="Pd site coverages",
+                ylabel="Pd-site coverage",
+                colors=COVERAGE_COLORS,
+                labels=POINTWISE_LABELS,
+                context_label=material_context,
+            )
+
+            ag_fraction = float(
+                config.get("surface_composition", {})
+                .get(material, {})
+                .get("Ag_fraction", 0.0)
+            )
+            if ag_fraction > 0.0:
+                plot_pointwise_variables(
+                    points,
+                    ("theta_OH_Ag", "theta_empty_Ag"),
+                    material_dir / "coverages_Ag.png",
+                    title="Ag site coverages",
+                    ylabel="Ag-site coverage",
+                    colors=COVERAGE_COLORS,
+                    labels=POINTWISE_LABELS,
+                    context_label=material_context,
                 )
-                plot_pointwise_variable(
-                    variable_frame,
-                    variable,
-                    figures_dir / f"{material}_{variable}.png",
-                    context_label=context,
-                )
+
+            plot_pointwise_variables(
+                points,
+                ("rate_fraction_BF", "rate_fraction_ER", "rate_fraction_LH"),
+                material_dir / "rate_fractions.png",
+                title="Pathway rate fractions",
+                ylabel="rate fraction",
+                colors=pathway_colors,
+                labels=POINTWISE_LABELS,
+                context_label=material_context,
+            )
+
+            if loo is not None:
+                material_loo = loo.pointwise.loc[loo.pointwise["material"] == material]
+                if not material_loo.empty:
+                    plot_pointwise_loo(
+                        material_loo,
+                        run.specification.model_name,
+                        material_dir / "loo_pointwise.png",
+                        context_label=material,
+                    )
+
+            if calibration is not None:
+                material_calibration = calibration.pointwise.loc[
+                    calibration.pointwise["material"] == material
+                ]
+                if not material_calibration.empty:
+                    material_pit = material_calibration["loo_pit"].to_numpy(dtype=float)
+                    plot_loo_pit_ecdf(
+                        material_pit,
+                        run.specification.model_name,
+                        material_dir / "loo_pit_ecdf.png",
+                        context_label=material,
+                    )
+                    plot_loo_pit_coverage(
+                        material_pit,
+                        run.specification.model_name,
+                        material_dir / "loo_pit_coverage.png",
+                        context_label=material,
+                    )
+                    plot_loo_pit_conditions(
+                        material_calibration,
+                        run.specification.model_name,
+                        material_dir / "loo_pit_conditions.png",
+                        context_label=material,
+                    )
+
+            if observable_points is not None and not observable_points.empty:
+                material_points = observable_points.loc[
+                    observable_points["material"] == material
+                ]
+
+                alpha = material_points.loc[material_points["observable"] == "alpha"]
+                if not alpha.empty:
+                    plot_alpha_comparison(
+                        alpha,
+                        material_dir / "alpha.png",
+                        material,
+                    )
+
+                delta_oh = material_points.loc[
+                    material_points["observable"] == "delta_OH"
+                ]
+                if not delta_oh.empty:
+                    plot_delta_oh_comparison(
+                        delta_oh,
+                        material_dir / "delta_OH.png",
+                        material,
+                    )
+
+                delta_co = material_points.loc[
+                    material_points["observable"] == "delta_CO"
+                ]
+                if not delta_co.empty:
+                    plot_delta_co_comparison(
+                        delta_co,
+                        material_dir / "delta_CO.png",
+                        material,
+                    )
 
     if level == "full":
         plot_sampling_trace(
@@ -354,6 +480,27 @@ def _make_plots(run, observation_diagnostics, model_point_summary, figures_dir, 
             figures_dir / "sampling_pairs.png",
         )
 
+        if loo is not None:
+            plot_pareto_k(
+                loo.loo_result,
+                run.specification.model_name,
+                figures_dir / "loo_pareto_k.png",
+            )
+
+        if calibration is not None:
+            loo_pit_values = calibration.pointwise["loo_pit"].to_numpy(dtype=float)
+            plot_loo_pit_ecdf(
+                loo_pit_values,
+                run.specification.model_name,
+                figures_dir / "loo_pit_ecdf.png",
+                context_label="all materials" if run.specification.is_all_materials else None,
+            )
+            plot_loo_pit_coverage(
+                loo_pit_values,
+                run.specification.model_name,
+                figures_dir / "loo_pit_coverage.png",
+                context_label="all materials" if run.specification.is_all_materials else None,
+            )
 
 def main():
     args = parse_args()
@@ -376,11 +523,9 @@ def main():
         progressbar=True,
     )
 
-    parameter_summary = build_posterior_parameter_summary(
-        run.inference_data,
-        run.parameter_specs,
-    )
-    parameter_summary.to_csv(run.output_dir / "posterior_parameters.csv", index=False)
+    tables_dir = paths.fit_tables_dir(run.output_dir)
+    figures_dir = paths.fit_figures_dir(run.output_dir)
+    tables_dir.mkdir(parents=True, exist_ok=True)
 
     observation_diagnostics = build_observation_diagnostics(
         run.inference_data,
@@ -389,18 +534,18 @@ def main():
         random_seed=args.random_seed,
     )
     observation_diagnostics.to_parquet(
-        run.output_dir / "observation_diagnostics.parquet",
+        tables_dir / "observation_diagnostics.parquet",
         index=False,
     )
 
     model_point_summary = _summarize_model_points(run)
     model_point_summary.to_parquet(
-        run.output_dir / "model_point_diagnostics.parquet",
+        tables_dir / "model_point_diagnostics.parquet",
         index=False,
     )
 
     physical_checks = build_physical_checks(run.inference_data.posterior)
-    physical_checks.to_csv(run.output_dir / "physical_checks.csv", index=False)
+    physical_checks.to_csv(tables_dir / "physical_checks.csv", index=False)
 
     curve_residuals = summarize_residual_curves(observation_diagnostics)
     shared_residuals = summarize_shared_replicate_residuals(observation_diagnostics)
@@ -412,6 +557,8 @@ def main():
         shared_residuals,
     )
 
+    loo = None
+    calibration = None
     loo_material = None
     if not args.skip_loo:
         loo = compute_loo_diagnostics(
@@ -419,8 +566,8 @@ def main():
             run.model_data.observations,
             model_name=run.specification.model_name,
         )
-        loo.summary.to_csv(run.output_dir / "loo_summary.csv", index=False)
-        loo.pointwise.to_parquet(run.output_dir / "loo_pointwise.parquet", index=False)
+        loo.summary.to_csv(tables_dir / "loo_summary.csv", index=False)
+        loo.pointwise.to_parquet(tables_dir / "loo_pointwise.parquet", index=False)
         loo_material = summarize_pointwise_loo_by_material(loo.pointwise)
 
         calibration = compute_normal_loo_pit(
@@ -430,11 +577,11 @@ def main():
             run.inputs,
         )
         calibration.summary.to_csv(
-            run.output_dir / "loo_pit_summary.csv",
+            tables_dir / "loo_pit_summary.csv",
             index=False,
         )
         calibration.pointwise.to_parquet(
-            run.output_dir / "loo_pit_pointwise.parquet",
+            tables_dir / "loo_pit_pointwise.parquet",
             index=False,
         )
 
@@ -443,8 +590,9 @@ def main():
         material_residual,
         loo_material,
     )
-    material_summary.to_csv(run.output_dir / "material_summary.csv", index=False)
+    material_summary.to_csv(tables_dir / "material_summary.csv", index=False)
 
+    observable_points = None
     if not args.skip_observables:
         preprocessing_config = load_agpd_preprocessing_config(paths)
         observable_points, observable_summary = _build_observable_outputs(
@@ -454,20 +602,24 @@ def main():
             paths,
         )
         observable_points.to_parquet(
-            run.output_dir / "experimental_observable_comparisons.parquet",
+            tables_dir / "experimental_observable_comparisons.parquet",
             index=False,
         )
         observable_summary.to_csv(
-            run.output_dir / "experimental_observable_summary.csv",
+            tables_dir / "experimental_observable_summary.csv",
             index=False,
         )
 
     _make_plots(
         run,
+        config,
         observation_diagnostics,
         model_point_summary,
-        run.output_dir / "figures",
+        figures_dir,
         args.plot_level,
+        loo=loo,
+        calibration=calibration,
+        observable_points=observable_points,
     )
 
     print(f"Postprocessing products saved to: {run.output_dir}")

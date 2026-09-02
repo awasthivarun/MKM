@@ -32,6 +32,10 @@ class ProjectPaths:
         return self.root / "data"
 
     @property
+    def raw_data_dir(self) -> Path:
+        return self.data_dir / "raw"
+
+    @property
     def processed_data_dir(self) -> Path:
         return self.data_dir / "processed"
 
@@ -40,8 +44,32 @@ class ProjectPaths:
         return self.root / "results"
 
     @property
+    def figures_dir(self) -> Path:
+        return self.root / "figures"
+
+    @property
+    def agpd_raw_dir(self) -> Path:
+        return self.raw_data_dir / "AgPd_COOx_basic"
+
+    @property
+    def agpd_processed_dir(self) -> Path:
+        return self.processed_data_dir / "AgPd_COOx_basic"
+
+    @property
+    def agpd_standardized_dir(self) -> Path:
+        return self.agpd_processed_dir / "standardized"
+
+    @property
     def agpd_analysis_dir(self) -> Path:
-        return self.processed_data_dir / "AgPd_COOx_basic" / "analysis"
+        return self.agpd_processed_dir / "analysis"
+
+    @property
+    def agpd_standardized_path(self) -> Path:
+        return self.agpd_standardized_dir / "AgPd_COOx_basic_replicates.parquet"
+
+    @property
+    def agpd_full_path(self) -> Path:
+        return self.agpd_analysis_dir / "AgPd_COOx_basic_full.parquet"
 
     @property
     def agpd_selected_path(self) -> Path:
@@ -52,6 +80,10 @@ class ProjectPaths:
         return self.agpd_analysis_dir / "AgPd_COOx_basic_summary.parquet"
 
     @property
+    def agpd_truncation_path(self) -> Path:
+        return self.agpd_analysis_dir / "AgPd_COOx_basic_truncation.parquet"
+
+    @property
     def agpd_delta_oh_path(self) -> Path:
         return self.agpd_analysis_dir / "AgPd_COOx_basic_delta_OH.parquet"
 
@@ -60,12 +92,20 @@ class ProjectPaths:
         return self.agpd_analysis_dir / "AgPd_COOx_basic_delta_CO.parquet"
 
     @property
+    def agpd_delta_co_replicates_path(self) -> Path:
+        return self.agpd_analysis_dir / "AgPd_COOx_basic_delta_CO_replicates.parquet"
+
+    @property
     def agpd_model_config_path(self) -> Path:
         return self.config_dir / "models" / "agpd_basic.yaml"
 
     @property
     def agpd_preprocessing_config_path(self) -> Path:
         return self.config_dir / "preprocessing" / "agpd_basic.yaml"
+
+    @property
+    def agpd_preprocessing_figure_dir(self) -> Path:
+        return self.figures_dir / "preprocessing" / "AgPd_COOx_basic"
 
     @property
     def agpd_results_root(self) -> Path:
@@ -133,6 +173,26 @@ class ProjectPaths:
 
         return directory
 
+    @staticmethod
+    def fit_tables_dir(fit_dir: str | Path) -> Path:
+        return Path(fit_dir) / "tables"
+
+    @staticmethod
+    def fit_figures_dir(fit_dir: str | Path) -> Path:
+        return Path(fit_dir) / "figures"
+
+    @staticmethod
+    def fit_drc_dir(fit_dir: str | Path) -> Path:
+        return Path(fit_dir) / "drc"
+
+    @staticmethod
+    def fit_composition_dir(fit_dir: str | Path) -> Path:
+        return Path(fit_dir) / "composition"
+
+    @staticmethod
+    def fit_validation_dir(fit_dir: str | Path) -> Path:
+        return Path(fit_dir) / "validation"
+
     def agpd_prior_predictive_output_dir(self, **fit_specification) -> Path:
         return self.agpd_prior_predictive_root / self._agpd_fit_relative_dir(**fit_specification)
 
@@ -172,15 +232,13 @@ class ProjectPaths:
             raise ValueError("Validation scheme must be 'loco' or 'lomo'.")
         self._validate_error_structure(error_structure)
 
-        base = (
-            self.agpd_validation_root
-            / "all_materials"
-            / parameterization
-            / error_structure
-            / model_name
-            / scheme
-            / material
+        fit_dir = self.agpd_posterior_output_dir(
+            fit_scope="all_materials",
+            model_name=model_name,
+            parameterization=parameterization,
+            error_structure=error_structure,
         )
+        base = self.fit_validation_dir(fit_dir) / scheme / material
 
         if scheme == "lomo":
             if koh_M is not None or co_mole_fraction is not None:

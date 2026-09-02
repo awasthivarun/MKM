@@ -1,6 +1,7 @@
 from dataclasses import dataclass, fields
 from typing import Callable
 
+import numpy as np
 import pytensor.tensor as pt
 
 from mkm.inference.priors import build_named_priors
@@ -13,6 +14,7 @@ from mkm.mechanisms.agpd_basic import (
     evaluate_agpd_bf_lh,
     evaluate_agpd_co_bf_er_lh,
 )
+from mkm.mechanisms.pd_basic import PdCOERLHParameters, evaluate_pd_co_er_lh
 
 
 @dataclass(frozen=True)
@@ -34,6 +36,10 @@ _AGPD_MODEL_REGISTRY = {
         parameter_class=AgPdCOBFERRLHParameters,
         evaluator=evaluate_agpd_co_bf_er_lh,
     ),
+    "CO_ER_LH": AgPdModelDefinition(
+        parameter_class=PdCOERLHParameters,
+        evaluator=evaluate_pd_co_er_lh,
+    ),
 }
 
 
@@ -42,8 +48,9 @@ def available_agpd_models():
 
 
 def available_agpd_all_material_models():
-    # The configured all-material dataset includes Pd100. A BF-only rate is
-    # structurally zero there and the BF evaluator requires a positive Ag fraction.
+    # The all-material dataset includes Pd100. BF_LH and CO_BF_ER_LH have
+    # non-BF pathways that remain defined at x_Ag = 0. CO_ER_LH is the
+    # reduced individual-Pd model and is not an all-material model.
     return ("BF_LH", "CO_BF_ER_LH")
 
 
@@ -128,6 +135,20 @@ def get_agpd_parameterization(config, model_name, parameterization="shared"):
     return x_reference, slope_specs
 
 
+def get_agpd_parameterization_metadata(config, model_name, parameterization):
+    """Return the resolved contents of one named composition profile."""
+    x_reference, slope_specs = get_agpd_parameterization(
+        config=config,
+        model_name=model_name,
+        parameterization=parameterization,
+    )
+    return {
+        "name": parameterization,
+        "x_reference": x_reference,
+        "slopes": slope_specs,
+    }
+
+
 def get_agpd_all_material_parameter_specs(
     config,
     prior_material,
@@ -182,6 +203,49 @@ def build_agpd_mechanism(model_name, material, config):
         return evaluated.mechanism_result
 
     return mechanism
+
+
+def _evaluate_all_material_state(
+    *,
+    model_name,
+    definition,
+    state,
+    effective_values,
+    config,
+    prediction_only,
+):
+    """Evaluate the configured all-material model, including pure-Pd prediction.
+
+    CO_BF_ER_LH is fit with the full parameter set whenever Ag-containing
+    training points are present. During prediction-only evaluation of a pure-Pd
+    held-out material, the BF-specific parameters are already learned but are
+    structurally inactive. The reduced CO_ER_LH evaluator is the exact x_Ag=0
+    limit and avoids treating fit identifiability as a state-domain restriction.
+    """
+    if (
+        prediction_only
+        and model_name == "CO_BF_ER_LH"
+        and np.all(state.Ag_fraction == 0.0)
+    ):
+        pd_parameter_names = {field.name for field in fields(PdCOERLHParameters)}
+        pd_parameters = PdCOERLHParameters(
+            **{
+                name: effective_values[name]
+                for name in pd_parameter_names
+            }
+        )
+        return evaluate_pd_co_er_lh(
+            state=state,
+            parameters=pd_parameters,
+            temperature_K=config["temperature_K"],
+        )
+
+    parameters = definition.parameter_class(**effective_values)
+    return definition.evaluator(
+        state=state,
+        parameters=parameters,
+        temperature_K=config["temperature_K"],
+    )
 
 
 def build_agpd_all_material_mechanism(
@@ -257,11 +321,13 @@ def build_agpd_all_material_mechanism(
                     + slope_values[slope_name] * x_shift
                 )
 
-        parameters = definition.parameter_class(**effective_values)
-        evaluated = definition.evaluator(
+        evaluated = _evaluate_all_material_state(
+            model_name=model_name,
+            definition=definition,
             state=state,
-            parameters=parameters,
-            temperature_K=config["temperature_K"],
+            effective_values=effective_values,
+            config=config,
+            prediction_only=prediction_only,
         )
         return evaluated.mechanism_result
 

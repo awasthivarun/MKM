@@ -74,41 +74,46 @@ def main():
         progressbar=False,
     )
 
+    drc_dir = paths.fit_drc_dir(run.output_dir)
+    drc_dir.mkdir(parents=True, exist_ok=True)
+
     result = _compute(run, config, args.step_eV)
     result.summary.to_parquet(
-        run.output_dir / "drc_transition_state.parquet",
+        drc_dir / "drc_transition_state.parquet",
         index=False,
     )
     result.checks.to_csv(
-        run.output_dir / "drc_transition_state_checks.csv",
+        drc_dir / "drc_transition_state_checks.csv",
         index=False,
     )
     if args.save_draws:
-        result.draws.to_netcdf(run.output_dir / "drc_transition_state_draws.nc")
+        result.draws.to_netcdf(drc_dir / "drc_transition_state_draws.nc")
 
     if args.check_half_step:
         half_step = _compute(run, config, 0.5 * args.step_eV)
         convergence = compare_transition_state_drc_steps(result, half_step)
         convergence.to_csv(
-            run.output_dir / "drc_transition_state_step_convergence.csv",
+            drc_dir / "drc_transition_state_step_convergence.csv",
             index=False,
         )
 
     if not args.skip_plots:
-        figures_dir = run.output_dir / "figures"
+        figures_dir = paths.fit_figures_dir(run.output_dir)
         figures_dir.mkdir(parents=True, exist_ok=True)
         for material in run.inputs.materials:
             summary = result.summary.loc[result.summary["material"] == material]
             if summary.empty:
                 continue
+            material_dir = figures_dir / material
+            material_dir.mkdir(parents=True, exist_ok=True)
             plot_transition_state_drc(
                 summary,
                 f"{run.specification.model_name}, {material}",
-                figures_dir / f"{material}_drc_transition_states.png",
+                material_dir / "drc_transition_states.png",
             )
 
     print(result.checks.to_string(index=False))
-    print(f"DRC products saved to: {run.output_dir}")
+    print(f"DRC products saved to: {drc_dir}")
 
 
 if __name__ == "__main__":

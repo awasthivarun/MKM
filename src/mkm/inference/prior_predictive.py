@@ -76,7 +76,7 @@ def summarize_prior_parameters(prior_predictive, parameter_names=None):
         if name not in prior:
             raise ValueError(f"Prior group is missing configured parameter '{name}'.")
 
-        data = prior[name].squeeze(drop=True)
+        data = prior[name]
         extra_dims = tuple(dim for dim in data.dims if dim not in {"chain", "draw"})
         if not extra_dims:
             components = [(name, data)]
