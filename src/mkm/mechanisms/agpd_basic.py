@@ -19,6 +19,8 @@ class AgPdPointState:
     Pd_fraction: np.ndarray
 
     theta_CO_max: np.ndarray | None = None
+    materials: tuple[str, ...] | None = None
+    material_index: np.ndarray | None = None
 
 
 def thermal_energy_eV(temperature_K):
@@ -127,6 +129,8 @@ def build_agpd_point_state(inputs: ModelPointInputs, config):
         ln_a_CO=ln_a_CO,
         Ag_fraction=Ag_fraction,
         Pd_fraction=Pd_fraction,
+        materials=tuple(inputs.materials),
+        material_index=material_index,
         theta_CO_max=theta_CO_max,
     )
 
@@ -660,12 +664,8 @@ def evaluate_agpd_co_bf_er_lh(
     parameters: AgPdCOBFERRLHParameters,
     temperature_K,
     theta_CO_max=None,
+    bf_activity=None,
 ):
-    if np.all(state.Ag_fraction <= 0):
-        raise ValueError(
-            "CO-BF-ER-LH requires a positive Ag fraction in at least one model point because "
-            "BF parameters would otherwise be unidentified."
-        )
     if np.any(state.Pd_fraction <= 0):
         raise ValueError("CO-BF-ER-LH requires a positive Pd fraction.")
 
@@ -702,7 +702,25 @@ def evaluate_agpd_co_bf_er_lh(
 
     ag_coverages = calculate_ag_qea_coverages(log_K_OH_Ag=log_K5, state=state)
     log_k1_a_CO = log_k1 + pt.as_tensor_variable(state.ln_a_CO)
-    log_k_BF_app = log_k2_BF + ag_coverages.log_theta_OH_Ag + log_surface_fraction(state.Ag_fraction)
+
+    if bf_activity is None:
+        bf_activity = np.ones_like(state.Ag_fraction)
+    bf_activity = np.asarray(bf_activity, dtype=float)
+    if bf_activity.shape != state.Ag_fraction.shape:
+        raise ValueError("BF pathway activity must have the same shape as the model points.")
+    if not np.all(np.isfinite(bf_activity)) or np.any(bf_activity < 0.0) or np.any(bf_activity > 1.0):
+        raise ValueError("BF pathway activity must be finite and lie in [0, 1].")
+    if np.all(state.Ag_fraction * bf_activity <= 0.0):
+        raise ValueError(
+            "CO-BF-ER-LH requires an active BF pathway at a positive Ag fraction in at least one model point."
+        )
+
+    log_k_BF_app = (
+        log_k2_BF
+        + ag_coverages.log_theta_OH_Ag
+        + log_surface_fraction(state.Ag_fraction)
+        + log_surface_fraction(bf_activity)
+    )
     log_k_ER_app = log_k2_ER + pt.as_tensor_variable(state.ln_a_OH)
     term_OH_Pd = log_K4 + pt.as_tensor_variable(state.ln_a_OH)
     log_k_LH_app = log_k2_LH + term_OH_Pd + log_surface_fraction(state.Pd_fraction)
@@ -777,4 +795,31 @@ def evaluate_agpd_co_bf_er_lh_capped(
         parameters=parameters,
         temperature_K=temperature_K,
         theta_CO_max=state.theta_CO_max,
+    )
+
+
+def evaluate_agpd_co_bf_er_lh_capped_ag10_no_bf(
+    state: AgPdPointState,
+    parameters: AgPdCOBFERRLHParameters,
+    temperature_K,
+):
+    if state.theta_CO_max is None:
+        raise ValueError(
+            "CO_BF_ER_LH_capped_Ag10_no_BF requires material-resolved CO coverage caps in the model configuration."
+        )
+    if state.materials is None or state.material_index is None:
+        raise ValueError("CO_BF_ER_LH_capped_Ag10_no_BF requires material identity in the AgPd point state.")
+
+    bf_activity_by_material = np.asarray(
+        [0.0 if material == "Ag10Pd90" else 1.0 for material in state.materials],
+        dtype=float,
+    )
+    bf_activity = bf_activity_by_material[state.material_index]
+
+    return evaluate_agpd_co_bf_er_lh(
+        state=state,
+        parameters=parameters,
+        temperature_K=temperature_K,
+        theta_CO_max=state.theta_CO_max,
+        bf_activity=bf_activity,
     )
