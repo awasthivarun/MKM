@@ -18,6 +18,8 @@ class AgPdPointState:
     Ag_fraction: np.ndarray
     Pd_fraction: np.ndarray
 
+    theta_CO_max: np.ndarray | None = None
+
 
 def thermal_energy_eV(temperature_K):
     temperature_K = float(temperature_K)
@@ -125,12 +127,45 @@ def build_agpd_point_state(inputs: ModelPointInputs, config):
     Ag_fraction = Ag_fraction_by_material[material_index]
     Pd_fraction = Pd_fraction_by_material[material_index]
 
+    theta_CO_max = None
+    coverage_cap_config = config.get("co_coverage_cap")
+
+    if coverage_cap_config is not None:
+        missing_caps = [
+            material
+            for material in inputs.materials
+            if material not in coverage_cap_config
+        ]
+        if missing_caps:
+            raise ValueError(
+                f"Missing CO coverage caps for materials: {missing_caps}."
+            )
+
+        theta_CO_max_by_material = np.asarray(
+            [
+                float(coverage_cap_config[material])
+                for material in inputs.materials
+            ],
+            dtype=float,
+        )
+
+        if not np.all(np.isfinite(theta_CO_max_by_material)):
+            raise ValueError("CO coverage caps must be finite.")
+
+        if np.any(theta_CO_max_by_material <= 0.0) or np.any(
+            theta_CO_max_by_material > 1.0
+        ):
+            raise ValueError("CO coverage caps must lie in (0, 1].")
+
+        theta_CO_max = theta_CO_max_by_material[material_index]
+
     return AgPdPointState(
         E_V_SHE=np.asarray(inputs.E_V_SHE, dtype=float),
         ln_a_OH=ln_a_OH,
         ln_a_CO=ln_a_CO,
         Ag_fraction=Ag_fraction,
         Pd_fraction=Pd_fraction,
+        theta_CO_max=theta_CO_max,
     )
 
 
@@ -628,7 +663,14 @@ class AgPdCOBFERRLHResult:
 
 
 def solve_pd_co_ssa_qea_oh(
-    log_K_OH_Pd, log_k1_a_CO, log_k_minus_1, log_k_BF_app, log_k_ER_app, log_k_LH_app, state: AgPdPointState
+    log_K_OH_Pd,
+    log_k1_a_CO,
+    log_k_minus_1,
+    log_k_BF_app,
+    log_k_ER_app,
+    log_k_LH_app,
+    state: AgPdPointState,
+    theta_CO_max=1.0,
 ):
     log_K_OH_Pd = pt.as_tensor_variable(log_K_OH_Pd)
     term_OH_Pd = log_K_OH_Pd + pt.as_tensor_variable(state.ln_a_OH)
@@ -652,7 +694,7 @@ def solve_pd_co_ssa_qea_oh(
     lambda_LH = pt.exp(log_lambda)
 
     quadratic_a = A_Pd * lambda_LH
-    quadratic_b = rho + A_Pd - lambda_LH
+    quadratic_b = rho / pt.as_tensor_variable(theta_CO_max) + A_Pd - lambda_LH
 
     discriminant = quadratic_b**2 + 4.0 * quadratic_a
     sqrt_discriminant = pt.sqrt(discriminant)
@@ -673,7 +715,12 @@ def solve_pd_co_ssa_qea_oh(
     )
 
 
-def evaluate_agpd_co_bf_er_lh(state: AgPdPointState, parameters: AgPdCOBFERRLHParameters, temperature_K):
+def evaluate_agpd_co_bf_er_lh(
+    state: AgPdPointState,
+    parameters: AgPdCOBFERRLHParameters,
+    temperature_K,
+    theta_CO_max=None,
+):
     if np.all(state.Ag_fraction <= 0):
         raise ValueError(
             "CO-BF-ER-LH requires a positive Ag fraction in at least one model point because "
@@ -725,6 +772,7 @@ def evaluate_agpd_co_bf_er_lh(state: AgPdPointState, parameters: AgPdCOBFERRLHPa
     term_OH_Pd = log_K4 + pt.as_tensor_variable(state.ln_a_OH)
     log_k_LH_app = log_k2_LH + term_OH_Pd + log_surface_fraction(state.Pd_fraction)
 
+    solver_theta_CO_max = 1.0 if theta_CO_max is None else theta_CO_max
     pd_coverages = solve_pd_co_ssa_qea_oh(
         log_K_OH_Pd=log_K4,
         log_k1_a_CO=log_k1_a_CO,
@@ -733,6 +781,7 @@ def evaluate_agpd_co_bf_er_lh(state: AgPdPointState, parameters: AgPdCOBFERRLHPa
         log_k_ER_app=log_k_ER_app,
         log_k_LH_app=log_k_LH_app,
         state=state,
+        theta_CO_max=solver_theta_CO_max,
     )
 
     log_rate_BF = log_k_BF_app + pd_coverages.log_theta_CO
@@ -748,21 +797,30 @@ def evaluate_agpd_co_bf_er_lh(state: AgPdPointState, parameters: AgPdCOBFERRLHPa
     rate_fraction_ER = pt.exp(log_rate_ER - log_rate_total)
     rate_fraction_LH = pt.exp(log_rate_LH - log_rate_total)
 
+    theta_CO = pt.exp(pd_coverages.log_theta_CO)
+
+    pointwise = {
+        "theta_CO": theta_CO,
+        "theta_OH_Pd": pt.exp(pd_coverages.log_theta_OH_Pd),
+        "theta_empty_Pd": pt.exp(pd_coverages.log_theta_empty_Pd),
+        "theta_OH_Ag": pt.exp(ag_coverages.log_theta_OH_Ag),
+        "theta_empty_Ag": pt.exp(ag_coverages.log_theta_empty_Ag),
+        "ln_rate_BF": log_rate_BF,
+        "ln_rate_ER": log_rate_ER,
+        "ln_rate_LH": log_rate_LH,
+        "rate_fraction_BF": rate_fraction_BF,
+        "rate_fraction_ER": rate_fraction_ER,
+        "rate_fraction_LH": rate_fraction_LH,
+    }
+
+    if theta_CO_max is not None:
+        pointwise["theta_CO_site_occupation"] = (
+            theta_CO / pt.as_tensor_variable(theta_CO_max)
+        )
+
     mechanism_result = MechanismResult(
         ln_rate=log_rate_total,
-        pointwise={
-            "theta_CO": pt.exp(pd_coverages.log_theta_CO),
-            "theta_OH_Pd": pt.exp(pd_coverages.log_theta_OH_Pd),
-            "theta_empty_Pd": pt.exp(pd_coverages.log_theta_empty_Pd),
-            "theta_OH_Ag": pt.exp(ag_coverages.log_theta_OH_Ag),
-            "theta_empty_Ag": pt.exp(ag_coverages.log_theta_empty_Ag),
-            "ln_rate_BF": log_rate_BF,
-            "ln_rate_ER": log_rate_ER,
-            "ln_rate_LH": log_rate_LH,
-            "rate_fraction_BF": rate_fraction_BF,
-            "rate_fraction_ER": rate_fraction_ER,
-            "rate_fraction_LH": rate_fraction_LH,
-        },
+        pointwise=pointwise,
     )
 
     return AgPdCOBFERRLHResult(
@@ -779,4 +837,23 @@ def evaluate_agpd_co_bf_er_lh(state: AgPdPointState, parameters: AgPdCOBFERRLHPa
         log_k2_BF=log_k2_BF,
         log_k2_ER=log_k2_ER,
         log_k2_LH=log_k2_LH,
+    )
+
+
+def evaluate_agpd_co_bf_er_lh_capped(
+    state: AgPdPointState,
+    parameters: AgPdCOBFERRLHParameters,
+    temperature_K,
+):
+    if state.theta_CO_max is None:
+        raise ValueError(
+            "CO_BF_ER_LH_capped requires material-resolved "
+            "CO coverage caps in the model configuration."
+        )
+
+    return evaluate_agpd_co_bf_er_lh(
+        state=state,
+        parameters=parameters,
+        temperature_K=temperature_K,
+        theta_CO_max=state.theta_CO_max,
     )

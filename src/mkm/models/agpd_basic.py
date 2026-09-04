@@ -13,6 +13,7 @@ from mkm.mechanisms.agpd_basic import (
     evaluate_agpd_bf,
     evaluate_agpd_bf_lh,
     evaluate_agpd_co_bf_er_lh,
+    evaluate_agpd_co_bf_er_lh_capped,
 )
 from mkm.mechanisms.pd_basic import PdCOERLHParameters, evaluate_pd_co_er_lh
 
@@ -36,10 +37,19 @@ _AGPD_MODEL_REGISTRY = {
         parameter_class=AgPdCOBFERRLHParameters,
         evaluator=evaluate_agpd_co_bf_er_lh,
     ),
+    "CO_BF_ER_LH_capped": AgPdModelDefinition(
+        parameter_class=AgPdCOBFERRLHParameters,
+        evaluator=evaluate_agpd_co_bf_er_lh_capped,
+    ),
     "CO_ER_LH": AgPdModelDefinition(
         parameter_class=PdCOERLHParameters,
         evaluator=evaluate_pd_co_er_lh,
     ),
+}
+
+
+_AGPD_MODEL_CONFIGURATION_ALIASES = {
+    "CO_BF_ER_LH_capped": "CO_BF_ER_LH",
 }
 
 
@@ -50,15 +60,19 @@ _UNIT_INTERVAL_PARAMETERS = {
 }
 
 
+def _configuration_model_name(model_name):
+    return _AGPD_MODEL_CONFIGURATION_ALIASES.get(model_name, model_name)
+
+
 def available_agpd_models():
     return tuple(_AGPD_MODEL_REGISTRY)
 
 
 def available_agpd_all_material_models():
-    # The all-material dataset includes Pd100. BF_LH and CO_BF_ER_LH have
-    # non-BF pathways that remain defined at x_Ag = 0. CO_ER_LH is the
-    # reduced individual-Pd model and is not an all-material model.
-    return ("BF_LH", "CO_BF_ER_LH")
+    # The all-material dataset includes Pd100. BF_LH and the full finite-CO
+    # models have non-BF pathways that remain defined at x_Ag = 0. CO_ER_LH is
+    # the reduced individual-Pd model and is not an all-material model.
+    return ("BF_LH", "CO_BF_ER_LH", "CO_BF_ER_LH_capped")
 
 
 def get_agpd_model_definition(model_name):
@@ -71,8 +85,10 @@ def get_agpd_model_definition(model_name):
 
 
 def get_agpd_prior_profile(config, material, model_name):
+    configuration_model_name = _configuration_model_name(model_name)
+
     try:
-        return config["prior_profiles"][material][model_name]
+        return config["prior_profiles"][material][configuration_model_name]
     except KeyError as error:
         raise ValueError(
             f"No prior profile is defined for material '{material}' and model '{model_name}'."
@@ -96,9 +112,13 @@ def available_agpd_parameterizations(config, model_name=None):
     parameterizations = config.get("composition_parameterizations", {})
     names = []
 
+    configuration_model_name = (
+        None if model_name is None else _configuration_model_name(model_name)
+    )
+
     for name, specification in parameterizations.items():
         models = specification.get("models", {})
-        if model_name is None or model_name in models:
+        if model_name is None or configuration_model_name in models:
             names.append(name)
 
     return tuple(names)
@@ -113,8 +133,10 @@ def get_agpd_parameterization(config, model_name, parameterization="shared"):
             f"Available parameterizations: {available_agpd_parameterizations(config)}."
         ) from error
 
+    configuration_model_name = _configuration_model_name(model_name)
+
     try:
-        model_specification = specification["models"][model_name]
+        model_specification = specification["models"][configuration_model_name]
     except KeyError as error:
         raise ValueError(
             f"AgPd parameterization '{parameterization}' is not configured for model '{model_name}'. "
@@ -223,15 +245,15 @@ def _evaluate_all_material_state(
 ):
     """Evaluate the configured all-material model, including pure-Pd prediction.
 
-    CO_BF_ER_LH is fit with the full parameter set whenever Ag-containing
-    training points are present. During prediction-only evaluation of a pure-Pd
-    held-out material, the BF-specific parameters are already learned but are
+    The full finite-CO models are fit with their full parameter set whenever
+    Ag-containing training points are present. During prediction-only
+    evaluation of pure Pd, BF-specific parameters are already learned but are
     structurally inactive. The reduced CO_ER_LH evaluator is the exact x_Ag=0
-    limit and avoids treating fit identifiability as a state-domain restriction.
+    limit; the capped model additionally retains its configured CO packing cap.
     """
     if (
         prediction_only
-        and model_name == "CO_BF_ER_LH"
+        and model_name in {"CO_BF_ER_LH", "CO_BF_ER_LH_capped"}
         and np.all(state.Ag_fraction == 0.0)
     ):
         pd_parameter_names = {field.name for field in fields(PdCOERLHParameters)}
@@ -241,10 +263,20 @@ def _evaluate_all_material_state(
                 for name in pd_parameter_names
             }
         )
+
+        theta_CO_max = None
+        if model_name == "CO_BF_ER_LH_capped":
+            if state.theta_CO_max is None:
+                raise ValueError(
+                    "CO_BF_ER_LH_capped requires configured CO coverage caps."
+                )
+            theta_CO_max = state.theta_CO_max
+
         return evaluate_pd_co_er_lh(
             state=state,
             parameters=pd_parameters,
             temperature_K=config["temperature_K"],
+            theta_CO_max=theta_CO_max,
         )
 
     parameters = definition.parameter_class(**effective_values)

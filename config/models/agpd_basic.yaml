@@ -33,6 +33,22 @@ surface_assumptions:
   surface_composition_equals_bulk: true
   random_mixing: true
 
+co_coverage_cap:
+  # Maximum molecular CO coverage on the Pd sublattice.
+  # Used only by CO_BF_ER_LH_capped.
+  #
+  # The cap is imposed through the Pd site balance:
+  # theta_empty_Pd + theta_OH_Pd + theta_CO / theta_CO_max = 1.
+  #
+  # Keeping this material-resolved lets us change the assumed maximum
+  # coverage by composition later without changing the mechanism code.
+  Pd100: 0.66
+  Ag10Pd90: 0.66
+  Ag25Pd75: 0.66
+  Ag50Pd50: 0.66
+  Ag75Pd25: 0.66
+  Ag90Pd10: 0.66
+
 composition_parameterizations:
   shared:
     x_reference: 0.50
@@ -400,24 +416,24 @@ prior_profiles:
           mu: 0.5
           sigma: 1
           lower: 0.2 # Low enough to be infinitely fast
-          upper: 1.0 # High enough for ~0 reaction rate
+          upper: 0.8 # High enough for ~0 reaction rate
         Gact2_BF_0:
           distribution: truncated_normal
           mu: 0.7
           sigma: 1
-          lower: 0.2 # Low enough to be infinitely fast
+          lower: 0.5 # Low enough to be infinitely fast
           upper: 1.0 # High enough for ~0 reaction rate
         Gact2_ER_0:
           distribution: truncated_normal
           mu: 0.7
           sigma: 1
-          lower: 0.2 # Low enough to be infinitely fast
+          lower: 0.5 # Low enough to be infinitely fast
           upper: 1.0 # High enough for ~0 reaction rate
         Gact2_LH_0:
           distribution: truncated_normal
           mu: 0.7
           sigma: 1
-          lower: 0.2 # Low enough to be infinitely fast
+          lower: 0.5 # Low enough to be infinitely fast
           upper: 1.0 # High enough for ~0 reaction rate 
 
   Ag25Pd75: *legacy_alloy_prior_profile

@@ -42,8 +42,17 @@ def test_individual_fit_rejects_shared_error_option():
 
 def test_pd100_individual_fit_requires_reduced_pd_model():
     config = _config()
-    for model_name in ("BF", "BF_LH", "CO_BF_ER_LH"):
-        with pytest.raises(ValueError, match="reduced Pd-only model 'CO_ER_LH'"):
+
+    for model_name in (
+        "BF",
+        "BF_LH",
+        "CO_BF_ER_LH",
+        "CO_BF_ER_LH_capped",
+    ):
+        with pytest.raises(
+            ValueError,
+            match="reduced Pd-only model 'CO_ER_LH'",
+        ):
             resolve_agpd_fit_specification(
                 config,
                 model_name=model_name,
@@ -57,13 +66,18 @@ def test_pd100_individual_fit_requires_reduced_pd_model():
         material="Pd100",
         error_structure="material",
     )
+
     assert specification.material == "Pd100"
     assert specification.model_name == "CO_ER_LH"
 
 
 def test_reduced_pd_model_is_not_available_for_alloys_or_all_material_fit():
     config = _config()
-    with pytest.raises(ValueError, match="reserved for individual Pd100"):
+
+    with pytest.raises(
+        ValueError,
+        match="reserved for individual Pd100",
+    ):
         resolve_agpd_fit_specification(
             config,
             model_name="CO_ER_LH",
@@ -71,7 +85,10 @@ def test_reduced_pd_model_is_not_available_for_alloys_or_all_material_fit():
             error_structure="material",
         )
 
-    with pytest.raises(ValueError, match="not available for all-material fitting"):
+    with pytest.raises(
+        ValueError,
+        match="not available for all-material fitting",
+    ):
         resolve_agpd_fit_specification(
             config,
             model_name="CO_ER_LH",
@@ -81,17 +98,56 @@ def test_reduced_pd_model_is_not_available_for_alloys_or_all_material_fit():
         )
 
 
-def test_all_material_fit_supports_shared_or_material_error():
+@pytest.mark.parametrize(
+    "model_name",
+    ("CO_BF_ER_LH", "CO_BF_ER_LH_capped"),
+)
+def test_all_material_fit_supports_shared_or_material_error(model_name):
     for error_structure in ("shared", "material"):
         specification = resolve_agpd_fit_specification(
             _config(),
-            model_name="CO_BF_ER_LH",
+            model_name=model_name,
             all_materials=True,
             parameterization="linear_xAg",
             error_structure=error_structure,
         )
+
         assert specification.fit_scope == "all_materials"
         assert specification.error_structure == error_structure
+
+
+def test_capped_fit_reuses_uncapped_parameterization_metadata():
+    config = _config()
+
+    base = resolve_agpd_fit_specification(
+        config,
+        model_name="CO_BF_ER_LH",
+        all_materials=True,
+        parameterization="linear_xAg",
+        error_structure="shared",
+    )
+    capped = resolve_agpd_fit_specification(
+        config,
+        model_name="CO_BF_ER_LH_capped",
+        all_materials=True,
+        parameterization="linear_xAg",
+        error_structure="shared",
+    )
+
+    assert all_parameter_specs(
+        capped,
+        config,
+    ) == all_parameter_specs(
+        base,
+        config,
+    )
+    assert resolved_parameterization_metadata(
+        capped,
+        config,
+    ) == resolved_parameterization_metadata(
+        base,
+        config,
+    )
 
 
 def test_profile_name_and_arbitrary_slope_are_preserved_in_specification():
@@ -110,6 +166,7 @@ def test_profile_name_and_arbitrary_slope_are_preserved_in_specification():
             }
         },
     }
+
     specification = resolve_agpd_fit_specification(
         config,
         model_name="CO_BF_ER_LH",
@@ -117,12 +174,21 @@ def test_profile_name_and_arbitrary_slope_are_preserved_in_specification():
         parameterization="linear_beta_er",
         error_structure="shared",
     )
-    specs = all_parameter_specs(specification, config)
-    metadata = resolved_parameterization_metadata(specification, config)
+    specs = all_parameter_specs(
+        specification,
+        config,
+    )
+    metadata = resolved_parameterization_metadata(
+        specification,
+        config,
+    )
 
     assert specification.parameterization == "linear_beta_er"
     assert "beta_2_ER_xAg_slope" in specs
-    assert {"sigma_rate_abs", "sigma_rate_rel"}.issubset(specs)
+    assert {
+        "sigma_rate_abs",
+        "sigma_rate_rel",
+    }.issubset(specs)
     assert metadata["name"] == "linear_beta_er"
     assert set(metadata["slopes"]) == {"beta_2_ER"}
 
@@ -130,11 +196,18 @@ def test_profile_name_and_arbitrary_slope_are_preserved_in_specification():
 def test_likelihood_configuration_requires_exact_current_sigma_form():
     config = _config()
     kwargs = rate_normal_likelihood_kwargs(config)
+
     assert kwargs["sigma_abs_prior_median_s_inv"] > 0
     assert kwargs["sigma_rel_prior_median"] > 0
 
-    config["likelihood"]["sigma_form"] = "sqrt(sigma_abs**2 + sigma_rel**2 * model_rate**2)"
-    with pytest.raises(ValueError, match="Configured sigma form"):
+    config["likelihood"][
+        "sigma_form"
+    ] = "sqrt(sigma_abs**2 + sigma_rel**2 * model_rate**2)"
+
+    with pytest.raises(
+        ValueError,
+        match="Configured sigma form",
+    ):
         rate_normal_likelihood_kwargs(config)
 
 
@@ -146,7 +219,11 @@ def test_likelihood_configuration_requires_exact_current_sigma_form():
         ("linear_dG5", {"deltaG5_0_xAg_slope"}),
         (
             "linear_thermo",
-            {"deltaG1_0_xAg_slope", "deltaG4_0_xAg_slope", "deltaG5_0_xAg_slope"},
+            {
+                "deltaG1_0_xAg_slope",
+                "deltaG4_0_xAg_slope",
+                "deltaG5_0_xAg_slope",
+            },
         ),
         ("linear_GactBF", {"Gact2_BF_0_xAg_slope"}),
         ("linear_GactER", {"Gact2_ER_0_xAg_slope"}),
@@ -185,24 +262,42 @@ def test_likelihood_configuration_requires_exact_current_sigma_form():
         ),
     ],
 )
+@pytest.mark.parametrize(
+    "model_name",
+    ("CO_BF_ER_LH", "CO_BF_ER_LH_capped"),
+)
 def test_named_composition_profiles_resolve_for_shared_error(
+    model_name,
     parameterization,
     expected_slopes,
 ):
     config = _config()
+
     specification = resolve_agpd_fit_specification(
         config,
-        model_name="CO_BF_ER_LH",
+        model_name=model_name,
         all_materials=True,
         parameterization=parameterization,
         error_structure="shared",
         prior_material="Ag10Pd90",
     )
-    specs = all_parameter_specs(specification, config)
-    metadata = resolved_parameterization_metadata(specification, config)
+    specs = all_parameter_specs(
+        specification,
+        config,
+    )
+    metadata = resolved_parameterization_metadata(
+        specification,
+        config,
+    )
 
     assert specification.error_structure == "shared"
     assert metadata["name"] == parameterization
-    assert {f"{name}_xAg_slope" for name in metadata["slopes"]} == expected_slopes
+    assert {
+        f"{name}_xAg_slope"
+        for name in metadata["slopes"]
+    } == expected_slopes
     assert expected_slopes.issubset(specs)
-    assert {"sigma_rate_abs", "sigma_rate_rel"}.issubset(specs)
+    assert {
+        "sigma_rate_abs",
+        "sigma_rate_rel",
+    }.issubset(specs)

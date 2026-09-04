@@ -7,6 +7,7 @@ from scipy.stats import lognorm, norm, truncnorm
 
 COVERAGE_VARIABLES = (
     "theta_CO",
+    "theta_CO_site_occupation",
     "theta_OH_Pd",
     "theta_empty_Pd",
     "theta_OH_Ag",
@@ -39,7 +40,6 @@ def highest_density_interval(values, prob=HDI_PROB):
     values = np.asarray(values, dtype=float)
     if values.ndim < 1 or values.shape[0] < 1:
         raise ValueError("HDI input must contain at least one sample.")
-
     dims = ("sample", *(f"dim_{index}" for index in range(values.ndim - 1)))
     data = xr.DataArray(values, dims=dims)
     hdi = azs.hdi(data, prob=float(prob), dim="sample")
@@ -60,7 +60,6 @@ def summarize_samples(values):
         sd = np.std(values, axis=0, ddof=1)
     else:
         sd = np.full(values.shape[1:], np.nan)
-
     return {
         "mean": np.mean(values, axis=0),
         "sd": sd,
@@ -84,7 +83,6 @@ def summarize_scalar_samples(values):
 
 def prior_statistics(spec):
     distribution = spec["distribution"]
-
     if distribution == "normal":
         mu = float(spec["mu"])
         sigma = float(spec["sigma"])
@@ -97,7 +95,6 @@ def prior_statistics(spec):
             "lower": np.nan,
             "upper": np.nan,
         }
-
     if distribution == "uniform":
         lower = float(spec["lower"])
         upper = float(spec["upper"])
@@ -110,7 +107,6 @@ def prior_statistics(spec):
             "lower": lower,
             "upper": upper,
         }
-
     if distribution == "truncated_normal":
         mu = float(spec["mu"])
         sigma = float(spec["sigma"])
@@ -131,7 +127,6 @@ def prior_statistics(spec):
             "lower": lower,
             "upper": upper,
         }
-
     if distribution == "lognormal":
         median = float(spec["median"])
         log_sd = float(spec["log_sd"])
@@ -145,7 +140,6 @@ def prior_statistics(spec):
             "lower": 0.0,
             "upper": np.inf,
         }
-
     raise ValueError(f"Unsupported prior distribution '{distribution}'.")
 
 
@@ -163,12 +157,10 @@ def _parameter_components(posterior, name):
             f"Posterior parameter '{name}' is missing sample dimensions: "
             f"{missing_sample_dims}."
         )
-
     extra_dims = tuple(dim for dim in values.dims if dim not in {"chain", "draw"})
     if not extra_dims:
         yield name, values.transpose("chain", "draw")
         return
-
     shape = tuple(values.sizes[dim] for dim in extra_dims)
     for index in np.ndindex(shape):
         indexers = dict(zip(extra_dims, index, strict=True))
@@ -290,13 +282,11 @@ def build_posterior_parameter_summary(inference_data, parameter_specs):
     return summary[existing + remainder]
 
 
-
 def build_physical_summary(posterior):
     records = []
     for name in (*COVERAGE_VARIABLES, *PATHWAY_FRACTION_VARIABLES):
         if name not in posterior:
             continue
-
         values = flatten_posterior_samples(posterior[name]).reshape(-1)
         summary = summarize_scalar_samples(values)
         records.append(
@@ -319,8 +309,13 @@ def build_balance_summary(posterior):
     records = []
 
     if all(name in posterior for name in ("theta_CO", "theta_OH_Pd", "theta_empty_Pd")):
+        theta_CO_balance_name = (
+            "theta_CO_site_occupation"
+            if "theta_CO_site_occupation" in posterior
+            else "theta_CO"
+        )
         balance = (
-            flatten_posterior_samples(posterior["theta_CO"])
+            flatten_posterior_samples(posterior[theta_CO_balance_name])
             + flatten_posterior_samples(posterior["theta_OH_Pd"])
             + flatten_posterior_samples(posterior["theta_empty_Pd"])
         )

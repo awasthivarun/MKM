@@ -10,7 +10,11 @@ import xarray as xr
 
 from mkm.constants import K_B_EV_K
 from mkm.mechanisms.agpd_basic import build_agpd_point_state
-from mkm.models.agpd_basic import get_agpd_parameterization, get_agpd_model_definition
+from mkm.models.agpd_basic import (
+    _UNIT_INTERVAL_PARAMETERS,
+    get_agpd_model_definition,
+    get_agpd_parameterization,
+)
 from mkm.postprocessing.diagnostics import summarize_samples
 
 
@@ -37,13 +41,31 @@ _TRANSITION_STATE_CONTROLS = {
         TransitionStateControl(name="LH", parameter="Gact2_LH_0", label="LH"),
     ),
     "CO_BF_ER_LH": (
-        TransitionStateControl(name="CO_adsorption", parameter="Gact1_0", label="CO adsorption/desorption"),
+        TransitionStateControl(
+            name="CO_adsorption",
+            parameter="Gact1_0",
+            label="CO adsorption/desorption",
+        ),
+        TransitionStateControl(name="BF", parameter="Gact2_BF_0", label="BF"),
+        TransitionStateControl(name="ER", parameter="Gact2_ER_0", label="ER"),
+        TransitionStateControl(name="LH", parameter="Gact2_LH_0", label="LH"),
+    ),
+    "CO_BF_ER_LH_capped": (
+        TransitionStateControl(
+            name="CO_adsorption",
+            parameter="Gact1_0",
+            label="CO adsorption/desorption",
+        ),
         TransitionStateControl(name="BF", parameter="Gact2_BF_0", label="BF"),
         TransitionStateControl(name="ER", parameter="Gact2_ER_0", label="ER"),
         TransitionStateControl(name="LH", parameter="Gact2_LH_0", label="LH"),
     ),
     "CO_ER_LH": (
-        TransitionStateControl(name="CO_adsorption", parameter="Gact1_0", label="CO adsorption/desorption"),
+        TransitionStateControl(
+            name="CO_adsorption",
+            parameter="Gact1_0",
+            label="CO adsorption/desorption",
+        ),
         TransitionStateControl(name="ER", parameter="Gact2_ER_0", label="ER"),
         TransitionStateControl(name="LH", parameter="Gact2_LH_0", label="LH"),
     ),
@@ -55,7 +77,9 @@ def transition_state_controls(model_name):
         return _TRANSITION_STATE_CONTROLS[model_name]
     except KeyError as error:
         available = tuple(_TRANSITION_STATE_CONTROLS)
-        raise ValueError(f"No transition-state DRC definition for '{model_name}'. Available: {available}.") from error
+        raise ValueError(
+            f"No transition-state DRC definition for '{model_name}'. Available: {available}."
+        ) from error
 
 
 def _compile_log_rate_evaluator(model_name, point_inputs, config):
@@ -63,9 +87,12 @@ def _compile_log_rate_evaluator(model_name, point_inputs, config):
     parameter_names = tuple(field.name for field in fields(definition.parameter_class))
     parameter_symbols = {name: pt.dscalar(name) for name in parameter_names}
     parameters = definition.parameter_class(**parameter_symbols)
-
     state = build_agpd_point_state(inputs=point_inputs, config=config)
-    evaluated = definition.evaluator(state=state, parameters=parameters, temperature_K=config["temperature_K"])
+    evaluated = definition.evaluator(
+        state=state,
+        parameters=parameters,
+        temperature_K=config["temperature_K"],
+    )
 
     function = pytensor.function(
         [parameter_symbols[name] for name in parameter_names],
@@ -89,9 +116,12 @@ def _compile_pointwise_log_rate_evaluator(model_name, point_inputs, config):
     parameter_names = tuple(field.name for field in fields(definition.parameter_class))
     parameter_symbols = {name: pt.dvector(name) for name in parameter_names}
     parameters = definition.parameter_class(**parameter_symbols)
-
     state = build_agpd_point_state(inputs=point_inputs, config=config)
-    evaluated = definition.evaluator(state=state, parameters=parameters, temperature_K=config["temperature_K"])
+    evaluated = definition.evaluator(
+        state=state,
+        parameters=parameters,
+        temperature_K=config["temperature_K"],
+    )
 
     function = pytensor.function(
         [parameter_symbols[name] for name in parameter_names],
@@ -121,7 +151,8 @@ def _posterior_scalar_parameter_draws(posterior, parameter_names):
         trailing_size = int(np.prod(values.shape[2:], dtype=int)) if values.ndim > 2 else 1
         if trailing_size != 1:
             raise ValueError(
-                f"DRC currently requires scalar mechanism parameters; '{name}' has shape {values.shape[2:]}."
+                f"DRC currently requires scalar mechanism parameters; "
+                f"'{name}' has shape {values.shape[2:]}."
             )
 
         values = values.reshape(n_chains, n_draws)
@@ -134,11 +165,18 @@ def _posterior_scalar_parameter_draws(posterior, parameter_names):
 
 
 def _evaluate_parameter_set(function, parameter_names, parameter_values):
-    ln_rate = np.asarray(function(*(parameter_values[name] for name in parameter_names)), dtype=float)
+    ln_rate = np.asarray(
+        function(*(parameter_values[name] for name in parameter_names)),
+        dtype=float,
+    )
     if ln_rate.ndim != 1:
-        raise ValueError(f"Mechanism evaluator returned log-rate shape {ln_rate.shape}; expected one dimension.")
+        raise ValueError(
+            f"Mechanism evaluator returned log-rate shape {ln_rate.shape}; expected one dimension."
+        )
     if not np.all(np.isfinite(ln_rate)):
-        raise ValueError("Mechanism evaluator returned non-finite log rates during DRC perturbation.")
+        raise ValueError(
+            "Mechanism evaluator returned non-finite log rates during DRC perturbation."
+        )
     return ln_rate
 
 
@@ -151,11 +189,17 @@ def _summarize_transition_state_draws(draws, model_points):
 
     metadata = model_points.sort_values("model_point_id").reset_index(drop=True).copy()
     if len(metadata) != n_points:
-        raise ValueError(f"DRC has {n_points} model points but metadata has {len(metadata)} rows.")
+        raise ValueError(
+            f"DRC has {n_points} model points but metadata has {len(metadata)} rows."
+        )
 
     records = []
-    for control_index, control_name in enumerate(draws.coords["control"].values.astype(str)):
-        control_parameter = str(draws.coords["control_parameter"].values[control_index])
+    for control_index, control_name in enumerate(
+        draws.coords["control"].values.astype(str)
+    ):
+        control_parameter = str(
+            draws.coords["control_parameter"].values[control_index]
+        )
         control_label = str(draws.coords["control_label"].values[control_index])
 
         frame = metadata.copy()
@@ -217,33 +261,67 @@ def compute_transition_state_drc(
         raise ValueError("DRC perturbation step must be finite and positive.")
 
     controls = transition_state_controls(model_name)
-    parameter_names, function = _compile_log_rate_evaluator(model_name, point_inputs, config)
+    parameter_names, function = _compile_log_rate_evaluator(
+        model_name,
+        point_inputs,
+        config,
+    )
     posterior = _posterior_dataset(inference_data.posterior)
-    posterior_draws = _posterior_scalar_parameter_draws(posterior, parameter_names)
+    posterior_draws = _posterior_scalar_parameter_draws(
+        posterior,
+        parameter_names,
+    )
 
-    missing_controls = [control.parameter for control in controls if control.parameter not in parameter_names]
+    missing_controls = [
+        control.parameter
+        for control in controls
+        if control.parameter not in parameter_names
+    ]
     if missing_controls:
-        raise ValueError(f"DRC control parameters are not mechanism parameters for '{model_name}': {missing_controls}")
+        raise ValueError(
+            f"DRC control parameters are not mechanism parameters for "
+            f"'{model_name}': {missing_controls}"
+        )
 
     n_chains = int(posterior.sizes["chain"])
     n_draws = int(posterior.sizes["draw"])
     n_points = len(point_inputs.E_V_SHE)
-    X_TS = np.empty((n_chains, n_draws, len(controls), n_points), dtype=float)
+
+    X_TS = np.empty(
+        (n_chains, n_draws, len(controls), n_points),
+        dtype=float,
+    )
     kBT_eV = K_B_EV_K * float(config["temperature_K"])
 
     for chain in range(n_chains):
         for draw in range(n_draws):
-            base = {name: float(posterior_draws[name][chain, draw]) for name in parameter_names}
+            base = {
+                name: float(posterior_draws[name][chain, draw])
+                for name in parameter_names
+            }
 
             for control_index, control in enumerate(controls):
                 plus = dict(base)
                 minus = dict(base)
+
                 plus[control.parameter] += step_eV
                 minus[control.parameter] -= step_eV
 
-                ln_rate_plus = _evaluate_parameter_set(function, parameter_names, plus)
-                ln_rate_minus = _evaluate_parameter_set(function, parameter_names, minus)
-                derivative = (ln_rate_plus - ln_rate_minus) / (2.0 * step_eV)
+                ln_rate_plus = _evaluate_parameter_set(
+                    function,
+                    parameter_names,
+                    plus,
+                )
+                ln_rate_minus = _evaluate_parameter_set(
+                    function,
+                    parameter_names,
+                    minus,
+                )
+
+                derivative = (
+                    ln_rate_plus - ln_rate_minus
+                ) / (2.0 * step_eV)
+
                 X_TS[chain, draw, control_index] = -kBT_eV * derivative
 
     coords = {
@@ -251,11 +329,23 @@ def compute_transition_state_drc(
         "draw": np.asarray(posterior.coords["draw"]),
         "control": [control.name for control in controls],
         "model_point": np.arange(n_points, dtype=np.int64),
-        "control_parameter": ("control", [control.parameter for control in controls]),
-        "control_label": ("control", [control.label for control in controls]),
+        "control_parameter": (
+            "control",
+            [control.parameter for control in controls],
+        ),
+        "control_label": (
+            "control",
+            [control.label for control in controls],
+        ),
     }
+
     dataset = xr.Dataset(
-        data_vars={"X_TS": (("chain", "draw", "control", "model_point"), X_TS)},
+        data_vars={
+            "X_TS": (
+                ("chain", "draw", "control", "model_point"),
+                X_TS,
+            )
+        },
         coords=coords,
         attrs={
             "model_name": model_name,
@@ -265,9 +355,19 @@ def compute_transition_state_drc(
         },
     )
 
-    summary = _summarize_transition_state_draws(dataset, model_points=model_points)
-    checks = _build_transition_state_checks(dataset, step_eV=step_eV)
-    return TransitionStateDRC(draws=dataset, summary=summary, checks=checks)
+    summary = _summarize_transition_state_draws(
+        dataset,
+        model_points=model_points,
+    )
+    checks = _build_transition_state_checks(
+        dataset,
+        step_eV=step_eV,
+    )
+    return TransitionStateDRC(
+        draws=dataset,
+        summary=summary,
+        checks=checks,
+    )
 
 
 def compute_composition_transition_state_drc(
@@ -279,16 +379,16 @@ def compute_composition_transition_state_drc(
     parameterization,
     step_eV=1e-4,
 ):
-    """Compute TS DRCs using the effective transition-state energy at each composition.
+    """Compute TS DRCs using effective transition-state energies at each composition.
 
-    For shared energetics this reduces to the ordinary transition-state DRC. For linear_xAg,
-    fitted reference values and slopes first generate pointwise effective mechanism parameters,
+    For shared energetics this reduces to the ordinary transition-state DRC.
+    For composition-dependent fits, fitted reference values and slopes first
+    generate pointwise effective mechanism parameters. Unit-interval parameters
+    use the same normalized slope convention as the fitted AgPd model.
 
-        p(x_Ag) = p_ref + s_p * (x_Ag - x_ref),
-
-    and the finite-difference perturbation is then applied to the effective transition-state
-    energy at every model point. The reported DRC remains the conventional local TS-energy DRC,
-    not a sensitivity with respect to the fitted slope.
+    The finite-difference perturbation is then applied to the effective
+    transition-state energy at every model point. The reported DRC remains the
+    conventional local TS-energy DRC, not a sensitivity to a fitted slope.
     """
     if parameterization == "shared":
         return compute_transition_state_drc(
@@ -311,54 +411,113 @@ def compute_composition_transition_state_drc(
     )
     if not slope_specs:
         raise ValueError(
-            f"Composition parameterization '{parameterization}' does not define slopes for '{model_name}'."
+            f"Composition parameterization '{parameterization}' "
+            f"does not define slopes for '{model_name}'."
         )
 
     controls = transition_state_controls(model_name)
-    parameter_names, function, state = _compile_pointwise_log_rate_evaluator(model_name, point_inputs, config)
+    parameter_names, function, state = _compile_pointwise_log_rate_evaluator(
+        model_name,
+        point_inputs,
+        config,
+    )
     posterior = _posterior_dataset(inference_data.posterior)
 
-    slope_names = tuple(f"{name}_xAg_slope" for name in slope_specs)
+    slope_names = tuple(
+        f"{name}_xAg_slope"
+        for name in slope_specs
+    )
     posterior_draws = _posterior_scalar_parameter_draws(
         posterior,
         (*parameter_names, *slope_names),
     )
 
-    missing_controls = [control.parameter for control in controls if control.parameter not in parameter_names]
+    missing_controls = [
+        control.parameter
+        for control in controls
+        if control.parameter not in parameter_names
+    ]
     if missing_controls:
-        raise ValueError(f"DRC control parameters are not mechanism parameters for '{model_name}': {missing_controls}")
+        raise ValueError(
+            f"DRC control parameters are not mechanism parameters for "
+            f"'{model_name}': {missing_controls}"
+        )
 
     n_chains = int(posterior.sizes["chain"])
     n_draws = int(posterior.sizes["draw"])
     n_points = len(point_inputs.E_V_SHE)
-    x_shift = np.asarray(state.Ag_fraction, dtype=float) - float(x_reference)
 
-    X_TS = np.empty((n_chains, n_draws, len(controls), n_points), dtype=float)
+    x_shift = (
+        np.asarray(state.Ag_fraction, dtype=float)
+        - float(x_reference)
+    )
+
+    X_TS = np.empty(
+        (n_chains, n_draws, len(controls), n_points),
+        dtype=float,
+    )
     kBT_eV = K_B_EV_K * float(config["temperature_K"])
 
     for chain in range(n_chains):
         for draw in range(n_draws):
             effective = {
-                name: np.full(n_points, posterior_draws[name][chain, draw], dtype=float)
+                name: np.full(
+                    n_points,
+                    posterior_draws[name][chain, draw],
+                    dtype=float,
+                )
                 for name in parameter_names
             }
 
             for parameter_name in slope_specs:
                 slope_name = f"{parameter_name}_xAg_slope"
+                reference_value = posterior_draws[parameter_name][chain, draw]
+                slope = posterior_draws[slope_name][chain, draw]
+
+                if parameter_name in _UNIT_INTERVAL_PARAMETERS:
+                    if not np.isclose(x_reference, 0.5):
+                        raise ValueError(
+                            "Bounded linear_xAg parameters currently require "
+                            "x_reference = 0.5."
+                        )
+
+                    max_abs_slope = 2.0 * min(
+                        reference_value,
+                        1.0 - reference_value,
+                    )
+                    slope = slope * max_abs_slope
+
                 effective[parameter_name] = (
-                    posterior_draws[parameter_name][chain, draw]
-                    + posterior_draws[slope_name][chain, draw] * x_shift
+                    reference_value
+                    + slope * x_shift
                 )
 
             for control_index, control in enumerate(controls):
                 plus = dict(effective)
                 minus = dict(effective)
-                plus[control.parameter] = effective[control.parameter] + step_eV
-                minus[control.parameter] = effective[control.parameter] - step_eV
 
-                ln_rate_plus = _evaluate_parameter_set(function, parameter_names, plus)
-                ln_rate_minus = _evaluate_parameter_set(function, parameter_names, minus)
-                derivative = (ln_rate_plus - ln_rate_minus) / (2.0 * step_eV)
+                plus[control.parameter] = (
+                    effective[control.parameter] + step_eV
+                )
+                minus[control.parameter] = (
+                    effective[control.parameter] - step_eV
+                )
+
+                ln_rate_plus = _evaluate_parameter_set(
+                    function,
+                    parameter_names,
+                    plus,
+                )
+                ln_rate_minus = _evaluate_parameter_set(
+                    function,
+                    parameter_names,
+                    minus,
+                )
+
+                derivative = (
+                    ln_rate_plus - ln_rate_minus
+                ) / (2.0 * step_eV)
+
                 X_TS[chain, draw, control_index] = -kBT_eV * derivative
 
     coords = {
@@ -366,11 +525,23 @@ def compute_composition_transition_state_drc(
         "draw": np.asarray(posterior.coords["draw"]),
         "control": [control.name for control in controls],
         "model_point": np.arange(n_points, dtype=np.int64),
-        "control_parameter": ("control", [control.parameter for control in controls]),
-        "control_label": ("control", [control.label for control in controls]),
+        "control_parameter": (
+            "control",
+            [control.parameter for control in controls],
+        ),
+        "control_label": (
+            "control",
+            [control.label for control in controls],
+        ),
     }
+
     dataset = xr.Dataset(
-        data_vars={"X_TS": (("chain", "draw", "control", "model_point"), X_TS)},
+        data_vars={
+            "X_TS": (
+                ("chain", "draw", "control", "model_point"),
+                X_TS,
+            )
+        },
         coords=coords,
         attrs={
             "model_name": model_name,
@@ -378,14 +549,27 @@ def compute_composition_transition_state_drc(
             "x_reference": float(x_reference),
             "temperature_K": float(config["temperature_K"]),
             "step_eV": step_eV,
-            "definition": "X_TS = -k_B*T*d ln(rate)/d G_TS_effective(x_Ag)",
+            "definition": (
+                "X_TS = -k_B*T*d ln(rate)/d G_TS_effective(x_Ag)"
+            ),
         },
     )
 
-    summary = _summarize_transition_state_draws(dataset, model_points=model_points)
-    checks = _build_transition_state_checks(dataset, step_eV=step_eV)
+    summary = _summarize_transition_state_draws(
+        dataset,
+        model_points=model_points,
+    )
+    checks = _build_transition_state_checks(
+        dataset,
+        step_eV=step_eV,
+    )
     checks.insert(1, "parameterization", parameterization)
-    return TransitionStateDRC(draws=dataset, summary=summary, checks=checks)
+
+    return TransitionStateDRC(
+        draws=dataset,
+        summary=summary,
+        checks=checks,
+    )
 
 
 def compare_transition_state_drc_steps(reference, comparison):
@@ -394,22 +578,37 @@ def compare_transition_state_drc_steps(reference, comparison):
     other = comparison.draws["X_TS"]
 
     if ref.dims != other.dims or ref.shape != other.shape:
-        raise ValueError("DRC step-convergence comparison requires identical dimensions and shapes.")
+        raise ValueError(
+            "DRC step-convergence comparison requires identical dimensions and shapes."
+        )
     if not np.array_equal(ref.coords["control"], other.coords["control"]):
-        raise ValueError("DRC step-convergence comparison requires identical controls.")
+        raise ValueError(
+            "DRC step-convergence comparison requires identical controls."
+        )
 
-    difference = np.abs(np.asarray(ref, dtype=float) - np.asarray(other, dtype=float))
+    difference = np.abs(
+        np.asarray(ref, dtype=float)
+        - np.asarray(other, dtype=float)
+    )
+
     records = []
-
-    for index, control in enumerate(ref.coords["control"].values.astype(str)):
+    for index, control in enumerate(
+        ref.coords["control"].values.astype(str)
+    ):
         values = difference[:, :, index, :].reshape(-1)
         records.append(
             {
                 "control": control,
-                "reference_step_eV": float(reference.draws.attrs["step_eV"]),
-                "comparison_step_eV": float(comparison.draws.attrs["step_eV"]),
+                "reference_step_eV": float(
+                    reference.draws.attrs["step_eV"]
+                ),
+                "comparison_step_eV": float(
+                    comparison.draws.attrs["step_eV"]
+                ),
                 "median_abs_difference": float(np.median(values)),
-                "q999_abs_difference": float(np.quantile(values, 0.999)),
+                "q999_abs_difference": float(
+                    np.quantile(values, 0.999)
+                ),
                 "max_abs_difference": float(np.max(values)),
             }
         )

@@ -31,16 +31,36 @@ def _point_inputs(materials):
         materials=tuple(materials),
         material_index=np.arange(len(materials), dtype=np.int64),
         E_V_SHE=np.linspace(0.25, 0.35, len(materials)),
-        ln_electrolyte_concentration=np.log(np.full(len(materials), 0.5)),
-        ln_CO_mole_fraction=np.log(np.full(len(materials), 0.1)),
+        ln_electrolyte_concentration=np.log(
+            np.full(len(materials), 0.5)
+        ),
+        ln_CO_mole_fraction=np.log(
+            np.full(len(materials), 0.1)
+        ),
     )
 
 
 def test_agpd_registry_keeps_all_chemical_mechanisms_and_reduced_pd_model():
-    assert available_agpd_models() == ("BF", "BF_LH", "CO_BF_ER_LH", "CO_ER_LH")
-    assert available_agpd_all_material_models() == ("BF_LH", "CO_BF_ER_LH")
+    assert available_agpd_models() == (
+        "BF",
+        "BF_LH",
+        "CO_BF_ER_LH",
+        "CO_BF_ER_LH_capped",
+        "CO_ER_LH",
+    )
+    assert available_agpd_all_material_models() == (
+        "BF_LH",
+        "CO_BF_ER_LH",
+        "CO_BF_ER_LH_capped",
+    )
+
     for name in available_agpd_models():
         assert get_agpd_model_definition(name).parameter_class is not None
+
+    assert (
+        get_agpd_model_definition("CO_BF_ER_LH_capped").parameter_class
+        is get_agpd_model_definition("CO_BF_ER_LH").parameter_class
+    )
 
     pd_definition = get_agpd_model_definition("CO_ER_LH")
     assert pd_definition.parameter_class is PdCOERLHParameters
@@ -56,8 +76,26 @@ def test_agpd_registry_keeps_all_chemical_mechanisms_and_reduced_pd_model():
 
 def test_parameterization_profiles_are_configuration_driven():
     config = _config()
-    assert available_agpd_parameterizations(config, "BF_LH") == ("shared",)
-    assert set(available_agpd_parameterizations(config, "CO_BF_ER_LH")) == {
+
+    assert available_agpd_parameterizations(
+        config,
+        "BF_LH",
+    ) == ("shared",)
+
+    base_parameterizations = set(
+        available_agpd_parameterizations(
+            config,
+            "CO_BF_ER_LH",
+        )
+    )
+    capped_parameterizations = set(
+        available_agpd_parameterizations(
+            config,
+            "CO_BF_ER_LH_capped",
+        )
+    )
+
+    assert base_parameterizations == {
         "shared",
         "linear_dG1",
         "linear_dG4",
@@ -67,8 +105,10 @@ def test_parameterization_profiles_are_configuration_driven():
         "linear_GactER",
         "linear_oxidation_barriers",
         "linear_selected_energies",
+        "linear_energies",
         "linear_xAg",
     }
+    assert capped_parameterizations == base_parameterizations
 
     selected_x_reference, selected_slopes = get_agpd_parameterization(
         config,
@@ -89,6 +129,12 @@ def test_parameterization_profiles_are_configuration_driven():
         "CO_BF_ER_LH",
         "linear_xAg",
     )
+    capped_x_reference, capped_slopes = get_agpd_parameterization(
+        config,
+        "CO_BF_ER_LH_capped",
+        "linear_xAg",
+    )
+
     assert x_reference == pytest.approx(0.5)
     assert set(slopes) == {
         "deltaG1_0",
@@ -102,15 +148,36 @@ def test_parameterization_profiles_are_configuration_driven():
         "Gact2_ER_0",
         "Gact2_LH_0",
     }
+    assert capped_x_reference == x_reference
+    assert capped_slopes == slopes
 
     metadata = get_agpd_parameterization_metadata(
         config,
-        "CO_BF_ER_LH",
+        "CO_BF_ER_LH_capped",
         "linear_xAg",
     )
     assert metadata["name"] == "linear_xAg"
     assert metadata["x_reference"] == pytest.approx(0.5)
     assert metadata["slopes"] == slopes
+
+
+def test_capped_model_reuses_uncapped_prior_and_slope_specs():
+    config = _config()
+
+    base_specs = get_agpd_all_material_parameter_specs(
+        config,
+        prior_material="Ag10Pd90",
+        model_name="CO_BF_ER_LH",
+        parameterization="linear_xAg",
+    )
+    capped_specs = get_agpd_all_material_parameter_specs(
+        config,
+        prior_material="Ag10Pd90",
+        model_name="CO_BF_ER_LH_capped",
+        parameterization="linear_xAg",
+    )
+
+    assert capped_specs == base_specs
 
 
 def test_arbitrary_parameter_subset_can_receive_xag_slopes_without_domain_enforcement():
@@ -138,7 +205,8 @@ def test_arbitrary_parameter_subset_can_receive_xag_slopes_without_domain_enforc
     )
     assert "beta_2_ER_xAg_slope" in specs
     assert not any(
-        name.endswith("_xAg_slope") and name != "beta_2_ER_xAg_slope"
+        name.endswith("_xAg_slope")
+        and name != "beta_2_ER_xAg_slope"
         for name in specs
     )
 
@@ -150,16 +218,26 @@ def test_arbitrary_parameter_subset_can_receive_xag_slopes_without_domain_enforc
         parameterization="linear_beta_er",
     )
     with pm.Model() as model:
-        result = mechanism(_point_inputs(("Ag10Pd90", "Pd100")))
+        result = mechanism(
+            _point_inputs(("Ag10Pd90", "Pd100"))
+        )
 
     assert result.ln_rate.ndim == 1
-    assert "beta_2_ER_xAg_slope" in {variable.name for variable in model.free_RVs}
+    assert "beta_2_ER_xAg_slope" in {
+        variable.name
+        for variable in model.free_RVs
+    }
 
 
-def test_prediction_only_full_model_accepts_pure_pd_state():
+@pytest.mark.parametrize(
+    "model_name",
+    ("CO_BF_ER_LH", "CO_BF_ER_LH_capped"),
+)
+def test_prediction_only_full_model_accepts_pure_pd_state(model_name):
     config = _config()
+
     mechanism = build_agpd_all_material_mechanism(
-        "CO_BF_ER_LH",
+        model_name,
         ("Pd100",),
         config,
         prior_material="Ag10Pd90",
@@ -168,22 +246,45 @@ def test_prediction_only_full_model_accepts_pure_pd_state():
     )
 
     with pm.Model() as model:
-        result = mechanism(_point_inputs(("Pd100",)))
+        result = mechanism(
+            _point_inputs(("Pd100",))
+        )
 
     assert result.ln_rate.ndim == 1
     assert "rate_fraction_BF" not in result.pointwise
-    assert {"rate_fraction_ER", "rate_fraction_LH"}.issubset(result.pointwise)
-    free_names = {variable.name for variable in model.free_RVs}
+    assert {
+        "rate_fraction_ER",
+        "rate_fraction_LH",
+    }.issubset(result.pointwise)
+
+    if model_name == "CO_BF_ER_LH_capped":
+        assert "theta_CO_site_occupation" in result.pointwise
+    else:
+        assert "theta_CO_site_occupation" not in result.pointwise
+
+    free_names = {
+        variable.name
+        for variable in model.free_RVs
+    }
     assert "Gact2_BF_0" in free_names
     assert "Gact2_BF_0_xAg_slope" in free_names
 
 
 def test_reduced_pd_individual_mechanism_contains_no_bf_parameters():
-    mechanism = build_agpd_mechanism("CO_ER_LH", "Pd100", _config())
+    mechanism = build_agpd_mechanism(
+        "CO_ER_LH",
+        "Pd100",
+        _config(),
+    )
     with pm.Model() as model:
-        result = mechanism(_point_inputs(("Pd100",)))
+        result = mechanism(
+            _point_inputs(("Pd100",))
+        )
 
-    free_names = {variable.name for variable in model.free_RVs}
+    free_names = {
+        variable.name
+        for variable in model.free_RVs
+    }
     assert result.ln_rate.ndim == 1
     assert free_names == {
         "deltaG1_0",
@@ -196,14 +297,35 @@ def test_reduced_pd_individual_mechanism_contains_no_bf_parameters():
 
 
 def test_individual_mechanism_rejects_different_material_set():
-    mechanism = build_agpd_mechanism("BF_LH", "Ag10Pd90", _config())
-    with pm.Model(), pytest.raises(ValueError, match="exactly that one material"):
-        mechanism(_point_inputs(("Ag10Pd90", "Ag50Pd50")))
+    mechanism = build_agpd_mechanism(
+        "BF_LH",
+        "Ag10Pd90",
+        _config(),
+    )
+    with pm.Model(), pytest.raises(
+        ValueError,
+        match="exactly that one material",
+    ):
+        mechanism(
+            _point_inputs(("Ag10Pd90", "Ag50Pd50"))
+        )
 
 
 def test_unknown_model_or_parameterization_is_rejected():
     config = _config()
-    with pytest.raises(ValueError, match="Unknown AgPd model"):
+
+    with pytest.raises(
+        ValueError,
+        match="Unknown AgPd model",
+    ):
         get_agpd_model_definition("unknown")
-    with pytest.raises(ValueError, match="Unknown AgPd parameterization"):
-        get_agpd_parameterization(config, "CO_BF_ER_LH", "unknown")
+
+    with pytest.raises(
+        ValueError,
+        match="Unknown AgPd parameterization",
+    ):
+        get_agpd_parameterization(
+            config,
+            "CO_BF_ER_LH",
+            "unknown",
+        )
