@@ -8,7 +8,11 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from mkm.models.agpd_basic import get_agpd_model_definition, get_agpd_parameterization
+from mkm.models.agpd_basic import (
+    _UNIT_INTERVAL_PARAMETERS,
+    get_agpd_model_definition,
+    get_agpd_parameterization,
+)
 from mkm.postprocessing.diagnostics import summarize_samples
 
 
@@ -109,6 +113,16 @@ def build_agpd_composition_parameter_trends(
 
         if is_x_dependent:
             slope = _scalar_draws(posterior, f"{parameter}_xAg_slope")
+
+            if parameter in _UNIT_INTERVAL_PARAMETERS:
+                if not np.isclose(x_reference, 0.5):
+                    raise ValueError(
+                        "Bounded linear_xAg parameters currently require x_reference = 0.5."
+                    )
+
+                max_abs_slope = 2.0 * np.minimum(base, 1.0 - base)
+                slope = slope * max_abs_slope
+
             draws = base[:, None] + slope[:, None] * (
                 x_grid[None, :] - float(x_reference)
             )

@@ -136,50 +136,50 @@ composition_parameterizations:
             mu: 0.0
             sigma: 1
             lower: -1
-            upper: 1
+            upper: 0 # DFT supports stronger OH binding on Pd with increasing Ag content 
           deltaG5_0:
             distribution: truncated_normal
             mu: 0.0
             sigma: 1
-            lower: -1
-            upper: 1
-          Gact1_0: # Activation energy of CO binding on Pd should not be a function of surface composition
+            lower: -10 # Hitting the wall
+            upper: 0 # DFT supports stronger OH binding on Pd with increasing Ag content 
+          Gact1_0: # (Relaxed right now) Activation energy of CO binding on Pd should not be a function of surface composition
             distribution: truncated_normal
             mu: 0.0
             sigma: 1
-            lower: -1e-4
-            upper: 1e-4
+            lower: -0.40
+            upper: 0.40
           Gact2_BF_0: # Large amount of change allowed in BF activation energy 
             distribution: truncated_normal
             mu: 0.0
             sigma: 1
             lower: -0.40
             upper: 0.40
-          Gact2_ER_0: # Large amount of change allowed in ER activation energy (but if CO binds weaker, ER activation energy should decrease)
+          Gact2_ER_0: # Large amount of change allowed in ER activation energy
             distribution: truncated_normal
             mu: 0.0
             sigma: 1
             lower: -0.40
-            upper: 0.40 # Maybe set to 0? 
+            upper: 0.0 # Activation energy should decrease if CO binds weaker
           Gact2_LH_0: # Large amount of change allowed in LH activation energy
             distribution: truncated_normal
             mu: 0.0
             sigma: 1
             lower: -0.40
-            upper: 0.40
-          beta_2_BF: # Allowed to change 
+            upper: 2 # Hitting the wall 
+          beta_2_BF: # Do not change - this is percentage change
             distribution: truncated_normal
             mu: 0.0
             sigma: 1
             lower: -1
             upper: 1
-          beta_2_ER: # Allowed to change
+          beta_2_ER: # Do not change - this is percentage change
             distribution: truncated_normal
             mu: 0.0
             sigma: 1
             lower: -1
             upper: 1
-          q: # Allowed to change
+          q: # Do not change - this is percentage change
             distribution: truncated_normal
             mu: 0.0
             sigma: 1
@@ -364,19 +364,19 @@ prior_profiles:
           mu: 0.0
           sigma: 2
           lower: -2
-          upper: 1
+          upper: 0.5
         deltaG4_0:
           distribution: truncated_normal
           mu: 0.0
           sigma: 2
           lower: -2
-          upper: 2
+          upper: 1
         deltaG5_0:
           distribution: truncated_normal
           mu: 0.0
           sigma: 2
           lower: -2
-          upper: 2
+          upper: 1
         beta_2_BF: # Bounded between 0 and 1
           distribution: truncated_normal
           mu: 0.5
@@ -399,25 +399,25 @@ prior_profiles:
           distribution: truncated_normal
           mu: 0.5
           sigma: 1
-          lower: 0.0 # Preventing values smaller than 0
+          lower: 0.2 # Low enough to be infinitely fast
           upper: 1.0 # High enough for ~0 reaction rate
         Gact2_BF_0:
           distribution: truncated_normal
           mu: 0.7
           sigma: 1
-          lower: 0.0 # Preventing values smaller than 0
+          lower: 0.2 # Low enough to be infinitely fast
           upper: 1.0 # High enough for ~0 reaction rate
         Gact2_ER_0:
           distribution: truncated_normal
           mu: 0.7
           sigma: 1
-          lower: 0.0 # Preventing values smaller than 0
+          lower: 0.2 # Low enough to be infinitely fast
           upper: 1.0 # High enough for ~0 reaction rate
         Gact2_LH_0:
           distribution: truncated_normal
           mu: 0.7
           sigma: 1
-          lower: 0.0 # Preventing values smaller than 0 
+          lower: 0.2 # Low enough to be infinitely fast
           upper: 1.0 # High enough for ~0 reaction rate 
 
   Ag25Pd75: *legacy_alloy_prior_profile

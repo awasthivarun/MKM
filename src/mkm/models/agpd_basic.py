@@ -43,6 +43,13 @@ _AGPD_MODEL_REGISTRY = {
 }
 
 
+_UNIT_INTERVAL_PARAMETERS = {
+    "beta_2_BF",
+    "beta_2_ER",
+    "q",
+}
+
+
 def available_agpd_models():
     return tuple(_AGPD_MODEL_REGISTRY)
 
@@ -314,11 +321,26 @@ def build_agpd_all_material_mechanism(
         effective_values = dict(prior_values)
         if slope_specs:
             x_shift = pt.as_tensor_variable(state.Ag_fraction) - x_reference
+
             for parameter_name in slope_specs:
                 slope_name = f"{parameter_name}_xAg_slope"
+                slope = slope_values[slope_name]
+
+                if parameter_name in _UNIT_INTERVAL_PARAMETERS:
+                    if not np.isclose(x_reference, 0.5):
+                        raise ValueError(
+                            "Bounded linear_xAg parameters currently require x_reference = 0.5."
+                        )
+
+                    max_abs_slope = 2.0 * pt.minimum(
+                        prior_values[parameter_name],
+                        1.0 - prior_values[parameter_name],
+                    )
+                    slope = slope * max_abs_slope
+
                 effective_values[parameter_name] = (
                     prior_values[parameter_name]
-                    + slope_values[slope_name] * x_shift
+                    + slope * x_shift
                 )
 
         evaluated = _evaluate_all_material_state(
