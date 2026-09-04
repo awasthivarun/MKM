@@ -43,7 +43,6 @@ def highest_density_interval(values, prob=HDI_PROB):
     dims = ("sample", *(f"dim_{index}" for index in range(values.ndim - 1)))
     data = xr.DataArray(values, dims=dims)
     hdi = azs.hdi(data, prob=float(prob), dim="sample")
-
     lower = np.asarray(hdi.sel(ci_bound="lower"), dtype=float)
     upper = np.asarray(hdi.sel(ci_bound="upper"), dtype=float)
     return lower, upper
@@ -54,7 +53,6 @@ def summarize_samples(values):
     values = np.asarray(values, dtype=float)
     if values.ndim < 1 or values.shape[0] < 1:
         raise ValueError("Posterior summary input must contain at least one sample.")
-
     hdi_lower, hdi_upper = highest_density_interval(values, prob=HDI_PROB)
     if values.shape[0] > 1:
         sd = np.std(values, axis=0, ddof=1)
@@ -154,8 +152,7 @@ def _parameter_components(posterior, name):
     missing_sample_dims = [dim for dim in ("chain", "draw") if dim not in values.dims]
     if missing_sample_dims:
         raise ValueError(
-            f"Posterior parameter '{name}' is missing sample dimensions: "
-            f"{missing_sample_dims}."
+            f"Posterior parameter '{name}' is missing sample dimensions: {missing_sample_dims}."
         )
     extra_dims = tuple(dim for dim in values.dims if dim not in {"chain", "draw"})
     if not extra_dims:
@@ -186,7 +183,6 @@ def build_posterior_parameter_summary(inference_data, parameter_specs):
     missing = [name for name in parameter_specs if name not in posterior]
     if missing:
         raise ValueError(f"Posterior is missing configured parameters: {missing}.")
-
     records = []
     for name, spec in parameter_specs.items():
         prior = prior_statistics(spec)
@@ -194,64 +190,36 @@ def build_posterior_parameter_summary(inference_data, parameter_specs):
             chain_draw = np.asarray(component, dtype=float)
             samples = chain_draw.reshape(-1)
             posterior_summary = summarize_scalar_samples(samples)
-
             if chain_draw.shape[0] >= 2:
-                rhat = _scalar_statistic(
-                    azs.rhat(chain_draw, chain_axis=0, draw_axis=1)
-                )
+                rhat = _scalar_statistic(azs.rhat(chain_draw, chain_axis=0, draw_axis=1))
             else:
                 rhat = np.nan
-
             record = {
                 "parameter": label,
                 "variable": name,
                 "parameter_type": "error" if name in ERROR_VARIABLES else "physical",
                 **posterior_summary,
                 "mcse_mean": _scalar_statistic(
-                    azs.mcse(
-                        chain_draw,
-                        method="mean",
-                        chain_axis=0,
-                        draw_axis=1,
-                    )
+                    azs.mcse(chain_draw, method="mean", chain_axis=0, draw_axis=1)
                 ),
                 "mcse_sd": _scalar_statistic(
-                    azs.mcse(
-                        chain_draw,
-                        method="sd",
-                        chain_axis=0,
-                        draw_axis=1,
-                    )
+                    azs.mcse(chain_draw, method="sd", chain_axis=0, draw_axis=1)
                 ),
                 "ess_bulk": _scalar_statistic(
-                    azs.ess(
-                        chain_draw,
-                        method="bulk",
-                        chain_axis=0,
-                        draw_axis=1,
-                    )
+                    azs.ess(chain_draw, method="bulk", chain_axis=0, draw_axis=1)
                 ),
                 "ess_tail": _scalar_statistic(
-                    azs.ess(
-                        chain_draw,
-                        method="tail",
-                        prob=(0.05, 0.95),
-                        chain_axis=0,
-                        draw_axis=1,
-                    )
+                    azs.ess(chain_draw, method="tail", prob=(0.05, 0.95), chain_axis=0, draw_axis=1)
                 ),
                 "rhat": rhat,
                 **prior,
             }
-            record["sd_ratio_posterior_over_prior"] = (
-                record["sd"] / record["prior_sd"]
-            )
+            record["sd_ratio_posterior_over_prior"] = record["sd"] / record["prior_sd"]
             prior_width = record["prior_q975"] - record["prior_q025"]
             record["interval95_width_ratio_posterior_hdi_over_prior_central"] = (
-                (record["hdi95_upper"] - record["hdi95_lower"]) / prior_width
-            )
+                record["hdi95_upper"] - record["hdi95_lower"]
+            ) / prior_width
             records.append(record)
-
     preferred = [
         "parameter",
         "variable",
@@ -307,15 +275,9 @@ def build_physical_summary(posterior):
 
 def build_balance_summary(posterior):
     records = []
-
     if all(name in posterior for name in ("theta_CO", "theta_OH_Pd", "theta_empty_Pd")):
-        theta_CO_balance_name = (
-            "theta_CO_site_occupation"
-            if "theta_CO_site_occupation" in posterior
-            else "theta_CO"
-        )
         balance = (
-            flatten_posterior_samples(posterior[theta_CO_balance_name])
+            flatten_posterior_samples(posterior["theta_CO"])
             + flatten_posterior_samples(posterior["theta_OH_Pd"])
             + flatten_posterior_samples(posterior["theta_empty_Pd"])
         )
@@ -328,7 +290,6 @@ def build_balance_summary(posterior):
                 "q999_abs_error": float(np.quantile(np.abs(error), 0.999)),
             }
         )
-
     if all(name in posterior for name in ("theta_OH_Ag", "theta_empty_Ag")):
         balance = (
             flatten_posterior_samples(posterior["theta_OH_Ag"])
@@ -343,7 +304,6 @@ def build_balance_summary(posterior):
                 "q999_abs_error": float(np.quantile(np.abs(error), 0.999)),
             }
         )
-
     fraction_names = [name for name in PATHWAY_FRACTION_VARIABLES if name in posterior]
     if fraction_names:
         total = sum(flatten_posterior_samples(posterior[name]) for name in fraction_names)
@@ -356,7 +316,6 @@ def build_balance_summary(posterior):
                 "q999_abs_error": float(np.quantile(np.abs(error), 0.999)),
             }
         )
-
     return pd.DataFrame(records)
 
 

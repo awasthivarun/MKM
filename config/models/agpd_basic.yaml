@@ -34,14 +34,10 @@ surface_assumptions:
   random_mixing: true
 
 co_coverage_cap:
-  # Maximum molecular CO coverage on the Pd sublattice.
-  # Used only by CO_BF_ER_LH_capped.
-  #
-  # The cap is imposed through the Pd site balance:
-  # theta_empty_Pd + theta_OH_Pd + theta_CO / theta_CO_max = 1.
-  #
-  # Keeping this material-resolved lets us change the assumed maximum
-  # coverage by composition later without changing the mechanism code.
+  # Maximum molecular CO coverage used only by CO_BF_ER_LH_capped.
+  # CO adsorption is multiplied by 1 - theta_CO / theta_CO_max while the ordinary Pd site balance
+  # theta_empty_Pd + theta_OH_Pd + theta_CO = 1 is retained.
+  # Kept material-resolved so the assumed packing limit can vary by composition.
   Pd100: 0.66
   Ag10Pd90: 0.66
   Ag25Pd75: 0.66
@@ -182,7 +178,7 @@ composition_parameterizations:
             mu: 0.0
             sigma: 1
             lower: -0.40
-            upper: 2 # Hitting the wall 
+            upper: 1 # Hitting the wall 
           beta_2_BF: # Do not change - this is percentage change
             distribution: truncated_normal
             mu: 0.0
@@ -416,24 +412,24 @@ prior_profiles:
           mu: 0.5
           sigma: 1
           lower: 0.2 # Low enough to be infinitely fast
-          upper: 0.8 # High enough for ~0 reaction rate
+          upper: 0.7 # High enough for ~0 reaction rate
         Gact2_BF_0:
           distribution: truncated_normal
           mu: 0.7
           sigma: 1
-          lower: 0.5 # Low enough to be infinitely fast
+          lower: 0.6 # Low enough to be infinitely fast
           upper: 1.0 # High enough for ~0 reaction rate
         Gact2_ER_0:
           distribution: truncated_normal
           mu: 0.7
           sigma: 1
-          lower: 0.5 # Low enough to be infinitely fast
+          lower: 0.6 # Low enough to be infinitely fast
           upper: 1.0 # High enough for ~0 reaction rate
         Gact2_LH_0:
           distribution: truncated_normal
           mu: 0.7
           sigma: 1
-          lower: 0.5 # Low enough to be infinitely fast
+          lower: 0.6 # Low enough to be infinitely fast
           upper: 1.0 # High enough for ~0 reaction rate 
 
   Ag25Pd75: *legacy_alloy_prior_profile

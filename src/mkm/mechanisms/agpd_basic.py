@@ -23,19 +23,15 @@ class AgPdPointState:
 
 def thermal_energy_eV(temperature_K):
     temperature_K = float(temperature_K)
-
     if not np.isfinite(temperature_K) or temperature_K <= 0:
         raise ValueError("Temperature must be finite and positive.")
-
     return K_B_EV_K * temperature_K
 
 
 def log_eyring_prefactor_s_inv(temperature_K):
     temperature_K = float(temperature_K)
-
     if not np.isfinite(temperature_K) or temperature_K <= 0:
         raise ValueError("Temperature must be finite and positive.")
-
     return np.log(K_B_J_K * temperature_K / H_J_S)
 
 
@@ -50,18 +46,15 @@ def log_tst_rate_constant(activation_G_eV, temperature_K):
 
 
 def electrochemical_free_energy(delta_G_0_eV, electron_transfer, E_V_SHE):
-    return (
-        pt.as_tensor_variable(delta_G_0_eV)
-        - pt.as_tensor_variable(electron_transfer) * pt.as_tensor_variable(E_V_SHE)
+    return pt.as_tensor_variable(delta_G_0_eV) - pt.as_tensor_variable(electron_transfer) * pt.as_tensor_variable(
+        E_V_SHE
     )
 
 
 def electrochemical_activation_energy(activation_G_0_eV, beta, electron_transfer, E_V_SHE):
     return (
         pt.as_tensor_variable(activation_G_0_eV)
-        - pt.as_tensor_variable(beta)
-        * pt.as_tensor_variable(electron_transfer)
-        * pt.as_tensor_variable(E_V_SHE)
+        - pt.as_tensor_variable(beta) * pt.as_tensor_variable(electron_transfer) * pt.as_tensor_variable(E_V_SHE)
     )
 
 
@@ -69,21 +62,17 @@ def build_agpd_point_state(inputs: ModelPointInputs, config):
     gas = config["gas"]
     standard_pressure_bar = float(gas["standard_state_pressure_bar"])
     total_pressure_bar = float(gas["total_pressure_bar"])
-
     if not np.isfinite(standard_pressure_bar) or standard_pressure_bar <= 0:
         raise ValueError("Gas standard-state pressure must be finite and positive.")
-
     if not np.isfinite(total_pressure_bar) or total_pressure_bar <= 0:
         raise ValueError("Total gas pressure must be finite and positive.")
 
     electrolyte = config["electrolyte"]
     activity_model = electrolyte["activity_model"]
-
     if activity_model != "ideal_molarity":
         raise ValueError(f"Unsupported electrolyte activity model '{activity_model}'.")
 
     standard_concentration_M = float(electrolyte["standard_state_concentration_M"])
-
     if not np.isfinite(standard_concentration_M) or standard_concentration_M <= 0:
         raise ValueError("Electrolyte standard-state concentration must be finite and positive.")
 
@@ -91,72 +80,45 @@ def build_agpd_point_state(inputs: ModelPointInputs, config):
     ln_a_CO = np.asarray(inputs.ln_CO_mole_fraction, dtype=float) + np.log(total_pressure_bar / standard_pressure_bar)
 
     composition_config = config["surface_composition"]
-
     Ag_fraction_by_material = []
     Pd_fraction_by_material = []
-
     for material in inputs.materials:
         if material not in composition_config:
             raise ValueError(f"Missing surface composition for material '{material}'.")
 
         composition = composition_config[material]
-
         Ag_fraction = float(composition["Ag_fraction"])
         Pd_fraction = float(composition["Pd_fraction"])
-
         if not np.isfinite(Ag_fraction) or not np.isfinite(Pd_fraction):
             raise ValueError(f"Non-finite surface composition for material '{material}'.")
-
         if not (0.0 <= Ag_fraction <= 1.0):
             raise ValueError(f"Ag fraction for '{material}' must lie between 0 and 1.")
-
         if not (0.0 <= Pd_fraction <= 1.0):
             raise ValueError(f"Pd fraction for '{material}' must lie between 0 and 1.")
-
         if not np.isclose(Ag_fraction + Pd_fraction, 1.0, rtol=0, atol=1e-12):
             raise ValueError(f"Ag and Pd fractions for '{material}' must sum to 1.")
-
         Ag_fraction_by_material.append(Ag_fraction)
         Pd_fraction_by_material.append(Pd_fraction)
 
     Ag_fraction_by_material = np.asarray(Ag_fraction_by_material, dtype=float)
     Pd_fraction_by_material = np.asarray(Pd_fraction_by_material, dtype=float)
-
     material_index = np.asarray(inputs.material_index, dtype=np.int64)
-
     Ag_fraction = Ag_fraction_by_material[material_index]
     Pd_fraction = Pd_fraction_by_material[material_index]
 
     theta_CO_max = None
     coverage_cap_config = config.get("co_coverage_cap")
-
     if coverage_cap_config is not None:
-        missing_caps = [
-            material
-            for material in inputs.materials
-            if material not in coverage_cap_config
-        ]
+        missing_caps = [material for material in inputs.materials if material not in coverage_cap_config]
         if missing_caps:
-            raise ValueError(
-                f"Missing CO coverage caps for materials: {missing_caps}."
-            )
-
+            raise ValueError(f"Missing CO coverage caps for materials: {missing_caps}.")
         theta_CO_max_by_material = np.asarray(
-            [
-                float(coverage_cap_config[material])
-                for material in inputs.materials
-            ],
-            dtype=float,
+            [float(coverage_cap_config[material]) for material in inputs.materials], dtype=float
         )
-
         if not np.all(np.isfinite(theta_CO_max_by_material)):
             raise ValueError("CO coverage caps must be finite.")
-
-        if np.any(theta_CO_max_by_material <= 0.0) or np.any(
-            theta_CO_max_by_material > 1.0
-        ):
+        if np.any(theta_CO_max_by_material <= 0.0) or np.any(theta_CO_max_by_material > 1.0):
             raise ValueError("CO coverage caps must lie in (0, 1].")
-
         theta_CO_max = theta_CO_max_by_material[material_index]
 
     return AgPdPointState(
@@ -185,19 +147,15 @@ class AgQEACoverages:
 def calculate_pd_qea_coverages(log_K_CO, log_K_OH_Pd, state: AgPdPointState):
     log_K_CO = pt.as_tensor_variable(log_K_CO)
     log_K_OH_Pd = pt.as_tensor_variable(log_K_OH_Pd)
-
     ln_a_CO = pt.as_tensor_variable(state.ln_a_CO)
     ln_a_OH = pt.as_tensor_variable(state.ln_a_OH)
 
     term_CO = log_K_CO + ln_a_CO
     term_OH_Pd = log_K_OH_Pd + ln_a_OH
-
     zeros = pt.zeros_like(term_CO)
-
     log_theta_empty_Pd = -pt.logsumexp(pt.stack([zeros, term_CO, term_OH_Pd]), axis=0)
     log_theta_CO = term_CO + log_theta_empty_Pd
     log_theta_OH_Pd = term_OH_Pd + log_theta_empty_Pd
-
     return PdQEACoverages(
         log_theta_empty_Pd=log_theta_empty_Pd,
         log_theta_CO=log_theta_CO,
@@ -211,10 +169,8 @@ def calculate_ag_qea_coverages(log_K_OH_Ag, state: AgPdPointState):
 
     term_OH_Ag = log_K_OH_Ag + ln_a_OH
     zeros = pt.zeros_like(term_OH_Ag)
-
     log_theta_empty_Ag = -pt.logsumexp(pt.stack([zeros, term_OH_Ag]), axis=0)
     log_theta_OH_Ag = term_OH_Ag + log_theta_empty_Ag
-
     return AgQEACoverages(log_theta_empty_Ag=log_theta_empty_Ag, log_theta_OH_Ag=log_theta_OH_Ag)
 
 
@@ -235,7 +191,6 @@ class AgPdBFResult:
     mechanism_result: object
 
     log_rate_BF: object
-
     log_K1: object
     log_K4: object
     log_K5: object
@@ -248,33 +203,27 @@ def evaluate_agpd_bf(state: AgPdPointState, parameters: AgPdBFParameters, temper
         raise ValueError("The BF-only mechanism requires a positive Ag surface fraction at every model point.")
 
     E = pt.as_tensor_variable(state.E_V_SHE)
-
     deltaG1 = pt.as_tensor_variable(parameters.deltaG1_0)
     deltaG4 = electrochemical_free_energy(delta_G_0_eV=parameters.deltaG4_0, electron_transfer=1.0, E_V_SHE=E)
     deltaG5 = electrochemical_free_energy(
         delta_G_0_eV=parameters.deltaG5_0, electron_transfer=parameters.q, E_V_SHE=E
     )
-
     Gact2_BF = electrochemical_activation_energy(
         activation_G_0_eV=parameters.Gact2_0,
         beta=parameters.beta_2,
         electron_transfer=1.0 - parameters.q,
         E_V_SHE=E,
     )
-
     log_K1 = log_equilibrium_constant(delta_G_eV=deltaG1, temperature_K=temperature_K)
     log_K4 = log_equilibrium_constant(delta_G_eV=deltaG4, temperature_K=temperature_K)
     log_K5 = log_equilibrium_constant(delta_G_eV=deltaG5, temperature_K=temperature_K)
 
     log_k2_BF = log_tst_rate_constant(activation_G_eV=Gact2_BF, temperature_K=temperature_K)
-
     pd_coverages = calculate_pd_qea_coverages(log_K_CO=log_K1, log_K_OH_Pd=log_K4, state=state)
     ag_coverages = calculate_ag_qea_coverages(log_K_OH_Ag=log_K5, state=state)
-
     log_Ag_fraction = log_surface_fraction(state.Ag_fraction)
 
     log_rate_BF = log_k2_BF + pd_coverages.log_theta_CO + ag_coverages.log_theta_OH_Ag + log_Ag_fraction
-
     mechanism_result = MechanismResult(
         ln_rate=log_rate_BF,
         pointwise={
@@ -286,7 +235,6 @@ def evaluate_agpd_bf(state: AgPdPointState, parameters: AgPdBFParameters, temper
             "ln_rate_BF": log_rate_BF,
         },
     )
-
     return AgPdBFResult(
         mechanism_result=mechanism_result,
         log_rate_BF=log_rate_BF,
@@ -299,31 +247,24 @@ def evaluate_agpd_bf(state: AgPdPointState, parameters: AgPdBFParameters, temper
 
 def log_surface_fraction(fraction):
     fraction = np.asarray(fraction, dtype=float)
-
     if not np.all(np.isfinite(fraction)):
         raise ValueError("Surface fractions contain non-finite values.")
-
     if np.any(fraction < 0) or np.any(fraction > 1):
         raise ValueError("Surface fractions must lie between 0 and 1.")
 
     log_fraction = np.full(fraction.shape, -np.inf, dtype=float)
     positive = fraction > 0
-
     log_fraction[positive] = np.log(fraction[positive])
-
     return pt.as_tensor_variable(log_fraction)
 
 
 def logsumexp_pathways(*log_rates):
     if len(log_rates) < 1:
         raise ValueError("At least one pathway is required.")
-
     tensors = [pt.as_tensor_variable(log_rate) for log_rate in log_rates]
-
     for tensor in tensors:
         if tensor.ndim != 1:
             raise ValueError("Pathway log rates must be one-dimensional.")
-
     return pt.logsumexp(pt.stack(tensors, axis=0), axis=0)
 
 
@@ -358,13 +299,11 @@ class AgPdBFLHResult:
 
 def evaluate_agpd_bf_lh(state: AgPdPointState, parameters: AgPdBFLHParameters, temperature_K):
     E = pt.as_tensor_variable(state.E_V_SHE)
-
     deltaG1 = pt.as_tensor_variable(parameters.deltaG1_0)
     deltaG4 = electrochemical_free_energy(delta_G_0_eV=parameters.deltaG4_0, electron_transfer=1.0, E_V_SHE=E)
     deltaG5 = electrochemical_free_energy(
         delta_G_0_eV=parameters.deltaG5_0, electron_transfer=parameters.q, E_V_SHE=E
     )
-
     Gact2_BF = electrochemical_activation_energy(
         activation_G_0_eV=parameters.Gact2_BF_0,
         beta=parameters.beta_2,
@@ -372,28 +311,23 @@ def evaluate_agpd_bf_lh(state: AgPdPointState, parameters: AgPdBFLHParameters, t
         E_V_SHE=E,
     )
     Gact2_LH = pt.as_tensor_variable(parameters.Gact2_LH_0)
-
     log_K1 = log_equilibrium_constant(delta_G_eV=deltaG1, temperature_K=temperature_K)
     log_K4 = log_equilibrium_constant(delta_G_eV=deltaG4, temperature_K=temperature_K)
     log_K5 = log_equilibrium_constant(delta_G_eV=deltaG5, temperature_K=temperature_K)
 
     log_k2_BF = log_tst_rate_constant(activation_G_eV=Gact2_BF, temperature_K=temperature_K)
     log_k2_LH = log_tst_rate_constant(activation_G_eV=Gact2_LH, temperature_K=temperature_K)
-
     pd_coverages = calculate_pd_qea_coverages(log_K_CO=log_K1, log_K_OH_Pd=log_K4, state=state)
     ag_coverages = calculate_ag_qea_coverages(log_K_OH_Ag=log_K5, state=state)
 
     log_Ag_fraction = log_surface_fraction(state.Ag_fraction)
     log_Pd_fraction = log_surface_fraction(state.Pd_fraction)
-
     log_rate_BF = log_k2_BF + pd_coverages.log_theta_CO + ag_coverages.log_theta_OH_Ag + log_Ag_fraction
     log_rate_LH = log_k2_LH + pd_coverages.log_theta_CO + pd_coverages.log_theta_OH_Pd + log_Pd_fraction
-
     log_rate_total = logsumexp_pathways(log_rate_BF, log_rate_LH)
 
     rate_fraction_BF = pt.exp(log_rate_BF - log_rate_total)
     rate_fraction_LH = pt.exp(log_rate_LH - log_rate_total)
-
     mechanism_result = MechanismResult(
         ln_rate=log_rate_total,
         pointwise={
@@ -408,7 +342,6 @@ def evaluate_agpd_bf_lh(state: AgPdPointState, parameters: AgPdBFLHParameters, t
             "rate_fraction_LH": rate_fraction_LH,
         },
     )
-
     return AgPdBFLHResult(
         mechanism_result=mechanism_result,
         log_rate_BF=log_rate_BF,
@@ -460,7 +393,6 @@ class AgPdBFERRLHParameters:
 @dataclass(frozen=True)
 class AgPdBFERRLHResult:
     mechanism_result: MechanismResult
-
     log_rate_BF: object
     log_rate_ER: object
     log_rate_LH: object
@@ -499,23 +431,21 @@ def calculate_log_rate_lh(log_k2_LH, log_theta_CO, log_theta_OH_Pd, state: AgPdP
 
 def evaluate_agpd_er(state: AgPdPointState, parameters: AgPdERParameters, temperature_K):
     E = pt.as_tensor_variable(state.E_V_SHE)
-
     deltaG1 = pt.as_tensor_variable(parameters.deltaG1_0)
     deltaG4 = electrochemical_free_energy(delta_G_0_eV=parameters.deltaG4_0, electron_transfer=1.0, E_V_SHE=E)
-
     Gact2_ER = electrochemical_activation_energy(
-        activation_G_0_eV=parameters.Gact2_ER_0, beta=parameters.beta_2_ER, electron_transfer=1.0, E_V_SHE=E
+        activation_G_0_eV=parameters.Gact2_ER_0,
+        beta=parameters.beta_2_ER,
+        electron_transfer=1.0,
+        E_V_SHE=E,
     )
 
     log_K1 = log_equilibrium_constant(delta_G_eV=deltaG1, temperature_K=temperature_K)
     log_K4 = log_equilibrium_constant(delta_G_eV=deltaG4, temperature_K=temperature_K)
-
     log_k2_ER = log_tst_rate_constant(activation_G_eV=Gact2_ER, temperature_K=temperature_K)
-
     pd_coverages = calculate_pd_qea_coverages(log_K_CO=log_K1, log_K_OH_Pd=log_K4, state=state)
 
     log_rate_ER = calculate_log_rate_er(log_k2_ER=log_k2_ER, log_theta_CO=pd_coverages.log_theta_CO, state=state)
-
     mechanism_result = MechanismResult(
         ln_rate=log_rate_ER,
         pointwise={
@@ -525,7 +455,6 @@ def evaluate_agpd_er(state: AgPdPointState, parameters: AgPdERParameters, temper
             "ln_rate_ER": log_rate_ER,
         },
     )
-
     return AgPdERResult(
         mechanism_result=mechanism_result,
         log_rate_ER=log_rate_ER,
@@ -537,13 +466,11 @@ def evaluate_agpd_er(state: AgPdPointState, parameters: AgPdERParameters, temper
 
 def evaluate_agpd_bf_er_lh(state: AgPdPointState, parameters: AgPdBFERRLHParameters, temperature_K):
     E = pt.as_tensor_variable(state.E_V_SHE)
-
     deltaG1 = pt.as_tensor_variable(parameters.deltaG1_0)
     deltaG4 = electrochemical_free_energy(delta_G_0_eV=parameters.deltaG4_0, electron_transfer=1.0, E_V_SHE=E)
     deltaG5 = electrochemical_free_energy(
         delta_G_0_eV=parameters.deltaG5_0, electron_transfer=parameters.q, E_V_SHE=E
     )
-
     Gact2_BF = electrochemical_activation_energy(
         activation_G_0_eV=parameters.Gact2_BF_0,
         beta=parameters.beta_2_BF,
@@ -551,10 +478,12 @@ def evaluate_agpd_bf_er_lh(state: AgPdPointState, parameters: AgPdBFERRLHParamet
         E_V_SHE=E,
     )
     Gact2_ER = electrochemical_activation_energy(
-        activation_G_0_eV=parameters.Gact2_ER_0, beta=parameters.beta_2_ER, electron_transfer=1.0, E_V_SHE=E
+        activation_G_0_eV=parameters.Gact2_ER_0,
+        beta=parameters.beta_2_ER,
+        electron_transfer=1.0,
+        E_V_SHE=E,
     )
     Gact2_LH = pt.as_tensor_variable(parameters.Gact2_LH_0)
-
     log_K1 = log_equilibrium_constant(delta_G_eV=deltaG1, temperature_K=temperature_K)
     log_K4 = log_equilibrium_constant(delta_G_eV=deltaG4, temperature_K=temperature_K)
     log_K5 = log_equilibrium_constant(delta_G_eV=deltaG5, temperature_K=temperature_K)
@@ -562,7 +491,6 @@ def evaluate_agpd_bf_er_lh(state: AgPdPointState, parameters: AgPdBFERRLHParamet
     log_k2_BF = log_tst_rate_constant(activation_G_eV=Gact2_BF, temperature_K=temperature_K)
     log_k2_ER = log_tst_rate_constant(activation_G_eV=Gact2_ER, temperature_K=temperature_K)
     log_k2_LH = log_tst_rate_constant(activation_G_eV=Gact2_LH, temperature_K=temperature_K)
-
     pd_coverages = calculate_pd_qea_coverages(log_K_CO=log_K1, log_K_OH_Pd=log_K4, state=state)
     ag_coverages = calculate_ag_qea_coverages(log_K_OH_Ag=log_K5, state=state)
 
@@ -579,13 +507,11 @@ def evaluate_agpd_bf_er_lh(state: AgPdPointState, parameters: AgPdBFERRLHParamet
         log_theta_OH_Pd=pd_coverages.log_theta_OH_Pd,
         state=state,
     )
-
     log_rate_total = logsumexp_pathways(log_rate_BF, log_rate_ER, log_rate_LH)
 
     rate_fraction_BF = pt.exp(log_rate_BF - log_rate_total)
     rate_fraction_ER = pt.exp(log_rate_ER - log_rate_total)
     rate_fraction_LH = pt.exp(log_rate_LH - log_rate_total)
-
     mechanism_result = MechanismResult(
         ln_rate=log_rate_total,
         pointwise={
@@ -602,7 +528,6 @@ def evaluate_agpd_bf_er_lh(state: AgPdPointState, parameters: AgPdBFERRLHParamet
             "rate_fraction_LH": rate_fraction_LH,
         },
     )
-
     return AgPdBFERRLHResult(
         mechanism_result=mechanism_result,
         log_rate_BF=log_rate_BF,
@@ -649,7 +574,6 @@ class AgPdCOBFERRLHResult:
     log_rate_ER: object
     log_rate_LH: object
     log_rate_total: object
-
     log_K1: object
     log_K4: object
     log_K5: object
@@ -670,11 +594,10 @@ def solve_pd_co_ssa_qea_oh(
     log_k_ER_app,
     log_k_LH_app,
     state: AgPdPointState,
-    theta_CO_max=1.0,
+    theta_CO_max=None,
 ):
     log_K_OH_Pd = pt.as_tensor_variable(log_K_OH_Pd)
     term_OH_Pd = log_K_OH_Pd + pt.as_tensor_variable(state.ln_a_OH)
-
     point_template = pt.zeros_like(term_OH_Pd)
 
     log_k1_a_CO = pt.as_tensor_variable(log_k1_a_CO) + point_template
@@ -682,32 +605,49 @@ def solve_pd_co_ssa_qea_oh(
     log_k_BF_app = pt.as_tensor_variable(log_k_BF_app) + point_template
     log_k_ER_app = pt.as_tensor_variable(log_k_ER_app) + point_template
     log_k_LH_app = pt.as_tensor_variable(log_k_LH_app) + point_template
-
     log_A_Pd = pt.logsumexp(pt.stack([point_template, term_OH_Pd]), axis=0)
     log_k_cons = pt.logsumexp(pt.stack([log_k_minus_1, log_k_BF_app, log_k_ER_app]), axis=0)
 
     log_rho = log_k1_a_CO - log_k_cons
     log_lambda = log_k_LH_app - log_k_cons
-
     A_Pd = pt.exp(log_A_Pd)
     rho = pt.exp(log_rho)
     lambda_LH = pt.exp(log_lambda)
 
-    quadratic_a = A_Pd * lambda_LH
-    quadratic_b = rho / pt.as_tensor_variable(theta_CO_max) + A_Pd - lambda_LH
+    if theta_CO_max is None:
+        quadratic_a = A_Pd * lambda_LH
+        quadratic_b = rho + A_Pd - lambda_LH
+        discriminant = quadratic_b**2 + 4.0 * quadratic_a
+        sqrt_discriminant = pt.sqrt(discriminant)
 
-    discriminant = quadratic_b**2 + 4.0 * quadratic_a
-    sqrt_discriminant = pt.sqrt(discriminant)
+        root_positive_b = 2.0 / (quadratic_b + sqrt_discriminant)
+        root_negative_b = (-quadratic_b + sqrt_discriminant) / (2.0 * quadratic_a)
+        theta_empty_Pd = pt.where(quadratic_b >= 0, root_positive_b, root_negative_b)
+        log_theta_empty_Pd = pt.log(theta_empty_Pd)
+        log_theta_CO = log_rho + log_theta_empty_Pd - pt.log1p(lambda_LH * theta_empty_Pd)
+    else:
+        theta_CO_max = pt.as_tensor_variable(theta_CO_max)
+        inv_theta_CO_max = 1.0 / theta_CO_max
 
-    root_positive_b = 2.0 / (quadratic_b + sqrt_discriminant)
-    root_negative_b = (-quadratic_b + sqrt_discriminant) / (2.0 * quadratic_a)
+        # r_ads = k1 a_CO theta_empty_Pd (1 - theta_CO / theta_CO_max).
+        # With theta_CO + A_Pd theta_empty_Pd = 1, the CO SSA remains quadratic.
+        quadratic_a = rho * inv_theta_CO_max + lambda_LH
+        quadratic_b = rho * (1.0 + inv_theta_CO_max) + A_Pd + lambda_LH
+        discriminant = (
+            (A_Pd + lambda_LH) ** 2
+            + 2.0
+            * rho
+            * (A_Pd * (1.0 + inv_theta_CO_max) + lambda_LH * (inv_theta_CO_max - 1.0))
+            + rho**2 * (1.0 - inv_theta_CO_max) ** 2
+        )
+        sqrt_discriminant = pt.sqrt(discriminant)
 
-    theta_empty_Pd = pt.where(quadratic_b >= 0, root_positive_b, root_negative_b)
+        # Stable smaller root of a theta_CO^2 - b theta_CO + rho = 0.
+        log_theta_CO = np.log(2.0) + log_rho - pt.log(quadratic_b + sqrt_discriminant)
+        theta_CO = pt.exp(log_theta_CO)
+        log_theta_empty_Pd = pt.log1p(-theta_CO) - log_A_Pd
 
-    log_theta_empty_Pd = pt.log(theta_empty_Pd)
-    log_theta_CO = log_rho + log_theta_empty_Pd - pt.log1p(lambda_LH * theta_empty_Pd)
     log_theta_OH_Pd = term_OH_Pd + log_theta_empty_Pd
-
     return PdCOSSACoverages(
         log_theta_empty_Pd=log_theta_empty_Pd,
         log_theta_CO=log_theta_CO,
@@ -726,12 +666,10 @@ def evaluate_agpd_co_bf_er_lh(
             "CO-BF-ER-LH requires a positive Ag fraction in at least one model point because "
             "BF parameters would otherwise be unidentified."
         )
-
     if np.any(state.Pd_fraction <= 0):
         raise ValueError("CO-BF-ER-LH requires a positive Pd fraction.")
 
     E = pt.as_tensor_variable(state.E_V_SHE)
-
     deltaG1 = pt.as_tensor_variable(parameters.deltaG1_0)
     deltaG4 = electrochemical_free_energy(delta_G_0_eV=parameters.deltaG4_0, electron_transfer=1.0, E_V_SHE=E)
     deltaG5 = electrochemical_free_energy(
@@ -739,7 +677,6 @@ def evaluate_agpd_co_bf_er_lh(
     )
 
     Gact1 = pt.as_tensor_variable(parameters.Gact1_0)
-
     Gact2_BF = electrochemical_activation_energy(
         activation_G_0_eV=parameters.Gact2_BF_0,
         beta=parameters.beta_2_BF,
@@ -747,32 +684,29 @@ def evaluate_agpd_co_bf_er_lh(
         E_V_SHE=E,
     )
     Gact2_ER = electrochemical_activation_energy(
-        activation_G_0_eV=parameters.Gact2_ER_0, beta=parameters.beta_2_ER, electron_transfer=1.0, E_V_SHE=E
+        activation_G_0_eV=parameters.Gact2_ER_0,
+        beta=parameters.beta_2_ER,
+        electron_transfer=1.0,
+        E_V_SHE=E,
     )
     Gact2_LH = pt.as_tensor_variable(parameters.Gact2_LH_0)
-
     log_K1 = log_equilibrium_constant(delta_G_eV=deltaG1, temperature_K=temperature_K)
     log_K4 = log_equilibrium_constant(delta_G_eV=deltaG4, temperature_K=temperature_K)
     log_K5 = log_equilibrium_constant(delta_G_eV=deltaG5, temperature_K=temperature_K)
 
     log_k1 = log_tst_rate_constant(activation_G_eV=Gact1, temperature_K=temperature_K)
     log_k_minus_1 = log_k1 - log_K1
-
     log_k2_BF = log_tst_rate_constant(activation_G_eV=Gact2_BF, temperature_K=temperature_K)
     log_k2_ER = log_tst_rate_constant(activation_G_eV=Gact2_ER, temperature_K=temperature_K)
     log_k2_LH = log_tst_rate_constant(activation_G_eV=Gact2_LH, temperature_K=temperature_K)
 
     ag_coverages = calculate_ag_qea_coverages(log_K_OH_Ag=log_K5, state=state)
-
     log_k1_a_CO = log_k1 + pt.as_tensor_variable(state.ln_a_CO)
-
     log_k_BF_app = log_k2_BF + ag_coverages.log_theta_OH_Ag + log_surface_fraction(state.Ag_fraction)
     log_k_ER_app = log_k2_ER + pt.as_tensor_variable(state.ln_a_OH)
-
     term_OH_Pd = log_K4 + pt.as_tensor_variable(state.ln_a_OH)
     log_k_LH_app = log_k2_LH + term_OH_Pd + log_surface_fraction(state.Pd_fraction)
 
-    solver_theta_CO_max = 1.0 if theta_CO_max is None else theta_CO_max
     pd_coverages = solve_pd_co_ssa_qea_oh(
         log_K_OH_Pd=log_K4,
         log_k1_a_CO=log_k1_a_CO,
@@ -781,16 +715,13 @@ def evaluate_agpd_co_bf_er_lh(
         log_k_ER_app=log_k_ER_app,
         log_k_LH_app=log_k_LH_app,
         state=state,
-        theta_CO_max=solver_theta_CO_max,
+        theta_CO_max=theta_CO_max,
     )
 
     log_rate_BF = log_k_BF_app + pd_coverages.log_theta_CO
     log_rate_ER = log_k_ER_app + pd_coverages.log_theta_CO
-
-    # LH contains an additional theta_empty_Pd
-    # because OH_Pd = K4 a_OH theta_empty_Pd.
+    # LH contains an additional theta_empty_Pd because OH_Pd = K4 a_OH theta_empty_Pd.
     log_rate_LH = log_k_LH_app + pd_coverages.log_theta_empty_Pd + pd_coverages.log_theta_CO
-
     log_rate_total = logsumexp_pathways(log_rate_BF, log_rate_ER, log_rate_LH)
 
     rate_fraction_BF = pt.exp(log_rate_BF - log_rate_total)
@@ -798,7 +729,6 @@ def evaluate_agpd_co_bf_er_lh(
     rate_fraction_LH = pt.exp(log_rate_LH - log_rate_total)
 
     theta_CO = pt.exp(pd_coverages.log_theta_CO)
-
     pointwise = {
         "theta_CO": theta_CO,
         "theta_OH_Pd": pt.exp(pd_coverages.log_theta_OH_Pd),
@@ -812,17 +742,10 @@ def evaluate_agpd_co_bf_er_lh(
         "rate_fraction_ER": rate_fraction_ER,
         "rate_fraction_LH": rate_fraction_LH,
     }
-
     if theta_CO_max is not None:
-        pointwise["theta_CO_site_occupation"] = (
-            theta_CO / pt.as_tensor_variable(theta_CO_max)
-        )
+        pointwise["theta_CO_site_occupation"] = theta_CO / pt.as_tensor_variable(theta_CO_max)
 
-    mechanism_result = MechanismResult(
-        ln_rate=log_rate_total,
-        pointwise=pointwise,
-    )
-
+    mechanism_result = MechanismResult(ln_rate=log_rate_total, pointwise=pointwise)
     return AgPdCOBFERRLHResult(
         mechanism_result=mechanism_result,
         log_rate_BF=log_rate_BF,
@@ -847,10 +770,8 @@ def evaluate_agpd_co_bf_er_lh_capped(
 ):
     if state.theta_CO_max is None:
         raise ValueError(
-            "CO_BF_ER_LH_capped requires material-resolved "
-            "CO coverage caps in the model configuration."
+            "CO_BF_ER_LH_capped requires material-resolved CO coverage caps in the model configuration."
         )
-
     return evaluate_agpd_co_bf_er_lh(
         state=state,
         parameters=parameters,
