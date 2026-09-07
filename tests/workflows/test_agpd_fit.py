@@ -19,7 +19,7 @@ def _config():
 def test_individual_fit_uses_one_material_labelled_error_pair():
     specification = resolve_agpd_fit_specification(
         _config(),
-        model_name="BF_LH",
+        model_name="CO_BF_ER_LH",
         material="Ag10Pd90",
         error_structure="material",
     )
@@ -34,25 +34,33 @@ def test_individual_fit_rejects_shared_error_option():
     with pytest.raises(ValueError, match="material-indexed"):
         resolve_agpd_fit_specification(
             _config(),
-            model_name="BF_LH",
+            model_name="CO_BF_ER_LH",
             material="Ag10Pd90",
             error_structure="shared",
         )
 
 
-def test_pd100_individual_fit_requires_reduced_pd_model():
+def test_pd100_individual_fit_allows_only_non_bf_finite_rate_co_models():
     config = _config()
 
+    for model_name in ("CO_LH", "CO_ER", "CO_ER_LH"):
+        specification = resolve_agpd_fit_specification(
+            config,
+            model_name=model_name,
+            material="Pd100",
+            error_structure="material",
+        )
+        assert specification.material == "Pd100"
+        assert specification.model_name == model_name
+
     for model_name in (
-        "BF",
-        "BF_LH",
+        "CO_BF",
+        "CO_BF_LH",
+        "CO_BF_ER",
         "CO_BF_ER_LH",
         "CO_BF_ER_LH_capped",
     ):
-        with pytest.raises(
-            ValueError,
-            match="reduced Pd-only model 'CO_ER_LH'",
-        ):
+        with pytest.raises(ValueError, match="non-BF finite-rate CO models"):
             resolve_agpd_fit_specification(
                 config,
                 model_name=model_name,
@@ -60,42 +68,35 @@ def test_pd100_individual_fit_requires_reduced_pd_model():
                 error_structure="material",
             )
 
+
+@pytest.mark.parametrize(
+    "model_name",
+    ("CO_LH", "CO_ER", "CO_BF", "CO_ER_LH", "CO_BF_LH", "CO_BF_ER", "CO_BF_ER_LH"),
+)
+def test_alloys_allow_full_individual_finite_rate_co_model_grid(model_name):
     specification = resolve_agpd_fit_specification(
-        config,
-        model_name="CO_ER_LH",
-        material="Pd100",
+        _config(),
+        model_name=model_name,
+        material="Ag50Pd50",
         error_structure="material",
     )
+    assert specification.fit_scope == "individual"
+    assert specification.model_name == model_name
+    assert specification.material == "Ag50Pd50"
 
-    assert specification.material == "Pd100"
-    assert specification.model_name == "CO_ER_LH"
 
-
-def test_reduced_pd_model_is_not_available_for_alloys_or_all_material_fit():
+def test_individual_co_subset_models_remain_unavailable_for_all_material_fit():
     config = _config()
 
-    with pytest.raises(
-        ValueError,
-        match="reserved for individual Pd100",
-    ):
-        resolve_agpd_fit_specification(
-            config,
-            model_name="CO_ER_LH",
-            material="Ag50Pd50",
-            error_structure="material",
-        )
-
-    with pytest.raises(
-        ValueError,
-        match="not available for all-material fitting",
-    ):
-        resolve_agpd_fit_specification(
-            config,
-            model_name="CO_ER_LH",
-            all_materials=True,
-            parameterization="shared",
-            error_structure="shared",
-        )
+    for model_name in ("CO_LH", "CO_ER", "CO_BF", "CO_ER_LH", "CO_BF_LH", "CO_BF_ER"):
+        with pytest.raises(ValueError, match="not available for all-material fitting"):
+            resolve_agpd_fit_specification(
+                config,
+                model_name=model_name,
+                all_materials=True,
+                parameterization="shared",
+                error_structure="shared",
+            )
 
 
 @pytest.mark.parametrize(
@@ -234,37 +235,7 @@ def test_likelihood_configuration_requires_exact_current_sigma_form():
 @pytest.mark.parametrize(
     ("parameterization", "expected_slopes"),
     [
-        ("linear_dG1", {"deltaG1_0_xAg_slope"}),
-        ("linear_dG4", {"deltaG4_0_xAg_slope"}),
-        ("linear_dG5", {"deltaG5_0_xAg_slope"}),
-        (
-            "linear_thermo",
-            {
-                "deltaG1_0_xAg_slope",
-                "deltaG4_0_xAg_slope",
-                "deltaG5_0_xAg_slope",
-            },
-        ),
-        ("linear_GactBF", {"Gact2_BF_0_xAg_slope"}),
-        ("linear_GactER", {"Gact2_ER_0_xAg_slope"}),
-        (
-            "linear_oxidation_barriers",
-            {
-                "Gact2_BF_0_xAg_slope",
-                "Gact2_ER_0_xAg_slope",
-                "Gact2_LH_0_xAg_slope",
-            },
-        ),
-        (
-            "linear_selected_energies",
-            {
-                "deltaG1_0_xAg_slope",
-                "deltaG4_0_xAg_slope",
-                "deltaG5_0_xAg_slope",
-                "Gact2_BF_0_xAg_slope",
-                "Gact2_ER_0_xAg_slope",
-            },
-        ),
+        ("shared", set()),
         (
             "linear_xAg",
             {

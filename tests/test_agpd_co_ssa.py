@@ -3,9 +3,11 @@ import pytensor.tensor as pt
 
 from mkm.mechanisms.agpd_basic import (
     AgPdCOBFERRLHParameters,
+    AgPdCOERParameters,
     build_agpd_point_state,
     evaluate_agpd_co_bf_er_lh,
     evaluate_agpd_co_bf_er_lh_capped,
+    evaluate_agpd_co_er,
     log_equilibrium_constant,
     log_tst_rate_constant,
     solve_pd_co_ssa_qea_oh,
@@ -164,6 +166,26 @@ def test_co_ssa_approaches_co_qea_when_consumption_is_slow():
     denominator = 1.0 + np.exp(term_CO) + np.exp(term_OH)
     theta_CO_qea = np.exp(term_CO) / denominator
     np.testing.assert_allclose(theta_CO_ssa, theta_CO_qea, rtol=1e-6, atol=1e-8)
+
+
+def test_no_lh_co_ssa_uses_exact_linear_solution():
+    state = build_agpd_point_state(inputs=_make_inputs(), config=_make_config())
+    parameters = AgPdCOERParameters(
+        deltaG1_0=-0.20,
+        deltaG4_0=0.00,
+        beta_2_ER=0.40,
+        Gact1_0=0.60,
+        Gact2_ER_0=0.72,
+    )
+    result = evaluate_agpd_co_er(state=state, parameters=parameters, temperature_K=293.15)
+    pointwise = result.mechanism_result.pointwise
+
+    theta_CO = pointwise["theta_CO"].eval()
+    theta_empty = pointwise["theta_empty_Pd"].eval()
+    theta_OH = pointwise["theta_OH_Pd"].eval()
+    np.testing.assert_allclose(theta_CO + theta_empty + theta_OH, 1.0, rtol=1e-10, atol=1e-10)
+    assert np.all(np.isfinite(theta_CO))
+    assert np.all(np.isfinite(result.mechanism_result.ln_rate.eval()))
 
 
 def test_capped_co_ssa_limits_molecular_co_coverage():

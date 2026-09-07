@@ -174,9 +174,12 @@ def test_shared_all_material_parameter_trends_do_not_invent_slopes():
         "deltaG1_0": -0.4,
         "deltaG4_0": 0.0,
         "deltaG5_0": 0.0,
-        "beta_2": 0.5,
+        "beta_2_BF": 0.5,
+        "beta_2_ER": 0.5,
         "q": 0.5,
+        "Gact1_0": 0.5,
         "Gact2_BF_0": 0.7,
+        "Gact2_ER_0": 0.7,
         "Gact2_LH_0": 0.7,
     }
     posterior = xr.Dataset(
@@ -188,7 +191,7 @@ def test_shared_all_material_parameter_trends_do_not_invent_slopes():
     trends = build_agpd_composition_parameter_trends(
         SimpleNamespace(posterior=posterior),
         config,
-        model_name="BF_LH",
+        model_name="CO_BF_ER_LH",
         parameterization="shared",
         n_grid=11,
     )

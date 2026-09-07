@@ -33,12 +33,56 @@ class TransitionStateDRC:
 
 
 _TRANSITION_STATE_CONTROLS = {
-    "BF": (
-        TransitionStateControl(name="BF", parameter="Gact2_0", label="BF"),
+    "CO_LH": (
+        TransitionStateControl(
+            name="CO_adsorption",
+            parameter="Gact1_0",
+            label="CO adsorption/desorption",
+        ),
+        TransitionStateControl(name="LH", parameter="Gact2_LH_0", label="LH"),
     ),
-    "BF_LH": (
+    "CO_ER": (
+        TransitionStateControl(
+            name="CO_adsorption",
+            parameter="Gact1_0",
+            label="CO adsorption/desorption",
+        ),
+        TransitionStateControl(name="ER", parameter="Gact2_ER_0", label="ER"),
+    ),
+    "CO_BF": (
+        TransitionStateControl(
+            name="CO_adsorption",
+            parameter="Gact1_0",
+            label="CO adsorption/desorption",
+        ),
+        TransitionStateControl(name="BF", parameter="Gact2_BF_0", label="BF"),
+    ),
+    "CO_ER_LH": (
+        TransitionStateControl(
+            name="CO_adsorption",
+            parameter="Gact1_0",
+            label="CO adsorption/desorption",
+        ),
+        TransitionStateControl(name="ER", parameter="Gact2_ER_0", label="ER"),
+        TransitionStateControl(name="LH", parameter="Gact2_LH_0", label="LH"),
+    ),
+    "CO_BF_LH": (
+        TransitionStateControl(
+            name="CO_adsorption",
+            parameter="Gact1_0",
+            label="CO adsorption/desorption",
+        ),
         TransitionStateControl(name="BF", parameter="Gact2_BF_0", label="BF"),
         TransitionStateControl(name="LH", parameter="Gact2_LH_0", label="LH"),
+    ),
+    "CO_BF_ER": (
+        TransitionStateControl(
+            name="CO_adsorption",
+            parameter="Gact1_0",
+            label="CO adsorption/desorption",
+        ),
+        TransitionStateControl(name="BF", parameter="Gact2_BF_0", label="BF"),
+        TransitionStateControl(name="ER", parameter="Gact2_ER_0", label="ER"),
     ),
     "CO_BF_ER_LH": (
         TransitionStateControl(
@@ -60,16 +104,8 @@ _TRANSITION_STATE_CONTROLS = {
         TransitionStateControl(name="ER", parameter="Gact2_ER_0", label="ER"),
         TransitionStateControl(name="LH", parameter="Gact2_LH_0", label="LH"),
     ),
-    "CO_ER_LH": (
-        TransitionStateControl(
-            name="CO_adsorption",
-            parameter="Gact1_0",
-            label="CO adsorption/desorption",
-        ),
-        TransitionStateControl(name="ER", parameter="Gact2_ER_0", label="ER"),
-        TransitionStateControl(name="LH", parameter="Gact2_LH_0", label="LH"),
-    ),
 }
+
 
 
 def transition_state_controls(model_name):

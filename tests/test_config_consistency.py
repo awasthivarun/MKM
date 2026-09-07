@@ -83,94 +83,37 @@ def test_pd100_reduced_model_prior_matches_reduced_parameter_set():
     }
 
 
-def test_first_composition_parameterization_batch_has_expected_slope_sets():
-    config = _load_yaml("config/models/agpd_basic.yaml")
-
-    expected = {
-        "linear_dG1": {"deltaG1_0"},
-        "linear_dG4": {"deltaG4_0"},
-        "linear_dG5": {"deltaG5_0"},
-        "linear_thermo": {
-            "deltaG1_0",
-            "deltaG4_0",
-            "deltaG5_0",
-        },
-        "linear_GactBF": {"Gact2_BF_0"},
-        "linear_GactER": {"Gact2_ER_0"},
-        "linear_oxidation_barriers": {
-            "Gact2_BF_0",
-            "Gact2_ER_0",
-            "Gact2_LH_0",
-        },
-        "linear_selected_energies": {
-            "deltaG1_0",
-            "deltaG4_0",
-            "deltaG5_0",
-            "Gact2_BF_0",
-            "Gact2_ER_0",
-        },
-        "linear_xAg": {
-            "deltaG1_0",
-            "deltaG4_0",
-            "deltaG5_0",
-            "beta_2_BF",
-            "beta_2_ER",
-            "q",
-            "Gact1_0",
-            "Gact2_BF_0",
-            "Gact2_ER_0",
-            "Gact2_LH_0",
-        },
-    }
-
-    for profile_name, expected_slopes in expected.items():
-        profile = config["composition_parameterizations"][profile_name]
-        slopes = profile["models"]["CO_BF_ER_LH"]["slopes"]
-
-        assert set(slopes) == expected_slopes
-        assert float(profile["x_reference"]) == 0.5
-
-
-def test_same_parameter_uses_same_slope_prior_across_legacy_profiles():
+def test_active_composition_parameterizations_have_expected_slope_sets():
     config = _load_yaml("config/models/agpd_basic.yaml")
     profiles = config["composition_parameterizations"]
 
-    anchor_slopes = profiles[
-        "linear_selected_energies"
-    ]["models"]["CO_BF_ER_LH"]["slopes"]
+    assert set(profiles) == {"shared", "linear_xAg"}
+    assert profiles["shared"]["models"]["CO_BF_ER_LH"]["slopes"] == {}
 
-    comparisons = {
-        "deltaG1_0": (
-            "linear_dG1",
-            "linear_thermo",
-        ),
-        "deltaG4_0": (
-            "linear_dG4",
-            "linear_thermo",
-        ),
-        "deltaG5_0": (
-            "linear_dG5",
-            "linear_thermo",
-        ),
-        "Gact2_BF_0": (
-            "linear_GactBF",
-            "linear_oxidation_barriers",
-        ),
-        "Gact2_ER_0": (
-            "linear_GactER",
-            "linear_oxidation_barriers",
-        ),
+    expected_slopes = {
+        "deltaG1_0",
+        "deltaG4_0",
+        "deltaG5_0",
+        "beta_2_BF",
+        "beta_2_ER",
+        "q",
+        "Gact1_0",
+        "Gact2_BF_0",
+        "Gact2_ER_0",
+        "Gact2_LH_0",
     }
+    slopes = profiles["linear_xAg"]["models"]["CO_BF_ER_LH"]["slopes"]
+    assert set(slopes) == expected_slopes
 
-    for parameter_name, profile_names in comparisons.items():
-        expected_prior = anchor_slopes[parameter_name]
 
-        for profile_name in profile_names:
-            actual_prior = profiles[
-                profile_name
-            ]["models"]["CO_BF_ER_LH"]["slopes"][parameter_name]
+def test_prior_profiles_keep_only_canonical_co_sources():
+    config = _load_yaml("config/models/agpd_basic.yaml")
+    profiles = config["prior_profiles"]
 
-            assert actual_prior == expected_prior
+    for material in ("Ag10Pd90", "Ag25Pd75", "Ag50Pd50", "Ag75Pd25", "Ag90Pd10"):
+        assert set(profiles[material]) == {"CO_BF_ER_LH"}
+
+    assert set(profiles["Pd100"]) == {"CO_ER_LH"}
 
 
 def test_full_linear_xag_contains_all_mechanism_slopes():

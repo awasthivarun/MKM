@@ -6,16 +6,24 @@ import pytensor.tensor as pt
 
 from mkm.inference.priors import build_named_priors
 from mkm.mechanisms.agpd_basic import (
-    AgPdBFParameters,
-    AgPdBFLHParameters,
     AgPdCOBFERRLHParameters,
+    AgPdCOBFParameters,
+    AgPdCOBFERParameters,
+    AgPdCOBFLHParameters,
+    AgPdCOERLHParameters,
+    AgPdCOERParameters,
+    AgPdCOLHParameters,
     build_agpd_point_state,
-    evaluate_agpd_bf,
-    evaluate_agpd_bf_lh,
+    evaluate_agpd_co_bf,
+    evaluate_agpd_co_bf_er,
     evaluate_agpd_co_bf_er_lh,
     evaluate_agpd_co_bf_er_lh_ag10_no_bf,
     evaluate_agpd_co_bf_er_lh_capped,
     evaluate_agpd_co_bf_er_lh_capped_ag10_no_bf,
+    evaluate_agpd_co_bf_lh,
+    evaluate_agpd_co_er,
+    evaluate_agpd_co_er_lh,
+    evaluate_agpd_co_lh,
 )
 from mkm.mechanisms.pd_basic import PdCOERLHParameters, evaluate_pd_co_er_lh
 
@@ -27,8 +35,12 @@ class AgPdModelDefinition:
 
 
 _AGPD_MODEL_REGISTRY = {
-    "BF": AgPdModelDefinition(parameter_class=AgPdBFParameters, evaluator=evaluate_agpd_bf),
-    "BF_LH": AgPdModelDefinition(parameter_class=AgPdBFLHParameters, evaluator=evaluate_agpd_bf_lh),
+    "CO_LH": AgPdModelDefinition(parameter_class=AgPdCOLHParameters, evaluator=evaluate_agpd_co_lh),
+    "CO_ER": AgPdModelDefinition(parameter_class=AgPdCOERParameters, evaluator=evaluate_agpd_co_er),
+    "CO_BF": AgPdModelDefinition(parameter_class=AgPdCOBFParameters, evaluator=evaluate_agpd_co_bf),
+    "CO_ER_LH": AgPdModelDefinition(parameter_class=AgPdCOERLHParameters, evaluator=evaluate_agpd_co_er_lh),
+    "CO_BF_LH": AgPdModelDefinition(parameter_class=AgPdCOBFLHParameters, evaluator=evaluate_agpd_co_bf_lh),
+    "CO_BF_ER": AgPdModelDefinition(parameter_class=AgPdCOBFERParameters, evaluator=evaluate_agpd_co_bf_er),
     "CO_BF_ER_LH": AgPdModelDefinition(
         parameter_class=AgPdCOBFERRLHParameters,
         evaluator=evaluate_agpd_co_bf_er_lh,
@@ -49,7 +61,6 @@ _AGPD_MODEL_REGISTRY = {
         parameter_class=AgPdCOBFERRLHParameters,
         evaluator=evaluate_agpd_co_bf_er_lh,
     ),
-    "CO_ER_LH": AgPdModelDefinition(parameter_class=PdCOERLHParameters, evaluator=evaluate_pd_co_er_lh),
 }
 
 
@@ -57,6 +68,16 @@ _MODEL_CONFIG_ALIASES = {
     "CO_BF_ER_LH_Ag10_no_BF": "CO_BF_ER_LH",
     "CO_BF_ER_LH_capped": "CO_BF_ER_LH",
     "CO_BF_ER_LH_capped_Ag10_no_BF": "CO_BF_ER_LH",
+}
+
+_INDIVIDUAL_CO_MODELS = {
+    "CO_LH",
+    "CO_ER",
+    "CO_BF",
+    "CO_ER_LH",
+    "CO_BF_LH",
+    "CO_BF_ER",
+    "CO_BF_ER_LH",
 }
 
 _FITTED_CAPS_MODEL = "CO_BF_ER_LH_fitted_caps_Ag10_no_BF"
@@ -86,7 +107,6 @@ def available_agpd_models():
 
 def available_agpd_all_material_models():
     return (
-        "BF_LH",
         "CO_BF_ER_LH",
         "CO_BF_ER_LH_Ag10_no_BF",
         "CO_BF_ER_LH_capped",
@@ -106,11 +126,31 @@ def get_agpd_prior_profile(config, material, model_name):
     if model_name == _FITTED_CAPS_MODEL:
         return config["fitted_cap_calibration"]
 
-    config_model_name = _config_model_name(model_name)
+    if model_name in _INDIVIDUAL_CO_MODELS:
+        config_model_name = "CO_ER_LH" if material == "Pd100" else "CO_BF_ER_LH"
+    else:
+        config_model_name = _config_model_name(model_name)
+
     try:
-        return config["prior_profiles"][material][config_model_name]
+        profile = config["prior_profiles"][material][config_model_name]
     except KeyError as error:
         raise ValueError(f"No prior profile is defined for material '{material}' and model '{model_name}'.") from error
+
+    if model_name not in _INDIVIDUAL_CO_MODELS:
+        return profile
+
+    definition = get_agpd_model_definition(model_name)
+    parameter_names = tuple(field.name for field in fields(definition.parameter_class))
+    missing = [name for name in parameter_names if name not in profile["parameters"]]
+    if missing:
+        raise ValueError(
+            f"Prior source '{material}/{config_model_name}' is missing parameters required by "
+            f"'{model_name}': {missing}."
+        )
+
+    projected = dict(profile)
+    projected["parameters"] = {name: profile["parameters"][name] for name in parameter_names}
+    return projected
 
 
 def _validate_parameter_specs(definition, parameter_specs, profile_label):

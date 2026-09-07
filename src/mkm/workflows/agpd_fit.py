@@ -22,7 +22,7 @@ from mkm.workflows.agpd_basic import (
 
 
 PURE_PD_MATERIAL = "Pd100"
-PURE_PD_INDIVIDUAL_MODELS = ("CO_ER_LH",)
+PURE_PD_INDIVIDUAL_MODELS = ("CO_LH", "CO_ER", "CO_ER_LH")
 
 
 @dataclass(frozen=True)
@@ -111,15 +111,12 @@ def resolve_agpd_fit_specification(
             "Use error_structure='material'."
         )
 
-    if material == PURE_PD_MATERIAL:
-        if model_name not in PURE_PD_INDIVIDUAL_MODELS:
-            raise ValueError(
-                "Individual Pd100 fits must use the reduced Pd-only model 'CO_ER_LH'. "
-                "Full Ag/BF-bearing parameterizations contain structurally inactive "
-                "parameters on pure Pd."
-            )
-    elif model_name == "CO_ER_LH":
-        raise ValueError("CO_ER_LH is reserved for individual Pd100 fits.")
+    if material == PURE_PD_MATERIAL and model_name not in PURE_PD_INDIVIDUAL_MODELS:
+        raise ValueError(
+            "Individual Pd100 fits support only the non-BF finite-rate CO models "
+            f"{PURE_PD_INDIVIDUAL_MODELS}. BF-bearing models contain structurally inactive "
+            "parameters on pure Pd."
+        )
 
     get_agpd_prior_profile(config, material, model_name)
 

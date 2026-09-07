@@ -181,8 +181,6 @@ composition_parameterizations:
   shared:
     x_reference: 0.50
     models:
-      BF_LH:
-        slopes: {}
       CO_BF_ER_LH:
         slopes: {}
 
@@ -263,141 +261,43 @@ likelihood:
   sigma_rel_prior_median: 0.18
   sigma_rel_prior_log_sd: 0.75
 
+
 prior_profiles:
-  Ag10Pd90: &legacy_alloy_prior_profile
-    BF: &legacy_bf_prior
-      provenance: legacy_tuned_for_multimodality
-      parameters:
-        deltaG1_0:
-          distribution: normal
-          mu: -0.4
-          sigma: 0.2
-        deltaG4_0:
-          distribution: normal
-          mu: 0.0
-          sigma: 0.2
-        deltaG5_0:
-          distribution: normal
-          mu: 0.0
-          sigma: 0.2
-        beta_2:
-          distribution: uniform
-          lower: 0.0
-          upper: 1.0
-        q:
-          distribution: uniform
-          lower: 0.0
-          upper: 1.0
-        Gact2_0:
-          distribution: truncated_normal
-          mu: 0.7
-          sigma: 0.2
-          lower: 0.0
-
-    CO_ER_LH:
-      provenance: legacy_tuned_for_multimodality
-      parameters:
-        deltaG1_0:
-          distribution: truncated_normal
-          mu: -0.4
-          sigma: 0.2
-          lower: -0.4
-          upper: 0.0
-        deltaG4_0:
-          distribution: normal
-          mu: 0.0
-          sigma: 0.2
-        beta_2_ER:
-          distribution: uniform
-          lower: 0.0
-          upper: 1.0
-        Gact1_0:
-          distribution: truncated_normal
-          mu: 0.7
-          sigma: 0.2
-          lower: 0.0
-          upper: 1.0
-        Gact2_ER_0:
-          distribution: truncated_normal
-          mu: 0.7
-          sigma: 0.2
-          lower: 0.5
-          upper: 0.8
-        Gact2_LH_0:
-          distribution: truncated_normal
-          mu: 0.7
-          sigma: 0.2
-          lower: 0.5
-          upper: 1.0
-
-    BF_LH: &legacy_bf_lh_prior
-      provenance: legacy_tuned_for_multimodality
-      parameters:
-        deltaG1_0:
-          distribution: normal
-          mu: -0.4
-          sigma: 0.2
-        deltaG4_0:
-          distribution: normal
-          mu: 0.0
-          sigma: 0.2
-        deltaG5_0:
-          distribution: normal
-          mu: 0.0
-          sigma: 0.2
-        beta_2:
-          distribution: uniform
-          lower: 0.0
-          upper: 1.0
-        q:
-          distribution: uniform
-          lower: 0.0
-          upper: 1.0
-        Gact2_BF_0:
-          distribution: truncated_normal
-          mu: 0.7
-          sigma: 0.2
-          lower: 0.0
-        Gact2_LH_0:
-          distribution: truncated_normal
-          mu: 0.7
-          sigma: 0.2
-          lower: 0.0
-
-    CO_BF_ER_LH: &legacy_co_bf_er_lh_prior
+  Ag10Pd90: &alloy_prior_profile
+    CO_BF_ER_LH:
       provenance: legacy_tuned_for_multimodality
       parameters:
         deltaG1_0:
           distribution: truncated_normal
           mu: 0.0
           sigma: 2
-          lower: -2
+          lower: -0.5
           upper: 0.5
         deltaG4_0:
           distribution: truncated_normal
           mu: 0.0
           sigma: 2
-          lower: -2
-          upper: 1
+          lower: -0.5
+          upper: 0.5
         deltaG5_0:
           distribution: truncated_normal
           mu: 0.0
           sigma: 2
-          lower: -2
-          upper: 1
-        beta_2_BF: # Bounded between 0 and 1
+          lower: -0.5
+          upper: 0.5
+        beta_2_BF:
           distribution: truncated_normal
           mu: 0.5
           sigma: 1
           lower: 0.0
           upper: 1.0
-        beta_2_ER: # Bounded between 0 and 1 
+        beta_2_ER:
           distribution: truncated_normal
           mu: 0.5
           sigma: 1
           lower: 0.0
           upper: 1.0
-        q: # Bounded between 0 and 1 
+        q:
           distribution: truncated_normal
           mu: 0.5
           sigma: 1
@@ -407,31 +307,31 @@ prior_profiles:
           distribution: truncated_normal
           mu: 0.5
           sigma: 1
-          lower: 0.2 # Low enough to be infinitely fast
-          upper: 0.7 # High enough for ~0 reaction rate
+          lower: 0.2
+          upper: 0.7
         Gact2_BF_0:
           distribution: truncated_normal
           mu: 0.7
           sigma: 1
-          lower: 0.6 # Low enough to be infinitely fast
-          upper: 1.0 # High enough for ~0 reaction rate
+          lower: 0.6
+          upper: 1.0
         Gact2_ER_0:
           distribution: truncated_normal
           mu: 0.7
           sigma: 1
-          lower: 0.6 # Low enough to be infinitely fast
-          upper: 1.0 # High enough for ~0 reaction rate
+          lower: 0.6
+          upper: 1.0
         Gact2_LH_0:
           distribution: truncated_normal
           mu: 0.7
           sigma: 1
-          lower: 0.6 # Low enough to be infinitely fast
-          upper: 1.0 # High enough for ~0 reaction rate 
+          lower: 0.6
+          upper: 1.0
 
-  Ag25Pd75: *legacy_alloy_prior_profile
-  Ag50Pd50: *legacy_alloy_prior_profile
-  Ag75Pd25: *legacy_alloy_prior_profile
-  Ag90Pd10: *legacy_alloy_prior_profile
+  Ag25Pd75: *alloy_prior_profile
+  Ag50Pd50: *alloy_prior_profile
+  Ag75Pd25: *alloy_prior_profile
+  Ag90Pd10: *alloy_prior_profile
 
   Pd100:
     CO_ER_LH:
@@ -439,36 +339,37 @@ prior_profiles:
       parameters:
         deltaG1_0:
           distribution: truncated_normal
-          mu: -0.4
-          sigma: 0.2
-          lower: -0.4
-          upper: 0.0
-        deltaG4_0:
-          distribution: normal
           mu: 0.0
-          sigma: 0.2
+          sigma: 2
+          lower: -0.5
+          upper: 0.5
+        deltaG4_0:
+          distribution: truncated_normal
+          mu: 0.0
+          sigma: 2
+          lower: -0.5
+          upper: 0.5
         beta_2_ER:
-          distribution: uniform
+          distribution: truncated_normal
+          mu: 0.5
+          sigma: 1
           lower: 0.0
           upper: 1.0
         Gact1_0:
           distribution: truncated_normal
-          mu: 0.7
-          sigma: 0.2
-          lower: 0.0
-          upper: 1.0
+          mu: 0.5
+          sigma: 1
+          lower: 0.2
+          upper: 0.7
         Gact2_ER_0:
           distribution: truncated_normal
           mu: 0.7
-          sigma: 0.2
-          lower: 0.5
-          upper: 0.8
+          sigma: 1
+          lower: 0.6
+          upper: 1.0
         Gact2_LH_0:
           distribution: truncated_normal
           mu: 0.7
-          sigma: 0.2
-          lower: 0.5
+          sigma: 1
+          lower: 0.6
           upper: 1.0
-
-    BF_LH: *legacy_bf_lh_prior
-    CO_BF_ER_LH: *legacy_co_bf_er_lh_prior

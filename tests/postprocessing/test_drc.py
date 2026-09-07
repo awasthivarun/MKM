@@ -64,45 +64,21 @@ def _idata(parameters):
     return SimpleNamespace(posterior=posterior)
 
 
-def test_bf_transition_state_drc_is_one():
+def test_co_bf_transition_state_drcs_sum_to_one():
     idata = _idata(
         {
             "deltaG1_0": [-0.12, -0.13],
             "deltaG4_0": [0.11, 0.12],
             "deltaG5_0": [0.03, 0.04],
-            "beta_2": [0.10, 0.15],
+            "beta_2_BF": [0.10, 0.15],
             "q": [0.30, 0.35],
-            "Gact2_0": [0.66, 0.68],
-        }
-    )
-    result = compute_transition_state_drc(
-        inference_data=idata,
-        model_name="BF",
-        point_inputs=_point_inputs(),
-        model_points=_model_points(),
-        config=CONFIG,
-        step_eV=1e-4,
-    )
-
-    np.testing.assert_allclose(result.draws["X_TS"].values, 1.0, rtol=0, atol=1e-9)
-    assert result.checks.loc[0, "max_abs_sum_error"] < 1e-9
-
-
-def test_bf_lh_transition_state_drcs_sum_to_one():
-    idata = _idata(
-        {
-            "deltaG1_0": [-0.12, -0.13],
-            "deltaG4_0": [0.11, 0.12],
-            "deltaG5_0": [0.03, 0.04],
-            "beta_2": [0.08, 0.12],
-            "q": [0.30, 0.35],
+            "Gact1_0": [0.58, 0.60],
             "Gact2_BF_0": [0.66, 0.68],
-            "Gact2_LH_0": [0.72, 0.74],
         }
     )
     result = compute_transition_state_drc(
         inference_data=idata,
-        model_name="BF_LH",
+        model_name="CO_BF",
         point_inputs=_point_inputs(),
         model_points=_model_points(),
         config=CONFIG,
@@ -111,6 +87,35 @@ def test_bf_lh_transition_state_drcs_sum_to_one():
 
     summed = result.draws["X_TS"].sum("control").values
     np.testing.assert_allclose(summed, 1.0, rtol=0, atol=2e-6)
+    assert set(result.summary["control"]) == {"CO_adsorption", "BF"}
+    assert result.checks.loc[0, "max_abs_sum_error"] < 2e-6
+
+
+def test_co_bf_lh_transition_state_drcs_sum_to_one():
+    idata = _idata(
+        {
+            "deltaG1_0": [-0.12, -0.13],
+            "deltaG4_0": [0.11, 0.12],
+            "deltaG5_0": [0.03, 0.04],
+            "beta_2_BF": [0.08, 0.12],
+            "q": [0.30, 0.35],
+            "Gact1_0": [0.58, 0.60],
+            "Gact2_BF_0": [0.66, 0.68],
+            "Gact2_LH_0": [0.72, 0.74],
+        }
+    )
+    result = compute_transition_state_drc(
+        inference_data=idata,
+        model_name="CO_BF_LH",
+        point_inputs=_point_inputs(),
+        model_points=_model_points(),
+        config=CONFIG,
+        step_eV=1e-4,
+    )
+
+    summed = result.draws["X_TS"].sum("control").values
+    np.testing.assert_allclose(summed, 1.0, rtol=0, atol=2e-6)
+    assert set(result.summary["control"]) == {"CO_adsorption", "BF", "LH"}
     assert result.checks.loc[0, "max_abs_sum_error"] < 2e-6
 
 
@@ -120,24 +125,26 @@ def test_transition_state_drc_summary_preserves_model_point_metadata():
             "deltaG1_0": [-0.12, -0.13],
             "deltaG4_0": [0.11, 0.12],
             "deltaG5_0": [0.03, 0.04],
-            "beta_2": [0.10, 0.15],
+            "beta_2_BF": [0.10, 0.15],
             "q": [0.30, 0.35],
-            "Gact2_0": [0.66, 0.68],
+            "Gact1_0": [0.58, 0.60],
+            "Gact2_BF_0": [0.66, 0.68],
         }
     )
     result = compute_transition_state_drc(
         inference_data=idata,
-        model_name="BF",
+        model_name="CO_BF",
         point_inputs=_point_inputs(),
         model_points=_model_points(),
         config=CONFIG,
     )
 
-    assert result.summary["model_point_id"].tolist() == [0, 1]
-    assert result.summary["control"].unique().tolist() == ["BF"]
-    assert result.summary["median"].tolist() == pytest.approx([1.0, 1.0])
-    assert result.summary["hdi95_lower"].tolist() == pytest.approx([1.0, 1.0])
-    assert result.summary["hdi95_upper"].tolist() == pytest.approx([1.0, 1.0])
+    assert set(result.summary["control"]) == {"CO_adsorption", "BF"}
+    for _, frame in result.summary.groupby("control", sort=False):
+        assert frame["model_point_id"].tolist() == [0, 1]
+        assert frame["condition_id"].tolist() == [0, 1]
+        assert frame["analysis_grid_index"].tolist() == [0, 1]
+        assert frame["E_V_SHE"].tolist() == pytest.approx([0.30, 0.45])
 
 
 def test_linear_xag_transition_state_drc_uses_effective_pointwise_barriers():
@@ -152,7 +159,7 @@ def test_linear_xag_transition_state_drc_uses_effective_pointwise_barriers():
             "linear_xAg": {
                 "x_reference": 0.50,
                 "models": {
-                    "BF_LH": {
+                    "CO_BF_ER_LH": {
                         "slopes": {
                             "Gact2_BF_0": {
                                 "distribution": "normal",
@@ -188,9 +195,12 @@ def test_linear_xag_transition_state_drc_uses_effective_pointwise_barriers():
             "deltaG1_0": [-0.12, -0.12],
             "deltaG4_0": [0.10, 0.10],
             "deltaG5_0": [0.00, 0.00],
-            "beta_2": [0.05, 0.05],
+            "beta_2_BF": [0.05, 0.05],
+            "beta_2_ER": [0.20, 0.20],
             "q": [0.30, 0.30],
+            "Gact1_0": [0.58, 0.58],
             "Gact2_BF_0": [0.68, 0.68],
+            "Gact2_ER_0": [0.70, 0.70],
             "Gact2_LH_0": [0.74, 0.74],
             "Gact2_BF_0_xAg_slope": [0.10, 0.10],
         }
@@ -198,7 +208,7 @@ def test_linear_xag_transition_state_drc_uses_effective_pointwise_barriers():
 
     result = compute_composition_transition_state_drc(
         inference_data=idata,
-        model_name="BF_LH",
+        model_name="CO_BF_ER_LH",
         point_inputs=point_inputs,
         model_points=model_points,
         config=config,
