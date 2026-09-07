@@ -13,6 +13,7 @@ from mkm.mechanisms.agpd_basic import (
     evaluate_agpd_bf,
     evaluate_agpd_bf_lh,
     evaluate_agpd_co_bf_er_lh,
+    evaluate_agpd_co_bf_er_lh_ag10_no_bf,
     evaluate_agpd_co_bf_er_lh_capped,
     evaluate_agpd_co_bf_er_lh_capped_ag10_no_bf,
 )
@@ -32,6 +33,10 @@ _AGPD_MODEL_REGISTRY = {
         parameter_class=AgPdCOBFERRLHParameters,
         evaluator=evaluate_agpd_co_bf_er_lh,
     ),
+    "CO_BF_ER_LH_Ag10_no_BF": AgPdModelDefinition(
+        parameter_class=AgPdCOBFERRLHParameters,
+        evaluator=evaluate_agpd_co_bf_er_lh_ag10_no_bf,
+    ),
     "CO_BF_ER_LH_capped": AgPdModelDefinition(
         parameter_class=AgPdCOBFERRLHParameters,
         evaluator=evaluate_agpd_co_bf_er_lh_capped,
@@ -45,12 +50,18 @@ _AGPD_MODEL_REGISTRY = {
 
 
 _MODEL_CONFIG_ALIASES = {
+    "CO_BF_ER_LH_Ag10_no_BF": "CO_BF_ER_LH",
     "CO_BF_ER_LH_capped": "CO_BF_ER_LH",
     "CO_BF_ER_LH_capped_Ag10_no_BF": "CO_BF_ER_LH",
 }
 
-_ALL_MATERIAL_ONLY_MODELS = {"CO_BF_ER_LH_capped_Ag10_no_BF"}
-_FULL_CO_MODELS = {"CO_BF_ER_LH", "CO_BF_ER_LH_capped", "CO_BF_ER_LH_capped_Ag10_no_BF"}
+_ALL_MATERIAL_ONLY_MODELS = {"CO_BF_ER_LH_Ag10_no_BF", "CO_BF_ER_LH_capped_Ag10_no_BF"}
+_FULL_CO_MODELS = {
+    "CO_BF_ER_LH",
+    "CO_BF_ER_LH_Ag10_no_BF",
+    "CO_BF_ER_LH_capped",
+    "CO_BF_ER_LH_capped_Ag10_no_BF",
+}
 _CAPPED_CO_MODELS = {"CO_BF_ER_LH_capped", "CO_BF_ER_LH_capped_Ag10_no_BF"}
 _UNIT_INTERVAL_PARAMETERS = {"beta_2_BF", "beta_2_ER", "q"}
 
@@ -64,7 +75,13 @@ def available_agpd_models():
 
 
 def available_agpd_all_material_models():
-    return ("BF_LH", "CO_BF_ER_LH", "CO_BF_ER_LH_capped", "CO_BF_ER_LH_capped_Ag10_no_BF")
+    return (
+        "BF_LH",
+        "CO_BF_ER_LH",
+        "CO_BF_ER_LH_Ag10_no_BF",
+        "CO_BF_ER_LH_capped",
+        "CO_BF_ER_LH_capped_Ag10_no_BF",
+    )
 
 
 def get_agpd_model_definition(model_name):

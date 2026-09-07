@@ -781,6 +781,28 @@ def evaluate_agpd_co_bf_er_lh(
     )
 
 
+def evaluate_agpd_co_bf_er_lh_ag10_no_bf(
+    state: AgPdPointState,
+    parameters: AgPdCOBFERRLHParameters,
+    temperature_K,
+):
+    if state.materials is None or state.material_index is None:
+        raise ValueError("CO_BF_ER_LH_Ag10_no_BF requires material identity in the AgPd point state.")
+
+    bf_activity_by_material = np.asarray(
+        [0.0 if material == "Ag10Pd90" else 1.0 for material in state.materials],
+        dtype=float,
+    )
+    bf_activity = bf_activity_by_material[state.material_index]
+
+    return evaluate_agpd_co_bf_er_lh(
+        state=state,
+        parameters=parameters,
+        temperature_K=temperature_K,
+        bf_activity=bf_activity,
+    )
+
+
 def evaluate_agpd_co_bf_er_lh_capped(
     state: AgPdPointState,
     parameters: AgPdCOBFERRLHParameters,

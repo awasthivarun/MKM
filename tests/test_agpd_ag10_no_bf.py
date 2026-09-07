@@ -4,6 +4,8 @@ import pytest
 from mkm.mechanisms.agpd_basic import (
     AgPdCOBFERRLHParameters,
     build_agpd_point_state,
+    evaluate_agpd_co_bf_er_lh,
+    evaluate_agpd_co_bf_er_lh_ag10_no_bf,
     evaluate_agpd_co_bf_er_lh_capped,
     evaluate_agpd_co_bf_er_lh_capped_ag10_no_bf,
 )
@@ -18,7 +20,10 @@ from mkm.models.agpd_basic import (
 )
 
 
-MODEL_NAME = "CO_BF_ER_LH_capped_Ag10_no_BF"
+MODEL_NAMES = (
+    "CO_BF_ER_LH_Ag10_no_BF",
+    "CO_BF_ER_LH_capped_Ag10_no_BF",
+)
 
 
 def _inputs():
@@ -31,7 +36,7 @@ def _inputs():
     )
 
 
-def _config():
+def _config(theta_CO_max=0.66):
     return {
         "gas": {"standard_state_pressure_bar": 1.0, "total_pressure_bar": 1.0},
         "electrolyte": {"standard_state_concentration_M": 1.0, "activity_model": "ideal_molarity"},
@@ -39,7 +44,7 @@ def _config():
             "Ag10Pd90": {"Ag_fraction": 0.10, "Pd_fraction": 0.90},
             "Ag25Pd75": {"Ag_fraction": 0.25, "Pd_fraction": 0.75},
         },
-        "co_coverage_cap": {"Ag10Pd90": 0.66, "Ag25Pd75": 0.66},
+        "co_coverage_cap": {"Ag10Pd90": theta_CO_max, "Ag25Pd75": theta_CO_max},
     }
 
 
@@ -58,15 +63,18 @@ def _parameters(deltaG5_0=0.0):
     )
 
 
-def test_ag10_no_bf_disables_bf_only_for_ag10():
+@pytest.mark.parametrize(
+    ("ordinary_evaluator", "no_bf_evaluator"),
+    [
+        (evaluate_agpd_co_bf_er_lh, evaluate_agpd_co_bf_er_lh_ag10_no_bf),
+        (evaluate_agpd_co_bf_er_lh_capped, evaluate_agpd_co_bf_er_lh_capped_ag10_no_bf),
+    ],
+)
+def test_ag10_no_bf_disables_bf_only_for_ag10(ordinary_evaluator, no_bf_evaluator):
     state = build_agpd_point_state(inputs=_inputs(), config=_config())
     parameters = _parameters()
-    ordinary = evaluate_agpd_co_bf_er_lh_capped(state=state, parameters=parameters, temperature_K=293.15)
-    no_bf = evaluate_agpd_co_bf_er_lh_capped_ag10_no_bf(
-        state=state,
-        parameters=parameters,
-        temperature_K=293.15,
-    )
+    ordinary = ordinary_evaluator(state=state, parameters=parameters, temperature_K=293.15)
+    no_bf = no_bf_evaluator(state=state, parameters=parameters, temperature_K=293.15)
 
     ag10 = state.material_index == 0
     ag25 = state.material_index == 1
@@ -76,23 +84,18 @@ def test_ag10_no_bf_disables_bf_only_for_ag10():
     assert np.all(ordinary_fraction[ag10] > 0.0)
     np.testing.assert_array_equal(no_bf_fraction[ag10], 0.0)
     assert np.all(np.isneginf(no_bf.log_rate_BF.eval()[ag10]))
-
     np.testing.assert_allclose(no_bf.log_rate_total.eval()[ag25], ordinary.log_rate_total.eval()[ag25], rtol=1e-12)
     np.testing.assert_allclose(no_bf_fraction[ag25], ordinary_fraction[ag25], rtol=1e-12)
 
 
-def test_ag10_rate_is_independent_of_delta_g5_when_bf_is_disabled():
+@pytest.mark.parametrize(
+    "evaluator",
+    [evaluate_agpd_co_bf_er_lh_ag10_no_bf, evaluate_agpd_co_bf_er_lh_capped_ag10_no_bf],
+)
+def test_ag10_rate_is_independent_of_delta_g5_when_bf_is_disabled(evaluator):
     state = build_agpd_point_state(inputs=_inputs(), config=_config())
-    less_favorable = evaluate_agpd_co_bf_er_lh_capped_ag10_no_bf(
-        state=state,
-        parameters=_parameters(deltaG5_0=0.10),
-        temperature_K=293.15,
-    )
-    more_favorable = evaluate_agpd_co_bf_er_lh_capped_ag10_no_bf(
-        state=state,
-        parameters=_parameters(deltaG5_0=-0.10),
-        temperature_K=293.15,
-    )
+    less_favorable = evaluator(state=state, parameters=_parameters(deltaG5_0=0.10), temperature_K=293.15)
+    more_favorable = evaluator(state=state, parameters=_parameters(deltaG5_0=-0.10), temperature_K=293.15)
 
     ag10 = state.material_index == 0
     ag25 = state.material_index == 1
@@ -103,7 +106,34 @@ def test_ag10_rate_is_independent_of_delta_g5_when_bf_is_disabled():
     assert np.any(np.abs(rate_low[ag25] - rate_high[ag25]) > 1e-6)
 
 
-def test_new_model_reuses_capped_base_configuration_and_is_all_material_only():
+def test_uncapped_ag10_no_bf_ignores_configured_co_cap():
+    parameters = _parameters()
+    low_cap_state = build_agpd_point_state(inputs=_inputs(), config=_config(theta_CO_max=0.05))
+    high_cap_state = build_agpd_point_state(inputs=_inputs(), config=_config(theta_CO_max=0.95))
+
+    low_cap = evaluate_agpd_co_bf_er_lh_ag10_no_bf(
+        state=low_cap_state,
+        parameters=parameters,
+        temperature_K=293.15,
+    )
+    high_cap = evaluate_agpd_co_bf_er_lh_ag10_no_bf(
+        state=high_cap_state,
+        parameters=parameters,
+        temperature_K=293.15,
+    )
+
+    np.testing.assert_allclose(low_cap.log_rate_total.eval(), high_cap.log_rate_total.eval(), rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(
+        low_cap.mechanism_result.pointwise["theta_CO"].eval(),
+        high_cap.mechanism_result.pointwise["theta_CO"].eval(),
+        rtol=1e-12,
+        atol=1e-12,
+    )
+    assert "theta_CO_site_occupation" not in low_cap.mechanism_result.pointwise
+
+
+@pytest.mark.parametrize("model_name", MODEL_NAMES)
+def test_ag10_no_bf_models_reuse_base_configuration_and_are_all_material_only(model_name):
     config = {
         "prior_profiles": {"Ag10Pd90": {"CO_BF_ER_LH": {"parameters": {"sentinel": 1}}}},
         "composition_parameterizations": {
@@ -115,11 +145,11 @@ def test_new_model_reuses_capped_base_configuration_and_is_all_material_only():
         "surface_composition": {"Ag10Pd90": {"Ag_fraction": 0.10, "Pd_fraction": 0.90}},
     }
 
-    assert MODEL_NAME in available_agpd_models()
-    assert MODEL_NAME in available_agpd_all_material_models()
-    assert get_agpd_model_definition(MODEL_NAME).parameter_class is AgPdCOBFERRLHParameters
-    assert get_agpd_prior_profile(config, "Ag10Pd90", MODEL_NAME)["parameters"] == {"sentinel": 1}
-    assert get_agpd_parameterization(config, MODEL_NAME, "linear_xAg") == (0.5, {})
+    assert model_name in available_agpd_models()
+    assert model_name in available_agpd_all_material_models()
+    assert get_agpd_model_definition(model_name).parameter_class is AgPdCOBFERRLHParameters
+    assert get_agpd_prior_profile(config, "Ag10Pd90", model_name)["parameters"] == {"sentinel": 1}
+    assert get_agpd_parameterization(config, model_name, "linear_xAg") == (0.5, {})
 
     with pytest.raises(ValueError, match="only for all-material fitting"):
-        build_agpd_mechanism(MODEL_NAME, "Ag10Pd90", config)
+        build_agpd_mechanism(model_name, "Ag10Pd90", config)

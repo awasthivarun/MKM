@@ -45,6 +45,7 @@ def test_agpd_registry_keeps_all_chemical_mechanisms_and_reduced_pd_model():
         "BF",
         "BF_LH",
         "CO_BF_ER_LH",
+        "CO_BF_ER_LH_Ag10_no_BF",
         "CO_BF_ER_LH_capped",
         "CO_BF_ER_LH_capped_Ag10_no_BF",
         "CO_ER_LH",
@@ -53,6 +54,7 @@ def test_agpd_registry_keeps_all_chemical_mechanisms_and_reduced_pd_model():
     assert available_agpd_all_material_models() == (
         "BF_LH",
         "CO_BF_ER_LH",
+        "CO_BF_ER_LH_Ag10_no_BF",
         "CO_BF_ER_LH_capped",
         "CO_BF_ER_LH_capped_Ag10_no_BF",
     )
