@@ -48,6 +48,7 @@ def test_agpd_registry_keeps_all_chemical_mechanisms_and_reduced_pd_model():
         "CO_BF_ER_LH_Ag10_no_BF",
         "CO_BF_ER_LH_capped",
         "CO_BF_ER_LH_capped_Ag10_no_BF",
+        "CO_BF_ER_LH_fitted_caps_Ag10_no_BF",
         "CO_ER_LH",
     )
 
@@ -57,6 +58,7 @@ def test_agpd_registry_keeps_all_chemical_mechanisms_and_reduced_pd_model():
         "CO_BF_ER_LH_Ag10_no_BF",
         "CO_BF_ER_LH_capped",
         "CO_BF_ER_LH_capped_Ag10_no_BF",
+        "CO_BF_ER_LH_fitted_caps_Ag10_no_BF",
     )
 
     for name in available_agpd_models():
@@ -114,6 +116,10 @@ def test_parameterization_profiles_are_configuration_driven():
         "linear_xAg",
     }
     assert capped_parameterizations == base_parameterizations
+    assert available_agpd_parameterizations(
+        config,
+        "CO_BF_ER_LH_fitted_caps_Ag10_no_BF",
+    ) == ("linear_xAg",)
 
     selected_x_reference, selected_slopes = get_agpd_parameterization(
         config,
@@ -164,6 +170,36 @@ def test_parameterization_profiles_are_configuration_driven():
     assert metadata["name"] == "linear_xAg"
     assert metadata["x_reference"] == pytest.approx(0.5)
     assert metadata["slopes"] == slopes
+
+
+def test_fitted_caps_model_builds_one_free_cap_per_configured_material():
+    config = _config()
+    model_name = "CO_BF_ER_LH_fitted_caps_Ag10_no_BF"
+    materials = tuple(config["surface_composition"])
+
+    specs = get_agpd_all_material_parameter_specs(
+        config,
+        prior_material="Ag10Pd90",
+        model_name=model_name,
+        parameterization="linear_xAg",
+    )
+    cap_names = {f"theta_CO_max_{material}" for material in materials}
+    assert cap_names.issubset(specs)
+    assert all(specs[name] == config["fitted_cap_calibration"]["theta_CO_max_prior"] for name in cap_names)
+
+    mechanism = build_agpd_all_material_mechanism(
+        model_name,
+        materials,
+        config,
+        prior_material="Ag10Pd90",
+        parameterization="linear_xAg",
+    )
+    with pm.Model() as model:
+        result = mechanism(_point_inputs(materials))
+
+    free_names = {variable.name for variable in model.free_RVs}
+    assert cap_names.issubset(free_names)
+    assert "theta_CO_site_occupation" in result.pointwise
 
 
 def test_capped_model_reuses_uncapped_prior_and_slope_specs():
@@ -236,7 +272,7 @@ def test_arbitrary_parameter_subset_can_receive_xag_slopes_without_domain_enforc
 
 @pytest.mark.parametrize(
     "model_name",
-    ("CO_BF_ER_LH", "CO_BF_ER_LH_capped"),
+    ("CO_BF_ER_LH", "CO_BF_ER_LH_capped", "CO_BF_ER_LH_fitted_caps_Ag10_no_BF"),
 )
 def test_prediction_only_full_model_accepts_pure_pd_state(model_name):
     config = _config()
@@ -262,7 +298,7 @@ def test_prediction_only_full_model_accepts_pure_pd_state(model_name):
         "rate_fraction_LH",
     }.issubset(result.pointwise)
 
-    if model_name == "CO_BF_ER_LH_capped":
+    if model_name in {"CO_BF_ER_LH_capped", "CO_BF_ER_LH_fitted_caps_Ag10_no_BF"}:
         assert "theta_CO_site_occupation" in result.pointwise
     else:
         assert "theta_CO_site_occupation" not in result.pointwise

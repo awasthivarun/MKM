@@ -100,7 +100,7 @@ def test_reduced_pd_model_is_not_available_for_alloys_or_all_material_fit():
 
 @pytest.mark.parametrize(
     "model_name",
-    ("CO_BF_ER_LH", "CO_BF_ER_LH_capped"),
+    ("CO_BF_ER_LH", "CO_BF_ER_LH_capped", "CO_BF_ER_LH_fitted_caps_Ag10_no_BF"),
 )
 def test_all_material_fit_supports_shared_or_material_error(model_name):
     for error_structure in ("shared", "material"):
@@ -114,6 +114,26 @@ def test_all_material_fit_supports_shared_or_material_error(model_name):
 
         assert specification.fit_scope == "all_materials"
         assert specification.error_structure == error_structure
+
+
+def test_fitted_cap_fit_exposes_material_cap_parameters():
+    config = _config()
+    specification = resolve_agpd_fit_specification(
+        config,
+        model_name="CO_BF_ER_LH_fitted_caps_Ag10_no_BF",
+        all_materials=True,
+        parameterization="linear_xAg",
+        error_structure="shared",
+        prior_material="Ag10Pd90",
+    )
+
+    specs = all_parameter_specs(specification, config)
+    for material in config["surface_composition"]:
+        assert f"theta_CO_max_{material}" in specs
+
+    metadata = resolved_parameterization_metadata(specification, config)
+    assert metadata["name"] == "linear_xAg"
+    assert set(metadata["slopes"]) == set(config["fitted_cap_calibration"]["slopes"])
 
 
 def test_capped_fit_reuses_uncapped_parameterization_metadata():

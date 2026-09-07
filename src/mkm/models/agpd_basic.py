@@ -45,6 +45,10 @@ _AGPD_MODEL_REGISTRY = {
         parameter_class=AgPdCOBFERRLHParameters,
         evaluator=evaluate_agpd_co_bf_er_lh_capped_ag10_no_bf,
     ),
+    "CO_BF_ER_LH_fitted_caps_Ag10_no_BF": AgPdModelDefinition(
+        parameter_class=AgPdCOBFERRLHParameters,
+        evaluator=evaluate_agpd_co_bf_er_lh,
+    ),
     "CO_ER_LH": AgPdModelDefinition(parameter_class=PdCOERLHParameters, evaluator=evaluate_pd_co_er_lh),
 }
 
@@ -55,14 +59,20 @@ _MODEL_CONFIG_ALIASES = {
     "CO_BF_ER_LH_capped_Ag10_no_BF": "CO_BF_ER_LH",
 }
 
-_ALL_MATERIAL_ONLY_MODELS = {"CO_BF_ER_LH_Ag10_no_BF", "CO_BF_ER_LH_capped_Ag10_no_BF"}
+_FITTED_CAPS_MODEL = "CO_BF_ER_LH_fitted_caps_Ag10_no_BF"
+_ALL_MATERIAL_ONLY_MODELS = {
+    "CO_BF_ER_LH_Ag10_no_BF",
+    "CO_BF_ER_LH_capped_Ag10_no_BF",
+    _FITTED_CAPS_MODEL,
+}
 _FULL_CO_MODELS = {
     "CO_BF_ER_LH",
     "CO_BF_ER_LH_Ag10_no_BF",
     "CO_BF_ER_LH_capped",
     "CO_BF_ER_LH_capped_Ag10_no_BF",
+    _FITTED_CAPS_MODEL,
 }
-_CAPPED_CO_MODELS = {"CO_BF_ER_LH_capped", "CO_BF_ER_LH_capped_Ag10_no_BF"}
+_CAPPED_CO_MODELS = {"CO_BF_ER_LH_capped", "CO_BF_ER_LH_capped_Ag10_no_BF", _FITTED_CAPS_MODEL}
 _UNIT_INTERVAL_PARAMETERS = {"beta_2_BF", "beta_2_ER", "q"}
 
 
@@ -81,6 +91,7 @@ def available_agpd_all_material_models():
         "CO_BF_ER_LH_Ag10_no_BF",
         "CO_BF_ER_LH_capped",
         "CO_BF_ER_LH_capped_Ag10_no_BF",
+        _FITTED_CAPS_MODEL,
     )
 
 
@@ -92,6 +103,9 @@ def get_agpd_model_definition(model_name):
 
 
 def get_agpd_prior_profile(config, material, model_name):
+    if model_name == _FITTED_CAPS_MODEL:
+        return config["fitted_cap_calibration"]
+
     config_model_name = _config_model_name(model_name)
     try:
         return config["prior_profiles"][material][config_model_name]
@@ -112,6 +126,9 @@ def _validate_parameter_specs(definition, parameter_specs, profile_label):
 
 
 def available_agpd_parameterizations(config, model_name=None):
+    if model_name == _FITTED_CAPS_MODEL:
+        return ("linear_xAg",)
+
     parameterizations = config.get("composition_parameterizations", {})
     config_model_name = None if model_name is None else _config_model_name(model_name)
     names = []
@@ -123,6 +140,14 @@ def available_agpd_parameterizations(config, model_name=None):
 
 
 def get_agpd_parameterization(config, model_name, parameterization="shared"):
+    if model_name == _FITTED_CAPS_MODEL:
+        if parameterization != "linear_xAg":
+            raise ValueError(
+                f"AgPd fitted-cap calibration only supports parameterization 'linear_xAg', got '{parameterization}'."
+            )
+        calibration = config["fitted_cap_calibration"]
+        return float(calibration["x_reference"]), dict(calibration["slopes"])
+
     try:
         specification = config["composition_parameterizations"][parameterization]
     except KeyError as error:
@@ -175,6 +200,12 @@ def get_agpd_all_material_parameter_specs(config, prior_material, model_name, pa
     )
     for parameter_name, specification in slope_specs.items():
         parameter_specs[f"{parameter_name}_xAg_slope"] = specification
+
+    if model_name == _FITTED_CAPS_MODEL:
+        cap_spec = config["fitted_cap_calibration"]["theta_CO_max_prior"]
+        for material in config["surface_composition"]:
+            parameter_specs[f"theta_CO_max_{material}"] = dict(cap_spec)
+
     return parameter_specs
 
 
@@ -206,12 +237,23 @@ def build_agpd_mechanism(model_name, material, config):
     return mechanism
 
 
-def _evaluate_all_material_state(*, model_name, definition, state, effective_values, config, prediction_only):
+def _evaluate_all_material_state(
+    *,
+    model_name,
+    definition,
+    state,
+    effective_values,
+    config,
+    prediction_only,
+    theta_CO_max_override=None,
+):
     """Evaluate an all-material model, using the reduced ER+LH evaluator for prediction-only pure Pd."""
     if prediction_only and model_name in _FULL_CO_MODELS and np.all(state.Ag_fraction == 0.0):
         pd_parameter_names = {field.name for field in fields(PdCOERLHParameters)}
         pd_parameters = PdCOERLHParameters(**{name: effective_values[name] for name in pd_parameter_names})
-        theta_CO_max = state.theta_CO_max if model_name in _CAPPED_CO_MODELS else None
+        theta_CO_max = theta_CO_max_override if model_name == _FITTED_CAPS_MODEL else None
+        if model_name in _CAPPED_CO_MODELS and model_name != _FITTED_CAPS_MODEL:
+            theta_CO_max = state.theta_CO_max
         return evaluate_pd_co_er_lh(
             state=state,
             parameters=pd_parameters,
@@ -220,6 +262,22 @@ def _evaluate_all_material_state(*, model_name, definition, state, effective_val
         )
 
     parameters = definition.parameter_class(**effective_values)
+    if model_name == _FITTED_CAPS_MODEL:
+        if state.materials is None or state.material_index is None:
+            raise ValueError("Fitted-cap AgPd model requires material identity in the point state.")
+        bf_activity_by_material = np.asarray(
+            [0.0 if material == "Ag10Pd90" else 1.0 for material in state.materials],
+            dtype=float,
+        )
+        bf_activity = bf_activity_by_material[state.material_index]
+        return evaluate_agpd_co_bf_er_lh(
+            state=state,
+            parameters=parameters,
+            temperature_K=config["temperature_K"],
+            theta_CO_max=theta_CO_max_override,
+            bf_activity=bf_activity,
+        )
+
     return definition.evaluator(state=state, parameters=parameters, temperature_K=config["temperature_K"])
 
 
@@ -263,6 +321,12 @@ def build_agpd_all_material_mechanism(
     slope_prior_specs = {
         f"{parameter_name}_xAg_slope": specification for parameter_name, specification in slope_specs.items()
     }
+    cap_prior_specs = {}
+    if model_name == _FITTED_CAPS_MODEL:
+        cap_spec = config["fitted_cap_calibration"]["theta_CO_max_prior"]
+        cap_prior_specs = {
+            f"theta_CO_max_{material}": dict(cap_spec) for material in config["surface_composition"]
+        }
 
     def mechanism(point_inputs):
         if tuple(point_inputs.materials) != materials:
@@ -273,6 +337,7 @@ def build_agpd_all_material_mechanism(
 
         prior_values = build_named_priors(parameter_specs)
         slope_values = build_named_priors(slope_prior_specs)
+        cap_values = build_named_priors(cap_prior_specs)
         state = build_agpd_point_state(inputs=point_inputs, config=config)
 
         effective_values = dict(prior_values)
@@ -288,6 +353,17 @@ def build_agpd_all_material_mechanism(
                     slope = slope * max_abs_slope
                 effective_values[parameter_name] = prior_values[parameter_name] + slope * x_shift
 
+        theta_CO_max_override = None
+        if model_name == _FITTED_CAPS_MODEL:
+            # Avoid indexing a stack of scalar RVs with the full pointwise material-index vector. PyTensor can
+            # rewrite that pattern into an N-input MakeVector, which exceeds Numba's tuple-size limit for this dataset.
+            theta_CO_max_override = pt.zeros_like(pt.as_tensor_variable(state.Ag_fraction))
+            for material_index, material in enumerate(point_inputs.materials):
+                material_mask = pt.as_tensor_variable((state.material_index == material_index).astype(float))
+                theta_CO_max_override = (
+                    theta_CO_max_override + cap_values[f"theta_CO_max_{material}"] * material_mask
+                )
+
         evaluated = _evaluate_all_material_state(
             model_name=model_name,
             definition=definition,
@@ -295,6 +371,7 @@ def build_agpd_all_material_mechanism(
             effective_values=effective_values,
             config=config,
             prediction_only=prediction_only,
+            theta_CO_max_override=theta_CO_max_override,
         )
         return evaluated.mechanism_result
 
