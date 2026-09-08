@@ -110,10 +110,8 @@ def test_prior_profiles_keep_only_canonical_co_sources():
     config = _load_yaml("config/models/agpd_basic.yaml")
     profiles = config["prior_profiles"]
 
-    for material in ("Ag10Pd90", "Ag25Pd75", "Ag50Pd50", "Ag75Pd25", "Ag90Pd10"):
+    for material in ("Ag10Pd90", "Ag25Pd75", "Ag50Pd50", "Ag75Pd25", "Ag90Pd10", "Pd100"):
         assert set(profiles[material]) == {"CO_BF_ER_LH"}
-
-    assert set(profiles["Pd100"]) == {"CO_ER_LH"}
 
 
 def test_full_linear_xag_contains_all_mechanism_slopes():

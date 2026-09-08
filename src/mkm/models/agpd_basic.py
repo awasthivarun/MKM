@@ -127,7 +127,7 @@ def get_agpd_prior_profile(config, material, model_name):
         return config["fitted_cap_calibration"]
 
     if model_name in _INDIVIDUAL_CO_MODELS:
-        config_model_name = "CO_ER_LH" if material == "Pd100" else "CO_BF_ER_LH"
+        config_model_name = "CO_BF_ER_LH"
     else:
         config_model_name = _config_model_name(model_name)
 

@@ -185,25 +185,62 @@ def test_alloy_individual_co_models_build_only_their_active_parameters(model_nam
     assert {variable.name for variable in model.free_RVs} == expected_parameters
 
 
-def test_individual_co_priors_use_one_canonical_parent_per_material_family():
+def test_individual_co_priors_project_from_one_shared_canonical_parent():
     config = _config()
-    alloy_parent = config["prior_profiles"]["Ag50Pd50"]["CO_BF_ER_LH"]["parameters"]
-    pd_parent = config["prior_profiles"]["Pd100"]["CO_ER_LH"]["parameters"]
+    canonical_parent = config["prior_profiles"]["Ag10Pd90"]["CO_BF_ER_LH"]["parameters"]
 
-    for model_name in ("CO_LH", "CO_ER", "CO_BF", "CO_ER_LH", "CO_BF_LH", "CO_BF_ER", "CO_BF_ER_LH"):
-        profile = get_agpd_prior_profile(config, "Ag50Pd50", model_name)
-        assert all(profile["parameters"][name] == alloy_parent[name] for name in profile["parameters"])
+    for material in ("Ag10Pd90", "Ag25Pd75", "Ag50Pd50", "Ag75Pd25", "Ag90Pd10"):
+        for model_name in ("CO_LH", "CO_ER", "CO_BF", "CO_ER_LH", "CO_BF_LH", "CO_BF_ER", "CO_BF_ER_LH"):
+            profile = get_agpd_prior_profile(config, material, model_name)
+            expected = {field.name for field in fields(get_agpd_model_definition(model_name).parameter_class)}
+            assert set(profile["parameters"]) == expected
+            assert all(profile["parameters"][name] == canonical_parent[name] for name in expected)
 
     for model_name in ("CO_LH", "CO_ER", "CO_ER_LH"):
         profile = get_agpd_prior_profile(config, "Pd100", model_name)
-        assert all(profile["parameters"][name] == pd_parent[name] for name in profile["parameters"])
+        expected = {field.name for field in fields(get_agpd_model_definition(model_name).parameter_class)}
+        assert set(profile["parameters"]) == expected
+        assert all(profile["parameters"][name] == canonical_parent[name] for name in expected)
 
 
-def test_yaml_keeps_only_canonical_individual_co_prior_profiles():
+def test_yaml_keeps_only_one_shared_canonical_individual_co_prior_profile():
     config = _config()
-    for material in ("Ag10Pd90", "Ag25Pd75", "Ag50Pd50", "Ag75Pd25", "Ag90Pd10"):
+    canonical_profile = config["prior_profiles"]["Ag10Pd90"]["CO_BF_ER_LH"]
+
+    for material in ("Ag10Pd90", "Ag25Pd75", "Ag50Pd50", "Ag75Pd25", "Ag90Pd10", "Pd100"):
         assert set(config["prior_profiles"][material]) == {"CO_BF_ER_LH"}
-    assert set(config["prior_profiles"]["Pd100"]) == {"CO_ER_LH"}
+        assert config["prior_profiles"][material]["CO_BF_ER_LH"] == canonical_profile
+
+
+def test_all_material_prior_resolution_is_independent_of_prior_material_for_lomo():
+    config = _config()
+    ag_specs = get_agpd_all_material_parameter_specs(
+        config, prior_material="Ag10Pd90", model_name="CO_BF_ER_LH", parameterization="linear_xAg"
+    )
+    pd_specs = get_agpd_all_material_parameter_specs(
+        config, prior_material="Pd100", model_name="CO_BF_ER_LH", parameterization="linear_xAg"
+    )
+
+    assert pd_specs == ag_specs
+
+
+def test_all_material_mechanism_can_use_pd100_as_prior_material_for_lomo():
+    config = _config()
+    materials = ("Ag50Pd50", "Pd100")
+    mechanism = build_agpd_all_material_mechanism(
+        "CO_BF_ER_LH",
+        materials,
+        config,
+        prior_material="Pd100",
+        parameterization="linear_xAg",
+    )
+
+    with pm.Model() as model:
+        result = mechanism(_point_inputs(materials))
+
+    assert result.ln_rate.ndim == 1
+    assert "Gact2_BF_0" in {variable.name for variable in model.free_RVs}
+    assert "Gact2_BF_0_xAg_slope" in {variable.name for variable in model.free_RVs}
 
 
 def test_parameterization_profiles_are_configuration_driven():

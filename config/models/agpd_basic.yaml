@@ -33,6 +33,7 @@ surface_assumptions:
   surface_composition_equals_bulk: true
   random_mixing: true
 
+## Do not use - there is not much justification to use CO coverage caps - much cleaner to work with elementary reactions
 co_coverage_cap:
   # Fixed molecular CO coverage caps for the two fixed-cap models. The fitted-cap calibration below ignores these values.
   # CO adsorption is multiplied by 1 - theta_CO / theta_CO_max while the ordinary Pd site balance
@@ -45,137 +46,135 @@ co_coverage_cap:
   Ag75Pd25: 0.66
   Ag90Pd10: 0.66
 
-# Same-data empirical-Bayes sensitivity experiment. These narrow chemistry priors are the posterior
-# means/SDs from CO_BF_ER_LH_capped_Ag10_no_BF. Do not use this run for formal LOO/WAIC comparison
-# against models whose priors were specified independently of these data.
+## Do not use -  Sensitivity analysis to see best values of CO coverage caps. 
 fitted_cap_calibration:
   x_reference: 0.50
   theta_CO_max_prior:
     distribution: uniform
-    lower: 0.7
+    lower: 0.3
     upper: 1.0
   parameters:
     deltaG1_0:
       distribution: truncated_normal
       mu: -0.1148115753
-      sigma: 0.0004718200
-      lower: -2.0
+      sigma: 1e-6 # 0.0004718200
+      lower: -0.3
       upper: 0.5
     deltaG4_0:
       distribution: truncated_normal
       mu: 0.1013418252
-      sigma: 0.0013542392
+      sigma: 1e-6 # 0.0013542392
       lower: -2.0
       upper: 1.0
     deltaG5_0:
       distribution: truncated_normal
       mu: -0.0172893204
-      sigma: 0.0016379510
+      sigma: 1e-6 # 0.0016379510
       lower: -2.0
       upper: 1.0
     beta_2_BF:
       distribution: truncated_normal
       mu: 0.0013053415
-      sigma: 0.0013372187
+      sigma: 1e-6 # 0.0013372187
       lower: 0.0
       upper: 0.2
     beta_2_ER:
       distribution: truncated_normal
       mu: 0.3016144903
-      sigma: 0.0047486890
+      sigma: 1e-6 # 0.0013372187
       lower: 0.0
       upper: 1.0
     q:
       distribution: truncated_normal
       mu: 0.3502937039
-      sigma: 0.0044993463
+      sigma: 1e-6 # 0.0044993463
       lower: 0.0
       upper: 1.0
     Gact1_0:
       distribution: truncated_normal
       mu: 0.5761783653
-      sigma: 0.0018413634
+      sigma: 1e-6 # 0.0018413634
       lower: 0.5
       upper: 0.7
     Gact2_BF_0:
       distribution: truncated_normal
       mu: 0.6800642823
-      sigma: 0.0010748812
+      sigma: 1e-6 # 0.0010748812
       lower: 0.6
       upper: 1.0
     Gact2_ER_0:
       distribution: truncated_normal
       mu: 0.7338166233
-      sigma: 0.0010078313
+      sigma: 1e-6 # 0.0010078313
       lower: 0.6
       upper: 1.0
     Gact2_LH_0:
       distribution: truncated_normal
       mu: 0.7382236823
-      sigma: 0.0080427843
+      sigma: 1e-6 # 0.0080427843
       lower: 0.6
-      upper: 1.0
+      upper: 1
   slopes:
     deltaG1_0:
       distribution: truncated_normal
       mu: 0.0314833021
-      sigma: 0.0011669641
-      lower: 0.0
-      upper: 1.0
+      sigma: 1e-6 # 0.0011669641
+      lower: 0
+      upper: 1
     deltaG4_0:
       distribution: truncated_normal
       mu: -0.0304713507
-      sigma: 0.0038320798
-      lower: -1.0
-      upper: 0.0
+      sigma: 1e-6 # 0.0038320798
+      lower: -1
+      upper: 0
     deltaG5_0:
       distribution: truncated_normal
       mu: -0.0393413446
-      sigma: 0.0043592583
-      lower: -10.0
-      upper: 0.0
+      sigma: 1e-6 # 0.0043592583
+      lower: -1
+      upper: 0
     Gact1_0:
       distribution: truncated_normal
       mu: 0.0592870019
-      sigma: 0.0048239057
+      sigma: 1e-6 # 0.0048239057
       lower: -0.4
       upper: 0.4
     Gact2_BF_0:
       distribution: truncated_normal
       mu: 0.0525695525
-      sigma: 0.0029211622
+      sigma: 1e-6 #0.0029211622
       lower: -0.4
       upper: 0.4
     Gact2_ER_0:
       distribution: truncated_normal
       mu: -0.0432875699
-      sigma: 0.0023418291
+      sigma: 1e-6 #0.0023418291
       lower: -0.4
-      upper: 0.0
+      upper: 0
     Gact2_LH_0:
       distribution: truncated_normal
       mu: 0.0225462853
-      sigma: 0.0167964695
+      sigma: 1e-6 # 0.0167964695
       lower: -0.4
-      upper: 1.0
+      upper: 1
     beta_2_BF:
       distribution: truncated_normal
       mu: -0.0665473523
-      sigma: 0.5439154205
-      lower: -1.0
-      upper: 1.0
+      sigma: 1e-6 # 0.5439154205
+      lower: -1
+      upper: 1
     beta_2_ER:
       distribution: truncated_normal
       mu: -0.0397812232
-      sigma: 0.0176944658
-      lower: -1.0
-      upper: 1.0
+      sigma: 1e-6 #0.0176944658
+      lower: -1
+      upper: 1
     q:
       distribution: truncated_normal
       mu: 0.1739582433
-      sigma: 0.0203224011
-      lower: -1.0
-      upper: 1.0
+      sigma: 1e-6 # 0.0203224011
+      lower: -1
+      upper: 1
 
 composition_parameterizations:
   shared:
@@ -205,9 +204,9 @@ composition_parameterizations:
             distribution: truncated_normal
             mu: 0.0
             sigma: 1
-            lower: -10 # Hitting the wall
-            upper: 0 # DFT supports stronger OH binding on Pd with increasing Ag content 
-          Gact1_0: # (Relaxed right now) Activation energy of CO binding on Pd should not be a function of surface composition
+            lower: -1 
+            upper: 0 # DFT supports stronger OH binding on Ag with increasing Ag content 
+          Gact1_0: # Large amount of change allowed in CO ads activation energy 
             distribution: truncated_normal
             mu: 0.0
             sigma: 1
@@ -219,7 +218,7 @@ composition_parameterizations:
             sigma: 1
             lower: -0.40
             upper: 0.40
-          Gact2_ER_0: # Large amount of change allowed in ER activation energy
+          Gact2_ER_0: 
             distribution: truncated_normal
             mu: 0.0
             sigma: 1
@@ -230,7 +229,7 @@ composition_parameterizations:
             mu: 0.0
             sigma: 1
             lower: -0.40
-            upper: 1 # Hitting the wall 
+            upper: 1 # Increased to prevent hitting the wall 
           beta_2_BF: # Do not change - this is percentage change
             distribution: truncated_normal
             mu: 0.0
@@ -263,113 +262,73 @@ likelihood:
 
 
 prior_profiles:
-  Ag10Pd90: &alloy_prior_profile
+  Ag10Pd90: &shared_prior_profile
     CO_BF_ER_LH:
-      provenance: legacy_tuned_for_multimodality
+      provenance: actual_prior_information
       parameters:
-        deltaG1_0:
+        deltaG1_0: # Flat and wide range for CO ads energy 
           distribution: truncated_normal
           mu: 0.0
           sigma: 2
           lower: -0.5
           upper: 0.5
-        deltaG4_0:
+        deltaG4_0: # Flat and wide range for OH ads energy on Pd
           distribution: truncated_normal
           mu: 0.0
           sigma: 2
           lower: -0.5
           upper: 0.5
-        deltaG5_0:
+        deltaG5_0: # Flat and wide range for OH ads energy on Ag
           distribution: truncated_normal
           mu: 0.0
           sigma: 2
           lower: -0.5
           upper: 0.5
-        beta_2_BF:
+        beta_2_BF: # Flat unrestricted
           distribution: truncated_normal
           mu: 0.5
           sigma: 1
           lower: 0.0
           upper: 1.0
-        beta_2_ER:
+        beta_2_ER: # Flat unrestricted
           distribution: truncated_normal
           mu: 0.5
           sigma: 1
           lower: 0.0
           upper: 1.0
-        q:
+        q: # Flat unrestricted
           distribution: truncated_normal
           mu: 0.5
           sigma: 1
           lower: 0.0
           upper: 1.0
-        Gact1_0:
+        Gact1_0: # Flat
           distribution: truncated_normal
           mu: 0.5
           sigma: 1
-          lower: 0.2
-          upper: 0.7
-        Gact2_BF_0:
+          lower: 0.2 # Low enough to not impede
+          upper: 0.7 # High enough to carry everything
+        Gact2_BF_0: # Flat reasonable bounds
+          distribution: truncated_normal
+          mu: 0.7
+          sigma: 1
+          lower: 0.6 
+          upper: 1.0 
+        Gact2_ER_0: # Flat reasonable bounds
           distribution: truncated_normal
           mu: 0.7
           sigma: 1
           lower: 0.6
           upper: 1.0
-        Gact2_ER_0:
-          distribution: truncated_normal
-          mu: 0.7
-          sigma: 1
-          lower: 0.6
-          upper: 1.0
-        Gact2_LH_0:
+        Gact2_LH_0: # Flat reasonable bounds
           distribution: truncated_normal
           mu: 0.7
           sigma: 1
           lower: 0.6
           upper: 1.0
 
-  Ag25Pd75: *alloy_prior_profile
-  Ag50Pd50: *alloy_prior_profile
-  Ag75Pd25: *alloy_prior_profile
-  Ag90Pd10: *alloy_prior_profile
-
-  Pd100:
-    CO_ER_LH:
-      provenance: legacy_tuned_for_multimodality
-      parameters:
-        deltaG1_0:
-          distribution: truncated_normal
-          mu: 0.0
-          sigma: 2
-          lower: -0.5
-          upper: 0.5
-        deltaG4_0:
-          distribution: truncated_normal
-          mu: 0.0
-          sigma: 2
-          lower: -0.5
-          upper: 0.5
-        beta_2_ER:
-          distribution: truncated_normal
-          mu: 0.5
-          sigma: 1
-          lower: 0.0
-          upper: 1.0
-        Gact1_0:
-          distribution: truncated_normal
-          mu: 0.5
-          sigma: 1
-          lower: 0.2
-          upper: 0.7
-        Gact2_ER_0:
-          distribution: truncated_normal
-          mu: 0.7
-          sigma: 1
-          lower: 0.6
-          upper: 1.0
-        Gact2_LH_0:
-          distribution: truncated_normal
-          mu: 0.7
-          sigma: 1
-          lower: 0.6
-          upper: 1.0
+  Ag25Pd75: *shared_prior_profile
+  Ag50Pd50: *shared_prior_profile
+  Ag75Pd25: *shared_prior_profile
+  Ag90Pd10: *shared_prior_profile
+  Pd100: *shared_prior_profile
