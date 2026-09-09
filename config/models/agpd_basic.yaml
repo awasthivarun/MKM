@@ -270,20 +270,20 @@ prior_profiles:
           distribution: truncated_normal
           mu: 0.0
           sigma: 2
-          lower: -0.5
-          upper: 0.5
+          lower: -2
+          upper: 1
         deltaG4_0: # Flat and wide range for OH ads energy on Pd
           distribution: truncated_normal
           mu: 0.0
           sigma: 2
-          lower: -0.5
-          upper: 0.5
+          lower: -1
+          upper: 1
         deltaG5_0: # Flat and wide range for OH ads energy on Ag
           distribution: truncated_normal
           mu: 0.0
           sigma: 2
-          lower: -0.5
-          upper: 0.5
+          lower: -1
+          upper: 1
         beta_2_BF: # Flat unrestricted
           distribution: truncated_normal
           mu: 0.5
