@@ -441,7 +441,7 @@ for `j` in `uA/cm2_Pd`.
 The processed analysis tables contain both positive `rate_s_inv` and
 
 $$
-\texttt{ln_rate}=\ln(\texttt{rate_s_inv}).
+\texttt{ln\_rate}=\ln(\texttt{rate\_s\_inv}).
 $$
 
 `build_model_data()` validates this equality numerically.

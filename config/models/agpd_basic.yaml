@@ -268,40 +268,40 @@ prior_profiles:
       parameters:
         deltaG1_0: # Flat and wide range for CO ads energy 
           distribution: truncated_normal
-          mu: 0.0
+          mu: 0
           sigma: 2
           lower: -2
-          upper: 1
+          upper: 2
         deltaG4_0: # Flat and wide range for OH ads energy on Pd
           distribution: truncated_normal
-          mu: 0.0
+          mu: 0
           sigma: 2
-          lower: -1
-          upper: 1
+          lower: -2
+          upper: 2
         deltaG5_0: # Flat and wide range for OH ads energy on Ag
           distribution: truncated_normal
-          mu: 0.0
+          mu: 0
           sigma: 2
-          lower: -1
-          upper: 1
+          lower: -2
+          upper: 2
         beta_2_BF: # Flat unrestricted
           distribution: truncated_normal
           mu: 0.5
-          sigma: 1
-          lower: 0.0
-          upper: 1.0
+          sigma: 2
+          lower: 0
+          upper: 1
         beta_2_ER: # Flat unrestricted
           distribution: truncated_normal
           mu: 0.5
-          sigma: 1
-          lower: 0.0
-          upper: 1.0
+          sigma: 2
+          lower: 0
+          upper: 1
         q: # Flat unrestricted
           distribution: truncated_normal
           mu: 0.5
-          sigma: 1
-          lower: 0.0
-          upper: 1.0
+          sigma: 2
+          lower: 0
+          upper: 1
         Gact1_0: # Flat
           distribution: truncated_normal
           mu: 0.5

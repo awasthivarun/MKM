@@ -65,16 +65,56 @@ def compute_normal_loo_pit(
             f"but observation table contains {len(observed)}."
         )
 
-    z = (observed[None, None, :] - draws.model_rate) / draws.sigma_rate
+    model_rate = np.asarray(draws.model_rate, dtype=float)
+    sigma_rate = np.asarray(draws.sigma_rate, dtype=float)
+    if not np.all(np.isfinite(observed)):
+        raise ValueError("Observed rates contain non-finite values.")
+    if not np.all(np.isfinite(model_rate)):
+        raise ValueError("Posterior model-rate draws contain non-finite values.")
+    if not np.all(np.isfinite(sigma_rate)) or np.any(sigma_rate <= 0.0):
+        raise ValueError("Posterior rate-scale draws must be finite and strictly positive.")
+
+    z = (observed[None, None, :] - model_rate) / sigma_rate
     normal_cdf = ndtr(z)
+    if not np.all(np.isfinite(normal_cdf)):
+        raise ValueError("Normal CDF values for LOO-PIT contain non-finite values.")
 
     log_weights = _extract_loo_log_weights(
         loo_result=loo_result,
         var_name=var_name,
         expected_shape=normal_cdf.shape,
     )
-    log_weights = log_weights - logsumexp(log_weights, axis=(0, 1), keepdims=True)
-    loo_pit = np.sum(np.exp(log_weights) * normal_cdf, axis=(0, 1))
+    if np.any(np.isnan(log_weights)) or np.any(np.isposinf(log_weights)):
+        raise ValueError("PSIS log weights contain NaN or +inf values.")
+    has_finite_weight = np.any(np.isfinite(log_weights), axis=(0, 1))
+    if not np.all(has_finite_weight):
+        bad = np.flatnonzero(~has_finite_weight)
+        raise ValueError(
+            "PSIS log weights contain no finite draw for observation index/indices "
+            f"{bad[:10].tolist()}{'...' if len(bad) > 10 else ''}."
+        )
+
+    log_norm = logsumexp(log_weights, axis=(0, 1), keepdims=True)
+    if not np.all(np.isfinite(log_norm)):
+        raise ValueError("PSIS log-weight normalization produced non-finite values.")
+
+    normalized_log_weights = log_weights - log_norm
+    weights = np.exp(normalized_log_weights)
+    if not np.all(np.isfinite(weights)):
+        raise ValueError("Normalized PSIS weights contain non-finite values.")
+
+    weight_sums = np.sum(weights, axis=(0, 1))
+    if not np.all(np.isfinite(weight_sums)) or np.any(weight_sums <= 0.0):
+        raise ValueError("Normalized PSIS weights have invalid observation-wise sums.")
+    if not np.allclose(weight_sums, 1.0, rtol=1e-10, atol=1e-12):
+        raise ValueError("Normalized PSIS weights do not sum to one within numerical tolerance.")
+
+    loo_pit = np.sum(weights * normal_cdf, axis=(0, 1))
+    if not np.all(np.isfinite(loo_pit)):
+        raise ValueError("LOO-PIT calculation produced non-finite values.")
+    if np.any((loo_pit < -1e-12) | (loo_pit > 1.0 + 1e-12)):
+        raise ValueError("LOO-PIT calculation produced values outside [0, 1].")
+    loo_pit = np.clip(loo_pit, 0.0, 1.0)
 
     pointwise = observations.copy()
     pointwise["loo_pit"] = loo_pit
