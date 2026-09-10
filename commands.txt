@@ -1,0 +1,23 @@
+python scripts/fit_agpd_posterior.py CO_BF_ER_LH --all-materials --parameterization linear_xAg --error-structure shared --overwrite
+if (-not $?) { exit $LASTEXITCODE }
+
+python scripts/postprocess_agpd_posterior.py CO_BF_ER_LH --all-materials --parameterization linear_xAg --error-structure shared --plot-level full
+if (-not $?) { exit $LASTEXITCODE }
+
+python scripts/postprocess_agpd_drc.py CO_BF_ER_LH --all-materials --parameterization linear_xAg --error-structure shared --check-half-step
+if (-not $?) { exit $LASTEXITCODE }
+
+python scripts/plot_agpd_composition_parameters.py CO_BF_ER_LH --parameterization linear_xAg --error-structure shared
+if (-not $?) { exit $LASTEXITCODE }
+
+python scripts/fit_agpd_posterior.py CO_BF_ER_LH_Ag10_no_BF --all-materials --parameterization linear_xAg --error-structure shared --overwrite
+if (-not $?) { exit $LASTEXITCODE }
+
+python scripts/postprocess_agpd_posterior.py CO_BF_ER_LH_Ag10_no_BF --all-materials --parameterization linear_xAg --error-structure shared --plot-level full
+if (-not $?) { exit $LASTEXITCODE }
+
+python scripts/postprocess_agpd_drc.py CO_BF_ER_LH_Ag10_no_BF --all-materials --parameterization linear_xAg --error-structure shared --check-half-step
+if (-not $?) { exit $LASTEXITCODE }
+
+python scripts/plot_agpd_composition_parameters.py CO_BF_ER_LH_Ag10_no_BF --parameterization linear_xAg --error-structure shared
+if (-not $?) { exit $LASTEXITCODE }

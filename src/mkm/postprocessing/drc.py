@@ -12,6 +12,7 @@ from mkm.constants import K_B_EV_K
 from mkm.mechanisms.agpd_basic import build_agpd_point_state
 from mkm.models.agpd_basic import (
     _UNIT_INTERVAL_PARAMETERS,
+    get_agpd_fixed_parameters,
     get_agpd_model_definition,
     get_agpd_parameterization,
 )
@@ -106,6 +107,10 @@ _TRANSITION_STATE_CONTROLS = {
     ),
 }
 
+_TRANSITION_STATE_CONTROLS["CO_BF_ER_LH_Ag10_no_BF"] = _TRANSITION_STATE_CONTROLS["CO_BF_ER_LH"]
+_TRANSITION_STATE_CONTROLS["CO_BF_ER_LH_capped_Ag10_no_BF"] = _TRANSITION_STATE_CONTROLS["CO_BF_ER_LH"]
+_TRANSITION_STATE_CONTROLS["CO_BF_ER_LH_fitted_caps_Ag10_no_BF"] = _TRANSITION_STATE_CONTROLS["CO_BF_ER_LH"]
+_TRANSITION_STATE_CONTROLS["CO_BF_ER_LH_Ag10_no_BF_q1"] = _TRANSITION_STATE_CONTROLS["CO_BF_ER_LH"]
 
 
 def transition_state_controls(model_name):
@@ -167,13 +172,21 @@ def _compile_pointwise_log_rate_evaluator(model_name, point_inputs, config):
     return parameter_names, function, state
 
 
-def _posterior_scalar_parameter_draws(posterior, parameter_names):
+def _posterior_scalar_parameter_draws(posterior, parameter_names, fixed_parameters=None):
     posterior = _posterior_dataset(posterior)
     n_chains = int(posterior.sizes["chain"])
     n_draws = int(posterior.sizes["draw"])
+    fixed_parameters = {} if fixed_parameters is None else dict(fixed_parameters)
     result = {}
 
     for name in parameter_names:
+        if name in fixed_parameters:
+            value = float(fixed_parameters[name])
+            if not np.isfinite(value):
+                raise ValueError(f"Fixed mechanism parameter '{name}' must be finite.")
+            result[name] = np.full((n_chains, n_draws), value, dtype=float)
+            continue
+
         if name not in posterior:
             raise ValueError(f"Posterior is missing mechanism parameter '{name}'.")
 
@@ -306,6 +319,7 @@ def compute_transition_state_drc(
     posterior_draws = _posterior_scalar_parameter_draws(
         posterior,
         parameter_names,
+        fixed_parameters=get_agpd_fixed_parameters(model_name),
     )
 
     missing_controls = [
@@ -466,6 +480,7 @@ def compute_composition_transition_state_drc(
     posterior_draws = _posterior_scalar_parameter_draws(
         posterior,
         (*parameter_names, *slope_names),
+        fixed_parameters=get_agpd_fixed_parameters(model_name),
     )
 
     missing_controls = [

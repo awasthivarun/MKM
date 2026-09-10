@@ -2,6 +2,7 @@ from dataclasses import dataclass, fields
 from typing import Callable
 
 import numpy as np
+import pymc as pm
 import pytensor.tensor as pt
 
 from mkm.inference.priors import build_named_priors
@@ -32,6 +33,7 @@ from mkm.mechanisms.pd_basic import PdCOERLHParameters, evaluate_pd_co_er_lh
 class AgPdModelDefinition:
     parameter_class: type
     evaluator: Callable
+    fixed_parameters: tuple[tuple[str, float], ...] = ()
 
 
 _AGPD_MODEL_REGISTRY = {
@@ -49,6 +51,12 @@ _AGPD_MODEL_REGISTRY = {
         parameter_class=AgPdCOBFERRLHParameters,
         evaluator=evaluate_agpd_co_bf_er_lh_ag10_no_bf,
     ),
+    "CO_BF_ER_LH_Ag10_no_BF_q1": AgPdModelDefinition(
+        parameter_class=AgPdCOBFERRLHParameters,
+        evaluator=evaluate_agpd_co_bf_er_lh_ag10_no_bf,
+        # beta_2_BF is fixed only as an identification convention: it is inactive when q = 1.
+        fixed_parameters=(("q", 1.0), ("beta_2_BF", 0.0)),
+    ),
     "CO_BF_ER_LH_capped": AgPdModelDefinition(
         parameter_class=AgPdCOBFERRLHParameters,
         evaluator=evaluate_agpd_co_bf_er_lh_capped,
@@ -63,9 +71,9 @@ _AGPD_MODEL_REGISTRY = {
     ),
 }
 
-
 _MODEL_CONFIG_ALIASES = {
     "CO_BF_ER_LH_Ag10_no_BF": "CO_BF_ER_LH",
+    "CO_BF_ER_LH_Ag10_no_BF_q1": "CO_BF_ER_LH",
     "CO_BF_ER_LH_capped": "CO_BF_ER_LH",
     "CO_BF_ER_LH_capped_Ag10_no_BF": "CO_BF_ER_LH",
 }
@@ -79,16 +87,17 @@ _INDIVIDUAL_CO_MODELS = {
     "CO_BF_ER",
     "CO_BF_ER_LH",
 }
-
 _FITTED_CAPS_MODEL = "CO_BF_ER_LH_fitted_caps_Ag10_no_BF"
 _ALL_MATERIAL_ONLY_MODELS = {
     "CO_BF_ER_LH_Ag10_no_BF",
+    "CO_BF_ER_LH_Ag10_no_BF_q1",
     "CO_BF_ER_LH_capped_Ag10_no_BF",
     _FITTED_CAPS_MODEL,
 }
 _FULL_CO_MODELS = {
     "CO_BF_ER_LH",
     "CO_BF_ER_LH_Ag10_no_BF",
+    "CO_BF_ER_LH_Ag10_no_BF_q1",
     "CO_BF_ER_LH_capped",
     "CO_BF_ER_LH_capped_Ag10_no_BF",
     _FITTED_CAPS_MODEL,
@@ -109,6 +118,7 @@ def available_agpd_all_material_models():
     return (
         "CO_BF_ER_LH",
         "CO_BF_ER_LH_Ag10_no_BF",
+        "CO_BF_ER_LH_Ag10_no_BF_q1",
         "CO_BF_ER_LH_capped",
         "CO_BF_ER_LH_capped_Ag10_no_BF",
         _FITTED_CAPS_MODEL,
@@ -122,10 +132,19 @@ def get_agpd_model_definition(model_name):
         raise ValueError(f"Unknown AgPd model '{model_name}'. Available models: {available_agpd_models()}.") from error
 
 
+def get_agpd_fixed_parameters(model_name):
+    definition = get_agpd_model_definition(model_name)
+    fixed_parameters = dict(definition.fixed_parameters)
+    mechanism_parameters = {field.name for field in fields(definition.parameter_class)}
+    unknown = set(fixed_parameters) - mechanism_parameters
+    if unknown:
+        raise ValueError(f"Model '{model_name}' fixes unknown mechanism parameters: {sorted(unknown)}.")
+    return fixed_parameters
+
+
 def get_agpd_prior_profile(config, material, model_name):
     if model_name == _FITTED_CAPS_MODEL:
         return config["fitted_cap_calibration"]
-
     if model_name in _INDIVIDUAL_CO_MODELS:
         config_model_name = "CO_BF_ER_LH"
     else:
@@ -138,7 +157,6 @@ def get_agpd_prior_profile(config, material, model_name):
 
     if model_name not in _INDIVIDUAL_CO_MODELS:
         return profile
-
     definition = get_agpd_model_definition(model_name)
     parameter_names = tuple(field.name for field in fields(definition.parameter_class))
     missing = [name for name in parameter_names if name not in profile["parameters"]]
@@ -147,7 +165,6 @@ def get_agpd_prior_profile(config, material, model_name):
             f"Prior source '{material}/{config_model_name}' is missing parameters required by "
             f"'{model_name}': {missing}."
         )
-
     projected = dict(profile)
     projected["parameters"] = {name: profile["parameters"][name] for name in parameter_names}
     return projected
@@ -165,10 +182,14 @@ def _validate_parameter_specs(definition, parameter_specs, profile_label):
         )
 
 
+def _free_parameter_specs(model_name, parameter_specs):
+    fixed_parameters = get_agpd_fixed_parameters(model_name)
+    return {name: specification for name, specification in parameter_specs.items() if name not in fixed_parameters}
+
+
 def available_agpd_parameterizations(config, model_name=None):
     if model_name == _FITTED_CAPS_MODEL:
         return ("linear_xAg",)
-
     parameterizations = config.get("composition_parameterizations", {})
     config_model_name = None if model_name is None else _config_model_name(model_name)
     names = []
@@ -187,7 +208,6 @@ def get_agpd_parameterization(config, model_name, parameterization="shared"):
             )
         calibration = config["fitted_cap_calibration"]
         return float(calibration["x_reference"]), dict(calibration["slopes"])
-
     try:
         specification = config["composition_parameterizations"][parameterization]
     except KeyError as error:
@@ -195,7 +215,6 @@ def get_agpd_parameterization(config, model_name, parameterization="shared"):
             f"Unknown AgPd parameterization '{parameterization}'. "
             f"Available parameterizations: {available_agpd_parameterizations(config)}."
         ) from error
-
     config_model_name = _config_model_name(model_name)
     try:
         model_specification = specification["models"][config_model_name]
@@ -204,11 +223,9 @@ def get_agpd_parameterization(config, model_name, parameterization="shared"):
             f"AgPd parameterization '{parameterization}' is not configured for model '{model_name}'. "
             f"Available parameterizations for this model: {available_agpd_parameterizations(config, model_name)}."
         ) from error
-
     x_reference = float(specification.get("x_reference", 0.5))
     if not 0.0 <= x_reference <= 1.0:
         raise ValueError(f"Parameterization '{parameterization}' x_reference must lie in [0, 1].")
-
     slope_specs = dict(model_specification.get("slopes", {}))
     definition = get_agpd_model_definition(model_name)
     mechanism_parameters = {field.name for field in fields(definition.parameter_class)}
@@ -217,6 +234,8 @@ def get_agpd_parameterization(config, model_name, parameterization="shared"):
         raise ValueError(
             f"Parameterization '{parameterization}' contains unknown mechanism parameters: {sorted(unknown)}."
         )
+    fixed_parameters = get_agpd_fixed_parameters(model_name)
+    slope_specs = {name: specification for name, specification in slope_specs.items() if name not in fixed_parameters}
     return x_reference, slope_specs
 
 
@@ -227,12 +246,22 @@ def get_agpd_parameterization_metadata(config, model_name, parameterization):
         model_name=model_name,
         parameterization=parameterization,
     )
-    return {"name": parameterization, "x_reference": x_reference, "slopes": slope_specs}
+    metadata = {
+        "name": parameterization,
+        "x_reference": x_reference,
+        "slopes": slope_specs,
+    }
+    fixed_parameters = get_agpd_fixed_parameters(model_name)
+    if fixed_parameters:
+        metadata["fixed_parameters"] = fixed_parameters
+    return metadata
 
 
 def get_agpd_all_material_parameter_specs(config, prior_material, model_name, parameterization="shared"):
     profile = get_agpd_prior_profile(config, prior_material, model_name)
-    parameter_specs = dict(profile["parameters"])
+    definition = get_agpd_model_definition(model_name)
+    _validate_parameter_specs(definition, profile["parameters"], f"{prior_material}/{model_name}")
+    parameter_specs = _free_parameter_specs(model_name, profile["parameters"])
     _, slope_specs = get_agpd_parameterization(
         config=config,
         model_name=model_name,
@@ -240,7 +269,6 @@ def get_agpd_all_material_parameter_specs(config, prior_material, model_name, pa
     )
     for parameter_name, specification in slope_specs.items():
         parameter_specs[f"{parameter_name}_xAg_slope"] = specification
-
     if model_name == _FITTED_CAPS_MODEL:
         cap_spec = config["fitted_cap_calibration"]["theta_CO_max_prior"]
         for material in config["surface_composition"]:
@@ -252,7 +280,6 @@ def get_agpd_all_material_parameter_specs(config, prior_material, model_name, pa
 def build_agpd_mechanism(model_name, material, config):
     if model_name in _ALL_MATERIAL_ONLY_MODELS:
         raise ValueError(f"Model '{model_name}' is defined only for all-material fitting.")
-
     definition = get_agpd_model_definition(model_name)
     if material not in config["surface_composition"]:
         raise ValueError(f"Material '{material}' has no surface-composition configuration.")
@@ -267,7 +294,6 @@ def build_agpd_mechanism(model_name, material, config):
                 f"AgPd individual-material model '{model_name}' for '{material}' "
                 "must be fit to exactly that one material."
             )
-
         prior_values = build_named_priors(parameter_specs)
         parameters = definition.parameter_class(**prior_values)
         state = build_agpd_point_state(inputs=point_inputs, config=config)
@@ -300,7 +326,6 @@ def _evaluate_all_material_state(
             temperature_K=config["temperature_K"],
             theta_CO_max=theta_CO_max,
         )
-
     parameters = definition.parameter_class(**effective_values)
     if model_name == _FITTED_CAPS_MODEL:
         if state.materials is None or state.material_index is None:
@@ -317,7 +342,6 @@ def _evaluate_all_material_state(
             theta_CO_max=theta_CO_max_override,
             bf_activity=bf_activity,
         )
-
     return definition.evaluator(state=state, parameters=parameters, temperature_K=config["temperature_K"])
 
 
@@ -335,7 +359,6 @@ def build_agpd_all_material_mechanism(
             f"Model '{model_name}' is not enabled for all-material fitting. "
             f"Available models: {available_agpd_all_material_models()}."
         )
-
     materials = tuple(materials)
     if not prediction_only and len(materials) < 2:
         raise ValueError("An all-material model requires at least two materials for fitting.")
@@ -343,16 +366,15 @@ def build_agpd_all_material_mechanism(
         raise ValueError("An all-material prediction requires at least one material.")
     if len(set(materials)) != len(materials):
         raise ValueError("All-material model materials must be unique.")
-
     missing = [material for material in materials if material not in config["surface_composition"]]
     if missing:
         raise ValueError(f"Missing surface-composition configuration for materials: {missing}.")
 
     definition = get_agpd_model_definition(model_name)
     profile = get_agpd_prior_profile(config, prior_material, model_name)
-    parameter_specs = profile["parameters"]
-    _validate_parameter_specs(definition, parameter_specs, f"{prior_material}/{model_name}")
-
+    _validate_parameter_specs(definition, profile["parameters"], f"{prior_material}/{model_name}")
+    parameter_specs = _free_parameter_specs(model_name, profile["parameters"])
+    fixed_parameters = get_agpd_fixed_parameters(model_name)
     x_reference, slope_specs = get_agpd_parameterization(
         config=config,
         model_name=model_name,
@@ -374,13 +396,15 @@ def build_agpd_all_material_mechanism(
                 f"AgPd all-material model expected materials {materials}, "
                 f"but model inputs contain {tuple(point_inputs.materials)}."
             )
-
         prior_values = build_named_priors(parameter_specs)
         slope_values = build_named_priors(slope_prior_specs)
         cap_values = build_named_priors(cap_prior_specs)
+        fixed_values = {
+            name: pm.Deterministic(name, pt.as_tensor_variable(float(value)))
+            for name, value in fixed_parameters.items()
+        }
         state = build_agpd_point_state(inputs=point_inputs, config=config)
-
-        effective_values = dict(prior_values)
+        effective_values = {**fixed_values, **prior_values}
         if slope_specs:
             x_shift = pt.as_tensor_variable(state.Ag_fraction) - x_reference
             for parameter_name in slope_specs:
@@ -392,7 +416,6 @@ def build_agpd_all_material_mechanism(
                     max_abs_slope = 2.0 * pt.minimum(prior_values[parameter_name], 1.0 - prior_values[parameter_name])
                     slope = slope * max_abs_slope
                 effective_values[parameter_name] = prior_values[parameter_name] + slope * x_shift
-
         theta_CO_max_override = None
         if model_name == _FITTED_CAPS_MODEL:
             # Avoid indexing a stack of scalar RVs with the full pointwise material-index vector. PyTensor can
@@ -403,7 +426,6 @@ def build_agpd_all_material_mechanism(
                 theta_CO_max_override = (
                     theta_CO_max_override + cap_values[f"theta_CO_max_{material}"] * material_mask
                 )
-
         evaluated = _evaluate_all_material_state(
             model_name=model_name,
             definition=definition,

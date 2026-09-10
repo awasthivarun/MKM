@@ -103,7 +103,7 @@ def parse_args():
         default="material",
     )
     parser.add_argument("--prior-material", default="Ag10Pd90")
-    parser.add_argument("--random-seed", type=int, default=20260826)
+    parser.add_argument("--random-seed", type=int, default=1)
     parser.add_argument("--skip-loo", action="store_true")
     parser.add_argument("--skip-observables", action="store_true")
     parser.add_argument(

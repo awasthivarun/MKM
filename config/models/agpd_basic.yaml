@@ -190,61 +190,61 @@ composition_parameterizations:
         slopes:
           deltaG1_0:
             distribution: truncated_normal 
-            mu: 0.0
-            sigma: 1
+            mu: 0
+            sigma: 0.1 # Small slopes encouraged
             lower: 0 # Ensemble effects, reducing binding strength of CO with increasing Ag content
             upper: 1 
           deltaG4_0:
             distribution: truncated_normal
-            mu: 0.0
-            sigma: 1
+            mu: 0
+            sigma: 0.1 # Small slopes encouraged
             lower: -1
             upper: 0 # DFT supports stronger OH binding on Pd with increasing Ag content 
           deltaG5_0:
             distribution: truncated_normal
-            mu: 0.0
-            sigma: 1
+            mu: 0
+            sigma: 0.2 # Small slopes encouraged, but larger than deltaG4 slopes (DFT)
             lower: -1 
             upper: 0 # DFT supports stronger OH binding on Ag with increasing Ag content 
-          Gact1_0: # Large amount of change allowed in CO ads activation energy 
+          Gact1_0: # Centered around zero
             distribution: truncated_normal
-            mu: 0.0
-            sigma: 1
-            lower: -0.40
-            upper: 0.40
-          Gact2_BF_0: # Large amount of change allowed in BF activation energy 
+            mu: 0
+            sigma: 0.1
+            lower: -0.4
+            upper: 0.4
+          Gact2_BF_0: # Centered around zero
             distribution: truncated_normal
-            mu: 0.0
-            sigma: 1
-            lower: -0.40
-            upper: 0.40
-          Gact2_ER_0: 
+            mu: 0
+            sigma: 0.1 
+            lower: -0.4
+            upper: 0.4
+          Gact2_ER_0: # Centered around zero
             distribution: truncated_normal
-            mu: 0.0
-            sigma: 1
-            lower: -0.40
-            upper: 0.0 # Activation energy should decrease if CO binds weaker
-          Gact2_LH_0: # Large amount of change allowed in LH activation energy
+            mu: 0
+            sigma: 0.1 
+            lower: -0.4
+            upper: 0.4
+          Gact2_LH_0: # Centered around zero
             distribution: truncated_normal
-            mu: 0.0
-            sigma: 1
-            lower: -0.40
+            mu: 0
+            sigma: 0.1 
+            lower: -0.4
             upper: 1 # Increased to prevent hitting the wall 
           beta_2_BF: # Do not change - this is percentage change
             distribution: truncated_normal
-            mu: 0.0
+            mu: 0
             sigma: 1
             lower: -1
             upper: 1
           beta_2_ER: # Do not change - this is percentage change
             distribution: truncated_normal
-            mu: 0.0
+            mu: 0
             sigma: 1
             lower: -1
             upper: 1
           q: # Do not change - this is percentage change
             distribution: truncated_normal
-            mu: 0.0
+            mu: 0
             sigma: 1
             lower: -1
             upper: 1
@@ -256,76 +256,76 @@ likelihood:
     - shared
     - material
   sigma_abs_prior_median_s_inv: 0.0002
-  sigma_abs_prior_log_sd: 1.0
-  sigma_rel_prior_median: 0.18
-  sigma_rel_prior_log_sd: 0.75
+  sigma_abs_prior_log_sd: 0.5
+  sigma_rel_prior_median: 0.2
+  sigma_rel_prior_log_sd: 0.5
 
 
 prior_profiles:
   Ag10Pd90: &shared_prior_profile
     CO_BF_ER_LH:
-      provenance: actual_prior_information
+      provenance: weak_regularization
       parameters:
-        deltaG1_0: # Flat and wide range for CO ads energy 
+        deltaG1_0: # Wide range for CO ads energy 
+          distribution: truncated_normal
+          mu: -0.2 # CO strong binding
+          sigma: 0.2
+          lower: -0.5
+          upper: 0.05 # OOM analysis - dead zone
+        deltaG4_0: # Wide range for OH ads energy on Pd
           distribution: truncated_normal
           mu: 0
-          sigma: 2
-          lower: -2
-          upper: 2
-        deltaG4_0: # Flat and wide range for OH ads energy on Pd
+          sigma: 0.2
+          lower: -0.25 # OOM analysis - dead zone
+          upper: 0.5
+        deltaG5_0: # Wide range for OH ads energy on Ag
           distribution: truncated_normal
           mu: 0
-          sigma: 2
-          lower: -2
-          upper: 2
-        deltaG5_0: # Flat and wide range for OH ads energy on Ag
-          distribution: truncated_normal
-          mu: 0
-          sigma: 2
-          lower: -2
-          upper: 2
-        beta_2_BF: # Flat unrestricted
+          sigma: 0.2
+          lower: -0.5
+          upper: 0.5
+        Gact1_0: # Flat reasonable bounds
           distribution: truncated_normal
           mu: 0.5
-          sigma: 2
-          lower: 0
-          upper: 1
-        beta_2_ER: # Flat unrestricted
-          distribution: truncated_normal
-          mu: 0.5
-          sigma: 2
-          lower: 0
-          upper: 1
-        q: # Flat unrestricted
-          distribution: truncated_normal
-          mu: 0.5
-          sigma: 2
-          lower: 0
-          upper: 1
-        Gact1_0: # Flat
-          distribution: truncated_normal
-          mu: 0.5
-          sigma: 1
-          lower: 0.2 # Low enough to not impede
-          upper: 0.7 # High enough to carry everything
+          sigma: 0.1
+          lower: 0.2
+          upper: 0.7
         Gact2_BF_0: # Flat reasonable bounds
           distribution: truncated_normal
           mu: 0.7
-          sigma: 1
+          sigma: 0.1
           lower: 0.6 
           upper: 1.0 
         Gact2_ER_0: # Flat reasonable bounds
           distribution: truncated_normal
           mu: 0.7
-          sigma: 1
+          sigma: 0.1
           lower: 0.6
           upper: 1.0
         Gact2_LH_0: # Flat reasonable bounds
           distribution: truncated_normal
           mu: 0.7
-          sigma: 1
+          sigma: 0.1
           lower: 0.6
           upper: 1.0
+        beta_2_BF: # Flat unrestricted
+          distribution: truncated_normal
+          mu: 0.5
+          sigma: 1
+          lower: 0
+          upper: 1
+        beta_2_ER: # Flat unrestricted
+          distribution: truncated_normal
+          mu: 0.5
+          sigma: 1
+          lower: 0
+          upper: 1
+        q: # Flat unrestricted
+          distribution: truncated_normal
+          mu: 0.5
+          sigma: 1
+          lower: 0
+          upper: 1
 
   Ag25Pd75: *shared_prior_profile
   Ag50Pd50: *shared_prior_profile

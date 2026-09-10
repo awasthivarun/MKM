@@ -92,8 +92,16 @@ def parse_args():
         action="store_true",
         help="Overwrite existing posterior directories on the first attempt for each fit.",
     )
+    parser.add_argument(
+        "--compare-only",
+        action="store_true",
+        help="Rebuild per-material model comparisons from the existing grid diagnostics without rerunning fits.",
+    )
     parser.add_argument("--stop-on-error", action="store_true")
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.compare_only and args.overwrite:
+        parser.error("--overwrite cannot be used with --compare-only.")
+    return args
 
 
 def _utc_now():
@@ -159,12 +167,16 @@ def _drc_command(root, model, material):
     ]
 
 
+def _comparison_name(material):
+    return f"{material}_all_models"
+
+
 def _comparison_command(root, material, models):
     command = [
         sys.executable,
         str(root / "scripts" / "compare_agpd_models.py"),
         "--comparison-name",
-        f"{material}_all_models",
+        _comparison_name(material),
         "--material",
         material,
     ]
@@ -190,6 +202,27 @@ def _as_int(value):
 
 def _format_float(value):
     return value if value is not None and math.isfinite(_as_float(value)) else ""
+
+
+def _as_bool(value):
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes"}
+
+
+def _read_diagnostics(path):
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Grid diagnostics do not exist: {path}. Run the full individual grid before using --compare-only."
+        )
+
+    with open(path, "r", newline="") as file:
+        rows = list(csv.DictReader(file))
+
+    return [
+        {field: row.get(field, "") for field in DIAGNOSTIC_FIELDS}
+        for row in rows
+    ]
 
 
 def _read_metadata(run_dir):
@@ -515,7 +548,7 @@ def _run_material_comparison(root, diagnostics_path, records, material, final_re
         for model, record in final_records.items()
         if record.get("comparison_included") is True
     ]
-    comparison_name = f"{material}_all_models"
+    comparison_name = _comparison_name(material)
     comparison_models = ";".join(eligible_models)
 
     if len(eligible_models) < 2:
@@ -538,6 +571,72 @@ def _run_material_comparison(root, diagnostics_path, records, material, final_re
     return returncode
 
 
+def _terminal_records_by_model(records, material):
+    final_records = {}
+    valid_models = set(_material_models(material))
+    for record in records:
+        if record.get("material") != material:
+            continue
+        if record.get("model") not in valid_models:
+            continue
+        if not _as_bool(record.get("terminal_attempt")):
+            continue
+        final_records[record["model"]] = record
+    return final_records
+
+
+def _run_compare_only(root, args, diagnostics_path):
+    records = _read_diagnostics(diagnostics_path)
+    materials = (*ALLOY_MATERIALS, "Pd100")
+    comparison_failures = []
+    n_materials = 0
+
+    print(f"Rebuilding model comparisons from: {diagnostics_path}", flush=True)
+
+    for material in materials:
+        final_records = _terminal_records_by_model(records, material)
+        if not final_records:
+            print(f"Skipping {material}: no terminal fit records in diagnostics.", flush=True)
+            continue
+
+        n_materials += 1
+        eligible_models = [
+            model
+            for model, record in final_records.items()
+            if _as_bool(record.get("comparison_included"))
+        ]
+        print(
+            f"\n{material}: rebuilding {_comparison_name(material)} with "
+            f"{len(eligible_models)}/{len(final_records)} eligible model(s).",
+            flush=True,
+        )
+
+        returncode = _run_material_comparison(
+            root,
+            diagnostics_path,
+            records,
+            material,
+            final_records,
+        )
+        if returncode not in ("", None, 0):
+            comparison_failures.append((material, returncode))
+            if args.stop_on_error:
+                break
+
+    print("\n" + "=" * 80)
+    print(f"Diagnostics updated at: {diagnostics_path}")
+    if n_materials == 0:
+        print("No material comparisons were rebuilt.")
+        raise SystemExit(1)
+    if comparison_failures:
+        print(f"Comparison failures recorded: {len(comparison_failures)}")
+        for material, returncode in comparison_failures:
+            print(f"  {material}: exit {returncode}")
+        raise SystemExit(1)
+
+    print(f"Rebuilt comparisons for {n_materials} material(s).")
+
+
 def _material_models(material):
     return PD_MODELS if material == "Pd100" else ALLOY_MODELS
 
@@ -547,6 +646,11 @@ def main():
     root = Path(__file__).resolve().parents[1]
     individual_root = _individual_root(root)
     diagnostics_path = individual_root / "individual_grid_diagnostics.csv"
+
+    if args.compare_only:
+        _run_compare_only(root, args, diagnostics_path)
+        return
+
     grid_started_utc = _utc_now()
     records = []
     _write_diagnostics(diagnostics_path, records)

@@ -10,6 +10,7 @@ import xarray as xr
 
 from mkm.models.agpd_basic import (
     _UNIT_INTERVAL_PARAMETERS,
+    get_agpd_fixed_parameters,
     get_agpd_model_definition,
     get_agpd_parameterization,
 )
@@ -90,6 +91,8 @@ def build_agpd_composition_parameter_trends(
     posterior = _posterior_dataset(inference_data.posterior)
     definition = get_agpd_model_definition(model_name)
     parameter_names = tuple(field.name for field in fields(definition.parameter_class))
+    fixed_parameters = get_agpd_fixed_parameters(model_name)
+    n_samples = int(posterior.sizes["chain"]) * int(posterior.sizes["draw"])
     x_reference, slope_specs = get_agpd_parameterization(
         config=config,
         model_name=model_name,
@@ -108,7 +111,11 @@ def build_agpd_composition_parameter_trends(
 
     records = []
     for parameter in parameter_names:
-        base = _scalar_draws(posterior, parameter)
+        is_fixed = parameter in fixed_parameters
+        if is_fixed:
+            base = np.full(n_samples, float(fixed_parameters[parameter]), dtype=float)
+        else:
+            base = _scalar_draws(posterior, parameter)
         is_x_dependent = parameter in slope_specs
 
         if is_x_dependent:
@@ -137,6 +144,7 @@ def build_agpd_composition_parameter_trends(
                     "parameter": parameter,
                     "xAg": float(x_ag),
                     "x_dependent": bool(is_x_dependent),
+                    "fixed": bool(is_fixed),
                     "mean": float(summary["mean"][index]),
                     "sd": float(summary["sd"][index]),
                     "median": float(summary["median"][index]),

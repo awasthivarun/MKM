@@ -29,7 +29,7 @@ def parse_args():
     )
     parser.add_argument("--prior-material", default="Ag10Pd90")
     parser.add_argument("--draws", type=int, default=1000)
-    parser.add_argument("--random-seed", type=int, default=20260826)
+    parser.add_argument("--random-seed", type=int, default=1)
     parser.add_argument("--save-draws", action="store_true")
     return parser.parse_args()
 
