@@ -5,6 +5,7 @@ from mkm.observable_maps import (
     build_adjacent_log_order_map,
     build_alpha_map,
     build_log_slope_order_map,
+    build_potential_derivative_map,
     evaluate_linear_observable_map,
 )
 
@@ -131,3 +132,31 @@ def test_adjacent_order_map_has_three_co_ranges():
     pairs = set(zip(order_map.outputs["CO_lower"], order_map.outputs["CO_upper"]))
 
     assert pairs == {(0.001, 0.01), (0.01, 0.10), (0.10, 1.00)}
+
+
+def test_potential_derivative_map_recovers_alpha_curvature():
+    points = _make_model_points()
+    E = points["E_V_SHE"].to_numpy()
+    log_rate = 2.0 + 4.0 * E + 6.0 * E**2
+    temperature_K = 293.15
+
+    alpha_map = build_alpha_map(points, temperature_K)
+    derivative_map = build_potential_derivative_map(alpha_map, ["condition_id"], potential_step_V=0.01)
+    derivative = evaluate_linear_observable_map(log_rate, derivative_map)
+
+    from mkm.constants import F_C_mol, R_J_mol_K
+
+    expected = (R_J_mol_K * temperature_K / F_C_mol) * 12.0
+    np.testing.assert_allclose(derivative, expected, rtol=1e-10, atol=1e-10)
+    assert np.allclose(derivative_map.outputs["potential_step_V"], 0.01)
+
+
+def test_potential_derivative_map_requires_symmetric_support():
+    points = _make_model_points()
+    alpha_map = build_alpha_map(points, 293.15)
+    derivative_map = build_potential_derivative_map(alpha_map, ["condition_id"], potential_step_V=0.02)
+
+    counts = derivative_map.outputs.groupby("condition_id").size()
+    assert set(counts.index) == set(alpha_map.outputs["condition_id"].unique())
+    assert (counts == 1).all()
+    assert np.allclose(derivative_map.outputs["E_V_SHE"], 0.02)

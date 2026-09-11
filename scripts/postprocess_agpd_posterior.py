@@ -37,18 +37,18 @@ from mkm.postprocessing.plotting import (
     plot_alpha_comparison,
     plot_delta_co_comparison,
     plot_delta_oh_comparison,
+    plot_loo_diagnostics,
     plot_loo_pit_conditions,
-    plot_loo_pit_coverage,
-    plot_loo_pit_ecdf,
+    plot_loo_pit_summary,
     plot_observation_grid,
     plot_parameter_posteriors,
-    plot_pareto_k,
     plot_pointwise_loo,
     plot_pointwise_variables,
     plot_sampling_energy,
     plot_sampling_pairs,
     plot_sampling_rank,
     plot_sampling_trace,
+    plot_second_order_difference,
 )
 from mkm.postprocessing.predictions import build_observation_diagnostics
 from mkm.postprocessing.residuals import (
@@ -56,6 +56,7 @@ from mkm.postprocessing.residuals import (
     summarize_shared_replicate_residuals,
 )
 from mkm.postprocessing.sampling import sampling_parameter_names
+from mkm.postprocessing.second_order import build_second_order_outputs
 from mkm.project_paths import ProjectPaths
 from mkm.workflows.agpd_basic import (
     load_agpd_model_config,
@@ -106,6 +107,7 @@ def parse_args():
     parser.add_argument("--random-seed", type=int, default=1)
     parser.add_argument("--skip-loo", action="store_true")
     parser.add_argument("--skip-observables", action="store_true")
+    parser.add_argument("--second-order-step-v", type=float, default=0.05)
     parser.add_argument(
         "--plot-level",
         choices=("none", "core", "full"),
@@ -349,6 +351,7 @@ def _make_plots(
     loo=None,
     calibration=None,
     observable_points=None,
+    second_order_points=None,
 ):
     if level == "none":
         status_rows.append(_status_row("plots", "skipped_user", "plot level is none"))
@@ -470,6 +473,7 @@ def _make_plots(
                 colors=pathway_colors,
                 labels=POINTWISE_LABELS,
                 context_label=material_context,
+                observed_rates=observations,
             )
 
             if loo is not None:
@@ -491,19 +495,11 @@ def _make_plots(
                 if not material_calibration.empty:
                     material_pit = material_calibration["loo_pit"].to_numpy(dtype=float)
                     plot(
-                        f"{material}/loo_pit_ecdf",
-                        plot_loo_pit_ecdf,
+                        f"{material}/loo_pit",
+                        plot_loo_pit_summary,
                         material_pit,
                         run.specification.model_name,
-                        material_dir / "loo_pit_ecdf.png",
-                        context_label=material,
-                    )
-                    plot(
-                        f"{material}/loo_pit_coverage",
-                        plot_loo_pit_coverage,
-                        material_pit,
-                        run.specification.model_name,
-                        material_dir / "loo_pit_coverage.png",
+                        material_dir / "loo_pit.png",
                         context_label=material,
                     )
                     plot(
@@ -539,6 +535,18 @@ def _make_plots(
                         plot_delta_co_comparison,
                         delta_co,
                         material_dir / "delta_CO.png",
+                        material,
+                    )
+
+            if second_order_points is not None and not second_order_points.empty:
+                material_second_order = second_order_points.loc[second_order_points["material"] == material]
+                delta2 = material_second_order.loc[material_second_order["observable"] == "delta2"]
+                if not delta2.empty:
+                    plot(
+                        f"{material}/second_order_difference",
+                        plot_second_order_difference,
+                        delta2,
+                        material_dir / "second_order_difference.png",
                         material,
                     )
 
@@ -586,31 +594,19 @@ def _make_plots(
             )
 
         if loo is not None:
-            plot(
-                "loo_pareto_k",
-                plot_pareto_k,
-                loo.loo_result,
-                run.specification.model_name,
-                figures_dir / "loo_pareto_k.png",
+            loo_pit_values = (
+                None
+                if calibration is None
+                else calibration.pointwise["loo_pit"].to_numpy(dtype=float)
             )
-
-        if calibration is not None:
-            loo_pit_values = calibration.pointwise["loo_pit"].to_numpy(dtype=float)
             context = "all materials" if run.specification.is_all_materials else None
             plot(
-                "loo_pit_ecdf",
-                plot_loo_pit_ecdf,
+                "loo_diagnostics",
+                plot_loo_diagnostics,
+                loo.loo_result,
                 loo_pit_values,
                 run.specification.model_name,
-                figures_dir / "loo_pit_ecdf.png",
-                context_label=context,
-            )
-            plot(
-                "loo_pit_coverage",
-                plot_loo_pit_coverage,
-                loo_pit_values,
-                run.specification.model_name,
-                figures_dir / "loo_pit_coverage.png",
+                figures_dir / "loo_diagnostics.png",
                 context_label=context,
             )
 
@@ -685,6 +681,7 @@ def _compute_loo_pit_stage(run, loo, tables_dir, status_rows):
             _status_row(
                 "loo_pit",
                 "skipped_unreliable_psis",
+        "skipped_observables_unavailable",
                 f"max Pareto-k={max_pareto_k:.6g} >= {LOO_PIT_MAX_PARETO_K:g}; LOO-PIT not attempted.",
                 max_pareto_k=max_pareto_k,
             )
@@ -749,8 +746,55 @@ def _build_observables_stage(run, config, paths, tables_dir, status_rows):
     return observable_points
 
 
+def _build_second_order_stage(
+    run,
+    config,
+    paths,
+    tables_dir,
+    status_rows,
+    observable_points,
+    potential_step_V,
+):
+    if observable_points is None:
+        status_rows.append(
+            _status_row(
+                "second_order",
+                "skipped_observables_unavailable",
+                "First-order observable products were unavailable.",
+            )
+        )
+        return None
+
+    try:
+        preprocessing_config = load_agpd_preprocessing_config(paths)
+        result = build_second_order_outputs(
+            inference_data=run.inference_data,
+            model_points=run.model_data.model_points,
+            conditions=run.model_data.conditions,
+            observable_points=observable_points,
+            temperature_K=config["temperature_K"],
+            koh_values=preprocessing_config["KOH_concentrations_M"],
+            co_values=preprocessing_config["CO_mole_fractions"],
+            potential_step_V=potential_step_V,
+        )
+        result.points.to_csv(tables_dir / "second_order_observables.csv", index=False)
+        result.summary.to_csv(tables_dir / "second_order_summary.csv", index=False)
+    except Exception as error:
+        status_rows.append(_status_row("second_order", "error", f"{type(error).__name__}: {error}"))
+        return None
+
+    status_rows.append(
+        _status_row(
+            "second_order",
+            "complete",
+            f"Symmetric potential derivative step = {float(potential_step_V):g} V.",
+        )
+    )
+    return result.points
+
+
 def _overall_postprocessing_status(status_rows):
-    aggregate_stages = {"core", "loo", "loo_pit", "observables", "plots"}
+    aggregate_stages = {"core", "loo", "loo_pit", "observables", "second_order", "plots"}
     aggregate = {
         row["stage"]: row["status"]
         for row in status_rows
@@ -851,10 +895,21 @@ def main():
     material_summary.to_csv(tables_dir / "material_summary.csv", index=False)
 
     observable_points = None
+    second_order_points = None
     if args.skip_observables:
         status_rows.append(_status_row("observables", "skipped_user", "--skip-observables was supplied."))
+        status_rows.append(_status_row("second_order", "skipped_user", "--skip-observables was supplied."))
     else:
         observable_points = _build_observables_stage(run, config, paths, tables_dir, status_rows)
+        second_order_points = _build_second_order_stage(
+            run,
+            config,
+            paths,
+            tables_dir,
+            status_rows,
+            observable_points,
+            args.second_order_step_v,
+        )
     _write_postprocessing_status(tables_dir, status_rows)
 
     _make_plots(
@@ -868,6 +923,7 @@ def main():
         loo=loo,
         calibration=calibration,
         observable_points=observable_points,
+        second_order_points=second_order_points,
     )
 
     overall = _overall_postprocessing_status(status_rows)

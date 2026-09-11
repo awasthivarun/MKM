@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -8,6 +10,8 @@ from mkm.postprocessing.plotting import (
     plot_alpha_comparison,
     plot_delta_co_comparison,
     plot_delta_oh_comparison,
+    plot_loo_diagnostics,
+    plot_loo_pit_summary,
     plot_observation_grid,
     plot_parameter_posteriors,
     plot_pointwise_loo,
@@ -147,6 +151,66 @@ def test_plot_pointwise_variables_combines_multiple_variables(tmp_path):
     )
 
     assert created is True
+    assert output_path.exists()
+    assert output_path.stat().st_size > 0
+
+
+def test_plot_pointwise_variables_overlays_scaled_mean_observed_rate(tmp_path):
+    summary = pd.DataFrame(
+        {
+            "electrolyte_concentration_M": [1.0, 1.0, 1.0],
+            "CO_mole_fraction": [0.1, 0.1, 0.1],
+            "E_V_SHE": [0.2, 0.3, 0.4],
+            "rate_fraction_BF_median": [0.2, 0.4, 0.3],
+            "rate_fraction_BF_hdi95_lower": [0.1, 0.3, 0.2],
+            "rate_fraction_BF_hdi95_upper": [0.3, 0.5, 0.4],
+        }
+    )
+    observed = pd.DataFrame(
+        {
+            "electrolyte_concentration_M": [1.0] * 6,
+            "CO_mole_fraction": [0.1] * 6,
+            "replicate": ["A", "B"] * 3,
+            "E_V_SHE": [0.2, 0.2, 0.3, 0.3, 0.4, 0.4],
+            "rate": [1.0, 3.0, 4.0, 6.0, 2.0, 4.0],
+        }
+    )
+    output_path = tmp_path / "rate_fractions_with_tof.png"
+
+    created = plot_pointwise_variables(
+        summary,
+        ("rate_fraction_BF",),
+        output_path,
+        title="Pathway rate fractions",
+        ylabel="rate fraction",
+        observed_rates=observed,
+    )
+
+    assert created is True
+    assert output_path.exists()
+    assert output_path.stat().st_size > 0
+
+
+def test_plot_loo_pit_summary_writes_one_two_row_file(tmp_path):
+    loo_pit = np.linspace(0.01, 0.20, 100)
+    output_path = tmp_path / "loo_pit.png"
+
+    plot_loo_pit_summary(loo_pit, "CO_BF_ER_LH", output_path, context_label="Ag50Pd50")
+
+    assert output_path.exists()
+    assert output_path.stat().st_size > 0
+
+
+def test_plot_loo_diagnostics_writes_one_three_row_file(tmp_path):
+    loo_result = SimpleNamespace(
+        pareto_k=xr.DataArray(np.array([0.1, 0.2, 0.4, 0.6]), dims=("observation",)),
+        good_k=0.7,
+    )
+    loo_pit = np.linspace(0.01, 0.20, 100)
+    output_path = tmp_path / "loo_diagnostics.png"
+
+    plot_loo_diagnostics(loo_result, loo_pit, "CO_BF_ER_LH", output_path, context_label="all materials")
+
     assert output_path.exists()
     assert output_path.stat().st_size > 0
 

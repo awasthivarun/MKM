@@ -236,6 +236,96 @@ def build_adjacent_log_order_map(
     return LinearObservableMap(outputs=pd.DataFrame(output_records), terms=pd.DataFrame(term_records))
 
 
+
+def build_potential_derivative_map(observable_map, group_columns, potential_step_V=0.05):
+    """Differentiate a linear observable with a symmetric potential stencil.
+
+    Only targets with source observables at exactly E-h and E+h are retained. The resulting
+    observable remains a linear map of the original model-point log rates.
+    """
+    potential_step_V = float(potential_step_V)
+    if not np.isfinite(potential_step_V) or potential_step_V <= 0:
+        raise ValueError("Potential derivative step must be finite and positive.")
+
+    outputs = observable_map.outputs.copy()
+    terms = observable_map.terms.copy()
+    required_output_columns = {"observable_id", "E_V_SHE", *group_columns}
+    required_term_columns = {"observable_id", "model_point_id", "coefficient"}
+
+    if not required_output_columns.issubset(outputs.columns):
+        missing = sorted(required_output_columns - set(outputs.columns))
+        raise ValueError(f"Observable-map outputs are missing required columns: {missing}")
+    if not required_term_columns.issubset(terms.columns):
+        missing = sorted(required_term_columns - set(terms.columns))
+        raise ValueError(f"Observable-map terms are missing required columns: {missing}")
+
+    term_lookup = {
+        int(observable_id): group[["model_point_id", "coefficient"]].copy()
+        for observable_id, group in terms.groupby("observable_id", sort=False)
+    }
+    output_records = []
+    term_records = []
+    derivative_id = 0
+
+    for _, group in outputs.groupby(group_columns, sort=False, dropna=False):
+        group = group.sort_values("E_V_SHE").reset_index(drop=True)
+        potentials = group["E_V_SHE"].to_numpy(dtype=float)
+        if len(np.unique(potentials)) != len(potentials):
+            raise ValueError("Potential derivative requires unique potentials within each observable curve.")
+
+        for _, target in group.iterrows():
+            target_potential = float(target["E_V_SHE"])
+            lower = group.loc[
+                np.isclose(potentials, target_potential - potential_step_V, rtol=0, atol=1e-12)
+            ]
+            upper = group.loc[
+                np.isclose(potentials, target_potential + potential_step_V, rtol=0, atol=1e-12)
+            ]
+
+            if lower.empty or upper.empty:
+                continue
+            if len(lower) != 1 or len(upper) != 1:
+                raise ValueError("Expected exactly one symmetric source observable on each side of target potential.")
+
+            record = target.to_dict()
+            record["observable_id"] = derivative_id
+            record["potential_step_V"] = potential_step_V
+            output_records.append(record)
+
+            coefficients = {}
+            for source, scale in ((lower.iloc[0], -0.5 / potential_step_V), (upper.iloc[0], 0.5 / potential_step_V)):
+                source_id = int(source["observable_id"])
+                if source_id not in term_lookup:
+                    raise ValueError(f"Observable {source_id} has no linear-map terms.")
+                for term in term_lookup[source_id].itertuples(index=False):
+                    model_point_id = int(term.model_point_id)
+                    coefficients[model_point_id] = (
+                        coefficients.get(model_point_id, 0.0) + scale * float(term.coefficient)
+                    )
+
+            for model_point_id, coefficient in coefficients.items():
+                if np.isclose(coefficient, 0.0, rtol=0, atol=1e-15):
+                    continue
+                term_records.append(
+                    {
+                        "observable_id": derivative_id,
+                        "model_point_id": model_point_id,
+                        "coefficient": float(coefficient),
+                    }
+                )
+            derivative_id += 1
+
+    output_columns = list(outputs.columns)
+    if "potential_step_V" not in output_columns:
+        output_columns.append("potential_step_V")
+    derivative_outputs = pd.DataFrame(output_records, columns=output_columns)
+    derivative_terms = pd.DataFrame(
+        term_records,
+        columns=["observable_id", "model_point_id", "coefficient"],
+    )
+    return LinearObservableMap(outputs=derivative_outputs, terms=derivative_terms)
+
+
 def evaluate_linear_observable_map(log_rate, observable_map):
     log_rate = np.asarray(log_rate, dtype=float)
 

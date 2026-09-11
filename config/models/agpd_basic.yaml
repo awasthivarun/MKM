@@ -288,7 +288,7 @@ prior_profiles:
           distribution: truncated_normal
           mu: 0.5
           sigma: 0.1
-          lower: 0.2
+          lower: 0.3
           upper: 0.7
         Gact2_BF_0: # Flat reasonable bounds
           distribution: truncated_normal

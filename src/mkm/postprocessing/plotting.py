@@ -367,6 +367,7 @@ def plot_pointwise_variables(
     labels=None,
     context_label=None,
     bounded=True,
+    observed_rates=None,
 ):
     """Plot several pointwise posterior variables together on the same condition grid."""
     variable_names = [
@@ -381,6 +382,12 @@ def plot_pointwise_variables(
     labels = {} if labels is None else labels
     KOH_values = sorted(summary["electrolyte_concentration_M"].unique())
     CO_values = sorted(summary["CO_mole_fraction"].unique())
+
+    if observed_rates is not None:
+        required = {"electrolyte_concentration_M", "CO_mole_fraction", "E_V_SHE", "rate"}
+        missing = sorted(required - set(observed_rates.columns))
+        if missing:
+            raise ValueError(f"Observed-rate overlay is missing required columns: {missing}.")
 
     fig, axes = plt.subplots(
         len(CO_values),
@@ -427,6 +434,31 @@ def plot_pointwise_variables(
                     linewidth=0,
                 )
 
+            if observed_rates is not None:
+                observed_condition = observed_rates[
+                    (observed_rates["electrolyte_concentration_M"] == c_koh)
+                    & (observed_rates["CO_mole_fraction"] == co_fraction)
+                ]
+                if not observed_condition.empty:
+                    mean_rate = (
+                        observed_condition.groupby("E_V_SHE", as_index=False)["rate"]
+                        .mean()
+                        .sort_values("E_V_SHE")
+                    )
+                    rate_values = mean_rate["rate"].to_numpy(dtype=float)
+                    if not np.all(np.isfinite(rate_values)):
+                        raise ValueError("Observed-rate overlay contains non-finite mean TOF values.")
+                    max_rate = float(np.max(rate_values))
+                    if max_rate > 0.0:
+                        ax.plot(
+                            mean_rate["E_V_SHE"],
+                            rate_values / max_rate,
+                            color="#7F7F7F",
+                            linestyle=":",
+                            linewidth=1.5,
+                            label="_nolegend_",
+                        )
+
             if bounded:
                 ax.set_ylim(-0.02, 1.02)
             if row == 0:
@@ -453,7 +485,6 @@ def plot_pointwise_variables(
     fig.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close(fig)
     return True
-
 
 def plot_sampling_trace(inference_data, parameter_names, output_path: str | Path):
     data = build_sampling_datatree(inference_data, parameter_names)
@@ -717,6 +748,79 @@ def plot_delta_co_comparison(comparison, output_path: str | Path, material):
     fig.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close(fig)
 
+
+def plot_second_order_difference(comparison, output_path: str | Path, material):
+    """Plot d(alpha)/dE - d(delta_OH)/dE using posterior draws and experimental point estimates."""
+    data = comparison.loc[comparison["observable"] == "delta2"].copy()
+    if data.empty:
+        raise ValueError("No delta2 second-order points were provided.")
+
+    koh_values = sorted(data["C_KOH_M"].dropna().unique())
+    co_values = sorted(data["CO_mole_fraction"].dropna().unique())
+    fig, axes = plt.subplots(
+        len(co_values),
+        len(koh_values),
+        figsize=(3.8 * len(koh_values), 2.7 * len(co_values)),
+        sharex=True,
+        sharey=True,
+        squeeze=False,
+    )
+
+    for row, co_fraction in enumerate(co_values):
+        for col, c_koh in enumerate(koh_values):
+            ax = axes[row, col]
+            condition = data[
+                (data["C_KOH_M"] == c_koh)
+                & (data["CO_mole_fraction"] == co_fraction)
+            ].sort_values("E_V_SHE")
+
+            if not condition.empty:
+                line, = ax.plot(
+                    condition["E_V_SHE"],
+                    condition["median"],
+                    linewidth=1.5,
+                    label="posterior",
+                )
+                ax.fill_between(
+                    condition["E_V_SHE"],
+                    condition["hdi95_lower"],
+                    condition["hdi95_upper"],
+                    color=line.get_color(),
+                    alpha=0.20,
+                    linewidth=0,
+                )
+                ax.scatter(
+                    condition["E_V_SHE"],
+                    condition["experimental"],
+                    s=12,
+                    label="experiment",
+                )
+
+            ax.axhline(0.0, linestyle="--", linewidth=0.9, alpha=0.5)
+            if row == 0:
+                ax.set_title(f"{c_koh:g} M KOH")
+            if col == len(koh_values) - 1:
+                ax.text(
+                    1.04,
+                    0.5,
+                    f"{100 * co_fraction:g}% CO",
+                    transform=ax.transAxes,
+                    rotation=-90,
+                    va="center",
+                )
+            ax.grid(alpha=0.20)
+
+    axes[0, 0].legend()
+    step = float(data["potential_step_V"].iloc[0])
+    fig.supxlabel("Potential (V vs SHE)")
+    fig.supylabel(r"$d\alpha/dE-d\delta_{\mathrm{OH}}/dE$ / V$^{-1}$")
+    fig.suptitle(f"{material}: second-order kinetic difference (symmetric h = {step:g} V)")
+    fig.tight_layout(rect=(0.04, 0.04, 0.96, 0.97))
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=220, bbox_inches="tight")
+    plt.close(fig)
+
 def plot_loo_comparison(compare_table, output_path: str | Path):
     frame = compare_table.set_index("model")
 
@@ -859,6 +963,89 @@ def plot_pointwise_loo(pointwise, model_name, output_path: str | Path, context_l
     fig.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close(fig)
 
+def _plot_loo_pit_axis(ax, loo_pit, *, coverage, title):
+    values = np.asarray(loo_pit, dtype=float).reshape(-1)
+    if values.size == 0:
+        raise ValueError("LOO-PIT values are empty.")
+    if not np.all(np.isfinite(values)):
+        raise ValueError("LOO-PIT values contain non-finite values.")
+    if np.any((values < 0.0) | (values > 1.0)):
+        raise ValueError("LOO-PIT values must lie inside [0, 1].")
+
+    if coverage:
+        values = 2.0 * np.abs(values - 0.5)
+
+    distribution = xr.Dataset({"rate_observed": ("observation", values)})
+    ecdf = distribution.azstats.ecdf(
+        dim=["observation"],
+        pit=True,
+        npoints=len(values),
+    )
+    uniformity_result = distribution.azstats.uniformity_test(
+        dim=["observation"],
+        method="pot_c",
+    )
+    if len(uniformity_result) < 2:
+        raise ValueError("Uniformity test did not return p-values and pointwise contributions.")
+    p_values = uniformity_result[0]
+    shapley_values = uniformity_result[1]
+
+    ecdf_values = ecdf["rate_observed"]
+    x = np.asarray(ecdf_values.sel(plot_axis="x"), dtype=float)
+    y = np.asarray(ecdf_values.sel(plot_axis="y"), dtype=float)
+    p_value = float(np.asarray(p_values["rate_observed"], dtype=float).reshape(-1)[0])
+    shapley = np.asarray(shapley_values["rate_observed"], dtype=float).reshape(-1)
+
+    alpha = 0.05
+    expected_max = np.sqrt(np.log(2.0 / alpha) / (2.0 * len(values))) * 1.3
+    actual_max = float(np.max(np.abs(y)))
+    epsilon = max(expected_max, actual_max)
+    suspicious = (shapley > 0.0) & (p_value < alpha)
+
+    ax.axhline(0.0, linestyle="--", linewidth=1.0, alpha=0.5)
+    ax.step(x, y, where="pre", linewidth=1.5)
+    if np.any(suspicious):
+        ax.scatter(x[suspicious], y[suspicious], s=18, marker="x")
+    ax.text(0.01, 0.92, f"p={p_value:.2f} (alpha={alpha:.2f})", transform=ax.transAxes, va="top")
+    ax.set_ylim(-epsilon, epsilon)
+    ax.set_ylabel(r"$\Delta$ ECDF")
+    ax.set_title(title)
+    ax.grid(alpha=0.20)
+
+    if coverage:
+        ax.set_xticks([0.0, 0.25, 0.5, 0.75, 1.0], labels=["0", "25", "50", "75", "100"])
+        ax.set_xlabel("ETI %")
+    else:
+        ax.set_xlim(0.0, 1.0)
+        ax.set_xlabel("PIT")
+
+
+def _plot_pareto_k_axis(ax, loo_result, *, title):
+    pareto_k = loo_result.pareto_k
+    if isinstance(pareto_k, xr.Dataset):
+        if len(pareto_k.data_vars) != 1:
+            raise ValueError("Pareto-k dataset must contain exactly one variable.")
+        pareto_k = pareto_k[next(iter(pareto_k.data_vars))]
+
+    values = np.asarray(pareto_k, dtype=float).reshape(-1)
+    finite = np.isfinite(values)
+    if not np.any(finite):
+        raise ValueError("Pareto-k values contain no finite entries.")
+
+    indices = np.arange(len(values))
+    good_k = float(loo_result.good_k)
+    ax.plot(indices[finite], values[finite], linestyle="none", marker=".", markersize=3.0)
+    ax.axhline(good_k, linestyle="--", linewidth=1.1, label=f"good k = {good_k:g}")
+    for level in (0.5, 0.7, 1.0):
+        if not np.isclose(level, good_k):
+            ax.axhline(level, linestyle=":", linewidth=0.8, alpha=0.45)
+    ax.set_xlabel("Observation index")
+    ax.set_ylabel("Pareto k")
+    ax.set_title(title)
+    ax.legend(fontsize=8)
+    ax.grid(alpha=0.20)
+
+
 def plot_loo_pit_ecdf(loo_pit, model_name, output_path: str | Path, context_label=None):
     from mkm.postprocessing.calibration import build_loo_pit_datatree
 
@@ -878,6 +1065,7 @@ def plot_loo_pit_ecdf(loo_pit, model_name, output_path: str | Path, context_labe
     pc.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close("all")
 
+
 def plot_loo_pit_coverage(loo_pit, model_name, output_path: str | Path, context_label=None):
     from mkm.postprocessing.calibration import build_loo_pit_datatree
 
@@ -896,6 +1084,41 @@ def plot_loo_pit_coverage(loo_pit, model_name, output_path: str | Path, context_
     pc.add_title(f"{prefix}LOO predictive coverage: {model_name}")
     pc.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close("all")
+
+
+def plot_loo_pit_summary(loo_pit, model_name, output_path: str | Path, context_label=None):
+    fig, axes = plt.subplots(2, 1, figsize=(8.0, 7.0))
+    prefix = f"{context_label}: " if context_label else ""
+    _plot_loo_pit_axis(axes[0], loo_pit, coverage=True, title="LOO predictive coverage")
+    _plot_loo_pit_axis(axes[1], loo_pit, coverage=False, title="LOO-PIT calibration")
+    fig.suptitle(f"{prefix}LOO-PIT diagnostics: {model_name}")
+    fig.tight_layout(rect=(0.04, 0.03, 0.98, 0.96))
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=220, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_loo_diagnostics(loo_result, loo_pit, model_name, output_path: str | Path, context_label=None):
+    fig, axes = plt.subplots(3, 1, figsize=(9.0, 10.5))
+    _plot_pareto_k_axis(axes[0], loo_result, title="Pareto-k diagnostics")
+
+    if loo_pit is None:
+        for ax, title in zip(axes[1:], ("LOO predictive coverage", "LOO-PIT calibration")):
+            ax.set_title(title)
+            ax.text(0.5, 0.5, "LOO-PIT unavailable", ha="center", va="center", transform=ax.transAxes)
+            ax.set_axis_off()
+    else:
+        _plot_loo_pit_axis(axes[1], loo_pit, coverage=True, title="LOO predictive coverage")
+        _plot_loo_pit_axis(axes[2], loo_pit, coverage=False, title="LOO-PIT calibration")
+
+    prefix = f"{context_label}: " if context_label else ""
+    fig.suptitle(f"{prefix}LOO diagnostics: {model_name}")
+    fig.tight_layout(rect=(0.04, 0.03, 0.98, 0.97))
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=220, bbox_inches="tight")
+    plt.close(fig)
 
 def plot_loo_pit_conditions(pointwise, model_name, output_path: str | Path, context_label=None):
     """Plot potential-resolved raw LOO-PIT values for one material."""
