@@ -57,7 +57,9 @@ def summarize_posterior_model_variable(inference_data, model_points, variable_na
         variable_name=variable_name,
     )
 
-    statistics = ("mean", "sd", "median", "hdi95_lower", "hdi95_upper")
+    statistics = (
+        "mean", "sd", "median", "hdi80_lower", "hdi80_upper", "hdi95_lower", "hdi95_upper"
+    )
 
     return result.rename(
         columns={statistic: f"{variable_name}_{statistic}" for statistic in statistics}

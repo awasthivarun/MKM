@@ -35,16 +35,24 @@ from mkm.postprocessing.plotting import (
     PATHWAY_COLORS,
     POINTWISE_LABELS,
     plot_alpha_comparison,
+    plot_alpha_overlay_koh,
+    plot_alpha_overlay_pco,
     plot_delta_co_comparison,
+    plot_delta_co_overlay_koh,
+    plot_delta_co_overlay_pco,
     plot_delta_oh_comparison,
+    plot_delta_oh_overlay_pco,
+    plot_rate_overlay_koh,
+    plot_rate_overlay_pco,
     plot_loo_diagnostics,
-    plot_loo_pit_conditions,
+    plot_pointwise_loo_pit,
     plot_loo_pit_summary,
     plot_observation_grid,
     plot_parameter_posteriors,
     plot_pointwise_loo,
     plot_pointwise_variables,
     plot_sampling_energy,
+    plot_sampling_correlations,
     plot_sampling_pairs,
     plot_sampling_rank,
     plot_sampling_trace,
@@ -476,18 +484,11 @@ def _make_plots(
                 observed_rates=observations,
             )
 
+            material_loo = None
             if loo is not None:
                 material_loo = loo.pointwise.loc[loo.pointwise["material"] == material]
-                if not material_loo.empty:
-                    plot(
-                        f"{material}/loo_pointwise",
-                        plot_pointwise_loo,
-                        material_loo,
-                        run.specification.model_name,
-                        material_dir / "loo_pointwise.png",
-                        context_label=material,
-                    )
 
+            material_calibration = None
             if calibration is not None:
                 material_calibration = calibration.pointwise.loc[
                     calibration.pointwise["material"] == material
@@ -502,12 +503,24 @@ def _make_plots(
                         material_dir / "loo_pit.png",
                         context_label=material,
                     )
+
+            if material_loo is not None and not material_loo.empty:
+                if material_calibration is not None and not material_calibration.empty:
                     plot(
-                        f"{material}/loo_pit_conditions",
-                        plot_loo_pit_conditions,
+                        f"{material}/loo_pointwise_pit",
+                        plot_pointwise_loo_pit,
+                        material_loo,
                         material_calibration,
+                        material_dir / "loo_pointwise_pit.png",
+                        context_label=material,
+                    )
+                else:
+                    plot(
+                        f"{material}/loo_pointwise",
+                        plot_pointwise_loo,
+                        material_loo,
                         run.specification.model_name,
-                        material_dir / "loo_pit_conditions.png",
+                        material_dir / "loo_pointwise.png",
                         context_label=material,
                     )
 
@@ -550,6 +563,61 @@ def _make_plots(
                         material,
                     )
 
+    if level == "full" and observable_points is not None and not observable_points.empty:
+        alpha_all = observable_points.loc[observable_points["observable"] == "alpha"]
+        delta_oh_all = observable_points.loc[observable_points["observable"] == "delta_OH"]
+        delta_co_all = observable_points.loc[observable_points["observable"] == "delta_CO"]
+
+        if not alpha_all.empty:
+            plot(
+                "alpha_overlay_pco",
+                plot_alpha_overlay_pco,
+                alpha_all,
+                figures_dir / "alpha_overlay_PCO.png",
+            )
+            plot(
+                "alpha_overlay_koh",
+                plot_alpha_overlay_koh,
+                alpha_all,
+                figures_dir / "alpha_overlay_KOH.png",
+            )
+
+        if not delta_co_all.empty:
+            plot(
+                "delta_CO_overlay_pco",
+                plot_delta_co_overlay_pco,
+                delta_co_all,
+                figures_dir / "delta_CO_overlay_PCO.png",
+            )
+            plot(
+                "delta_CO_overlay_koh",
+                plot_delta_co_overlay_koh,
+                delta_co_all,
+                figures_dir / "delta_CO_overlay_KOH.png",
+            )
+
+        if not delta_oh_all.empty:
+            plot(
+                "delta_OH_overlay_pco",
+                plot_delta_oh_overlay_pco,
+                delta_oh_all,
+                figures_dir / "delta_OH_overlay_PCO.png",
+            )
+
+    if level == "full" and observation_diagnostics is not None and not observation_diagnostics.empty:
+        plot(
+            "rate_overlay_pco",
+            plot_rate_overlay_pco,
+            observation_diagnostics,
+            figures_dir / "rate_overlay_PCO.png",
+        )
+        plot(
+            "rate_overlay_koh",
+            plot_rate_overlay_koh,
+            observation_diagnostics,
+            figures_dir / "rate_overlay_KOH.png",
+        )
+
     if level == "full":
         plot(
             "sampling_trace",
@@ -573,7 +641,7 @@ def _make_plots(
             figures_dir / "sampling_energy.png",
         )
         try:
-            pair_names = sampling_parameter_names(run.inference_data.posterior, run.parameter_specs)
+            pair_names = sampling_parameter_names(run.inference_data.posterior, run.parameter_specs, exclude=())
         except Exception as error:
             attempts += 1
             failures += 1
@@ -591,6 +659,13 @@ def _make_plots(
                 run.inference_data,
                 pair_names,
                 figures_dir / "sampling_pairs.png",
+            )
+            plot(
+                "sampling_correlations",
+                plot_sampling_correlations,
+                run.inference_data,
+                pair_names,
+                figures_dir / "sampling_correlations.png",
             )
 
         if loo is not None:

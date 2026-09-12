@@ -30,7 +30,7 @@ def _expand_variable(values, name):
 
 
 def sampling_parameter_names(posterior, parameter_specs, exclude=ERROR_VARIABLES):
-    """Return configured scalar variable names, excluding pair-plot nuisances by default."""
+    """Return configured posterior variable names, excluding requested nuisances."""
     excluded = set(exclude)
     names = []
     for name in parameter_specs:
@@ -38,14 +38,6 @@ def sampling_parameter_names(posterior, parameter_specs, exclude=ERROR_VARIABLES
             continue
         if name not in posterior:
             raise ValueError(f"Posterior is missing sampling parameter '{name}'.")
-
-        values = posterior[name].squeeze(drop=True)
-        extra_dims = set(values.dims) - {"chain", "draw"}
-        if extra_dims:
-            raise ValueError(
-                f"Pair-plot parameter '{name}' is not scalar; remaining dimensions: "
-                f"{sorted(extra_dims)}."
-            )
         names.append(name)
     return tuple(names)
 

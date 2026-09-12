@@ -49,11 +49,13 @@ def highest_density_interval(values, prob=HDI_PROB):
 
 
 def summarize_samples(values):
-    """Summarize draws over the leading sample axis using a 95% HDI."""
+    """Summarize draws over the leading sample axis using 80% and 95% HDIs."""
     values = np.asarray(values, dtype=float)
     if values.ndim < 1 or values.shape[0] < 1:
         raise ValueError("Posterior summary input must contain at least one sample.")
-    hdi_lower, hdi_upper = highest_density_interval(values, prob=HDI_PROB)
+
+    hdi80_lower, hdi80_upper = highest_density_interval(values, prob=0.80)
+    hdi95_lower, hdi95_upper = highest_density_interval(values, prob=0.95)
     if values.shape[0] > 1:
         sd = np.std(values, axis=0, ddof=1)
     else:
@@ -62,8 +64,10 @@ def summarize_samples(values):
         "mean": np.mean(values, axis=0),
         "sd": sd,
         "median": np.median(values, axis=0),
-        "hdi95_lower": hdi_lower,
-        "hdi95_upper": hdi_upper,
+        "hdi80_lower": hdi80_lower,
+        "hdi80_upper": hdi80_upper,
+        "hdi95_lower": hdi95_lower,
+        "hdi95_upper": hdi95_upper,
     }
 
 
@@ -74,6 +78,8 @@ def summarize_scalar_samples(values):
         "mean": float(summary["mean"][0]),
         "sd": float(summary["sd"][0]),
         "median": float(summary["median"][0]),
+        "hdi80_lower": float(summary["hdi80_lower"][0]),
+        "hdi80_upper": float(summary["hdi80_upper"][0]),
         "hdi95_lower": float(summary["hdi95_lower"][0]),
         "hdi95_upper": float(summary["hdi95_upper"][0]),
     }
@@ -227,6 +233,8 @@ def build_posterior_parameter_summary(inference_data, parameter_specs):
         "mean",
         "sd",
         "median",
+        "hdi80_lower",
+        "hdi80_upper",
         "hdi95_lower",
         "hdi95_upper",
         "mcse_mean",

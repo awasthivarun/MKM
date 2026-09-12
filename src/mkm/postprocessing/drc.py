@@ -235,22 +235,13 @@ def _summarize_transition_state_draws(draws, model_points):
     samples = values.reshape(n_chains * n_draws, n_controls, n_points)
 
     summary = summarize_samples(samples)
-
     metadata = model_points.sort_values("model_point_id").reset_index(drop=True).copy()
     if len(metadata) != n_points:
-        raise ValueError(
-            f"DRC has {n_points} model points but metadata has {len(metadata)} rows."
-        )
-
+        raise ValueError(f"DRC has {n_points} model points but metadata has {len(metadata)} rows.")
     records = []
-    for control_index, control_name in enumerate(
-        draws.coords["control"].values.astype(str)
-    ):
-        control_parameter = str(
-            draws.coords["control_parameter"].values[control_index]
-        )
+    for control_index, control_name in enumerate(draws.coords["control"].values.astype(str)):
+        control_parameter = str(draws.coords["control_parameter"].values[control_index])
         control_label = str(draws.coords["control_label"].values[control_index])
-
         frame = metadata.copy()
         frame["control_type"] = "transition_state"
         frame["control"] = control_name
@@ -259,10 +250,11 @@ def _summarize_transition_state_draws(draws, model_points):
         frame["mean"] = summary["mean"][control_index]
         frame["sd"] = summary["sd"][control_index]
         frame["median"] = summary["median"][control_index]
+        frame["hdi80_lower"] = summary["hdi80_lower"][control_index]
+        frame["hdi80_upper"] = summary["hdi80_upper"][control_index]
         frame["hdi95_lower"] = summary["hdi95_lower"][control_index]
         frame["hdi95_upper"] = summary["hdi95_upper"][control_index]
         records.append(frame)
-
     return pd.concat(records, ignore_index=True)
 
 
