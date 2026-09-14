@@ -1,6 +1,6 @@
 # CURRENT_STATE
 
-Documentation checkpoint: `d1b0bcedce7628f7af4ade4534e6c7cd1fee9d12` on `rebuild/from-scratch`.
+Documentation checkpoint: `7a8c42394fed57e880fbae9d609faefad0c25041` on `rebuild/from-scratch`.
 
 This file records the **software/scientific workflow state**, not a frozen list of posterior results. Numerical conclusions should be taken from the current `results/` products rather than copied here unless they have become durable project knowledge.
 
@@ -29,6 +29,7 @@ raw workbooks
   -> sampler + parameter + physical diagnostics
   -> rate/residual/pathway/coverage products
   -> alpha / OH-order / CO-order comparison
+  -> second-order kinetic-difference products
   -> PSIS-LOO + LOO-PIT
   -> multi-model comparison
   -> transition-state DRC
@@ -174,19 +175,23 @@ A config-file hash warning after a harmless documentation/YAML refactor is inten
 
 `postprocess_agpd_posterior.py` supports individual and all-material runs and can generate:
 
-- sampler diagnostics and sampling plots;
+- sampler diagnostics and sampling plots, including pair and parameter-correlation diagnostics;
 - posterior parameter summaries and prior/posterior contraction information;
-- observation-level model and posterior-predictive rate distributions;
+- observation-level latent model-rate and posterior-predictive rate distributions;
 - residual products and material summaries;
 - model-point coverages and pathway fractions;
 - experimental alpha, OH-order, and adjacent CO-order comparisons;
+- second-order kinetic-difference products from potential derivatives;
+- composition/material overlay plots for alpha, OH order, CO order, and latent model rate;
 - pointwise PSIS-LOO and Pareto-k diagnostics;
 - analytic Normal LOO-PIT diagnostics;
 - full/core/no-plot modes.
 
 `postprocess_agpd_drc.py` now supports both individual and composition fits. Composition DRC perturbs effective composition-specific transition-state energies and supports half-step convergence checks.
 
-`plot_agpd_composition_parameters.py` stores posterior effective-parameter trends versus Ag fraction.
+`plot_agpd_composition_parameters.py` stores posterior effective-parameter trends versus Ag fraction with 80% and 95% posterior HDIs; the `xAg = 0.5` reference composition is marked explicitly.
+
+Rate-overlay HDIs describe uncertainty in the latent model rate from posterior parameter uncertainty. They do not include the additional observation-noise uncertainty used in posterior-predictive rate intervals.
 
 ## Predictive validation implemented
 

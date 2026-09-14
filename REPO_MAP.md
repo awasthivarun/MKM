@@ -233,6 +233,10 @@ Residual-curve structure and shared-vs-replicate summaries.
 
 Posterior linear observables and comparison to experimental alpha/OH-order/CO-order products.
 
+### `second_order.py`
+
+Potential derivatives of the first-order kinetic observables and the second-order kinetic-difference products used in posterior/experimental comparison.
+
 ### `loo.py`
 
 Single-model PSIS-LOO and pointwise Pareto-k diagnostics.
@@ -251,7 +255,7 @@ Individual and composition-resolved transition-state DRC and finite-step converg
 
 ### `composition_parameters.py`
 
-Effective physical-parameter trends versus composition.
+Effective physical-parameter trends versus composition and the composition-overview figure.
 
 ### `materials.py`
 
@@ -263,7 +267,7 @@ Validation posterior-shift summaries and held-out validation plots.
 
 ### `plotting.py`
 
-Shared plotting implementation used by posterior, DRC, and validation scripts.
+Shared plotting implementation used by posterior, DRC, and validation scripts, including common presentation styling and material/composition overlay figures.
 
 ## Canonical scripts
 
