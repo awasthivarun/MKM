@@ -4,6 +4,7 @@ from argparse import ArgumentParser
 import csv
 from datetime import datetime, timezone
 import math
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -21,15 +22,21 @@ ALL_MATERIAL_ERROR_STRUCTURE = "shared"
 ALL_MATERIAL_PRIOR_MATERIAL = "Ag10Pd90"
 ALL_MATERIAL_RUNS = (
     ("Full", "CO_BF_ER_LH"),
+    ("Full_q1", "CO_BF_ER_LH_q1"),
+    ("Full_neg", "CO_BF_ER_LH_neg"),
     ("Ag10_no_BF", "CO_BF_ER_LH_Ag10_no_BF"),
     ("Ag10_no_BF_q1", "CO_BF_ER_LH_Ag10_no_BF_q1"),
+    ("Ag10_no_BF_neg", "CO_BF_ER_LH_Ag10_no_BF_neg"),
 )
 ALL_MATERIAL_COMPARISON_NAME = "all_materials_shared_models"
 
 TARGET_ACCEPT_SEQUENCE = (0.90, 0.95, 0.99)
+AGPD_DATASET_NAMES = {"base": "AgPd_COOx_basic", "maxtof": "AgPd_COOx_basic_maxtof"}
+AGPD_DATA_VARIANT_ENV = "MKM_AGPD_DATA_VARIANT"
 
 DIAGNOSTIC_FIELDS = (
     "grid_started_utc",
+    "data_variant",
     "fit_scope",
     "material",
     "model",
@@ -119,14 +126,35 @@ def parse_args():
         "--all-materials-only",
         action="store_true",
         help=(
-            "Run only the three configured all-material linear_xAg fits. "
+            "Run only the configured all-material linear_xAg fits. "
             "Their diagnostics are written separately under the all-material shared-error directory."
+        ),
+    )
+    parser.add_argument(
+        "--data-variant",
+        choices=tuple(AGPD_DATASET_NAMES),
+        default="base",
+        help=(
+            "AgPd processed dataset/result namespace. The default 'base' uses AgPd_COOx_basic; "
+            "'maxtof' uses AgPd_COOx_basic_maxtof and is propagated to all subprocesses."
+        ),
+    )
+    parser.add_argument(
+        "--all-material-model",
+        choices=tuple(display_name for display_name, _ in ALL_MATERIAL_RUNS),
+        help=(
+            "With --all-materials-only, run only the selected all-material fit while preserving the other "
+            "all-material diagnostic records. The final comparison is rebuilt from all available terminal records."
         ),
     )
     parser.add_argument("--stop-on-error", action="store_true")
     args = parser.parse_args()
     if args.compare_only and args.overwrite:
         parser.error("--overwrite cannot be used with --compare-only.")
+    if args.all_material_model and not args.all_materials_only:
+        parser.error("--all-material-model requires --all-materials-only.")
+    if args.compare_only and args.all_material_model:
+        parser.error("--all-material-model cannot be used with --compare-only.")
     return args
 
 
@@ -141,8 +169,16 @@ def _run(command):
     return returncode, perf_counter() - start
 
 
+def _dataset_name():
+    variant = os.environ.get(AGPD_DATA_VARIANT_ENV, "base")
+    try:
+        return AGPD_DATASET_NAMES[variant]
+    except KeyError as exc:
+        raise ValueError(f"Unknown AgPd data variant '{variant}'.") from exc
+
+
 def _posterior_root(root):
-    return root / "results" / "AgPd_COOx_basic" / "posterior"
+    return root / "results" / _dataset_name() / "posterior"
 
 
 def _individual_root(root):
@@ -356,8 +392,11 @@ def _all_material_job(display_name, model):
     }
 
 
-def _all_material_jobs():
-    return tuple(_all_material_job(display_name, model) for display_name, model in ALL_MATERIAL_RUNS)
+def _all_material_jobs(display_name=None):
+    jobs = tuple(_all_material_job(name, model) for name, model in ALL_MATERIAL_RUNS)
+    if display_name is None:
+        return jobs
+    return tuple(job for job in jobs if job["display_name"] == display_name)
 
 
 def _as_float(value):
@@ -528,6 +567,7 @@ def _sampling_status(record):
 def _attempt_record(grid_started_utc, job, attempt, target_accept):
     return {field: "" for field in DIAGNOSTIC_FIELDS} | {
         "grid_started_utc": grid_started_utc,
+        "data_variant": os.environ.get(AGPD_DATA_VARIANT_ENV, "base"),
         "fit_scope": job["fit_scope"],
         "material": job["material"],
         "model": job["model"],
@@ -888,6 +928,7 @@ def _collect_command_failures(record):
 
 def main():
     args = parse_args()
+    os.environ[AGPD_DATA_VARIANT_ENV] = args.data_variant
     root = Path(__file__).resolve().parents[1]
     diagnostics_path = _diagnostics_path(root, args.all_materials_only)
 
@@ -896,12 +937,26 @@ def main():
         return
 
     grid_started_utc = _utc_now()
-    records = []
+    selected_all_material_jobs = _all_material_jobs(args.all_material_model)
+
+    if args.all_materials_only and args.all_material_model and diagnostics_path.exists():
+        records = _read_diagnostics(diagnostics_path)
+        selected_models = {job["model"] for job in selected_all_material_jobs}
+        records = [
+            record
+            for record in records
+            if not (
+                _record_scope(record) == "all_materials"
+                and record.get("model") in selected_models
+            )
+        ]
+    else:
+        records = []
     _write_diagnostics(diagnostics_path, records)
 
     materials = () if args.all_materials_only else (*ALLOY_MATERIALS, "Pd100")
     individual_jobs = sum(len(_material_models(material)) for material in materials)
-    all_material_jobs = len(ALL_MATERIAL_RUNS)
+    all_material_jobs = len(selected_all_material_jobs)
     total_jobs = individual_jobs + all_material_jobs
     print(
         f"Queued {individual_jobs} individual fits plus {all_material_jobs} all-material fits "
@@ -910,6 +965,7 @@ def main():
         "composition-parameter plots.",
         flush=True,
     )
+    print(f"Data variant: {args.data_variant} ({_dataset_name()})", flush=True)
     print(f"Persistent diagnostics: {diagnostics_path}", flush=True)
 
     completed_jobs = 0
@@ -961,7 +1017,7 @@ def main():
     all_material_final_records = {}
     if not stop_requested:
         print(f"\n{'#' * 80}\nALL-MATERIAL FITS\n{'#' * 80}", flush=True)
-        for job in _all_material_jobs():
+        for job in selected_all_material_jobs:
             completed_jobs += 1
             print(
                 f"\n{'=' * 80}\n[{completed_jobs}/{total_jobs}] "
@@ -983,11 +1039,14 @@ def main():
                 break
 
     if not stop_requested and all_material_final_records:
+        comparison_records = all_material_final_records
+        if args.all_materials_only and args.all_material_model:
+            comparison_records = _terminal_all_material_records_by_model(records)
         comparison_returncode = _run_all_material_comparison(
             root,
             diagnostics_path,
             records,
-            all_material_final_records,
+            comparison_records,
         )
         if comparison_returncode not in ("", None, 0):
             command_failures.append(("all_materials", "", "", "comparison", comparison_returncode))
@@ -1001,7 +1060,12 @@ def main():
     if hard_failures or command_failures:
         raise SystemExit(1)
 
-    if args.all_materials_only:
+    if args.all_materials_only and args.all_material_model:
+        print(
+            f"Completed selected all-material fit {args.all_material_model} with shared error structure, "
+            "including full postprocessing, DRC, composition plots, and comparison rebuild from available runs."
+        )
+    elif args.all_materials_only:
         print(
             f"Completed all {all_material_jobs} all-material fits with shared error structure, "
             "including full postprocessing, DRC, composition plots, and model comparison."

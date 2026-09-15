@@ -4,7 +4,6 @@ from typing import Callable
 import numpy as np
 import pymc as pm
 import pytensor.tensor as pt
-
 from mkm.inference.priors import build_named_priors
 from mkm.mechanisms.agpd_basic import (
     AgPdCOBFERRLHParameters,
@@ -47,6 +46,16 @@ _AGPD_MODEL_REGISTRY = {
         parameter_class=AgPdCOBFERRLHParameters,
         evaluator=evaluate_agpd_co_bf_er_lh,
     ),
+    "CO_BF_ER_LH_q1": AgPdModelDefinition(
+        parameter_class=AgPdCOBFERRLHParameters,
+        evaluator=evaluate_agpd_co_bf_er_lh,
+        # beta_2_BF is fixed only as an identification convention: it is inactive when q = 1.
+        fixed_parameters=(("q", 1.0), ("beta_2_BF", 0.0)),
+    ),
+    "CO_BF_ER_LH_neg": AgPdModelDefinition(
+        parameter_class=AgPdCOBFERRLHParameters,
+        evaluator=evaluate_agpd_co_bf_er_lh,
+    ),
     "CO_BF_ER_LH_Ag10_no_BF": AgPdModelDefinition(
         parameter_class=AgPdCOBFERRLHParameters,
         evaluator=evaluate_agpd_co_bf_er_lh_ag10_no_bf,
@@ -56,6 +65,10 @@ _AGPD_MODEL_REGISTRY = {
         evaluator=evaluate_agpd_co_bf_er_lh_ag10_no_bf,
         # beta_2_BF is fixed only as an identification convention: it is inactive when q = 1.
         fixed_parameters=(("q", 1.0), ("beta_2_BF", 0.0)),
+    ),
+    "CO_BF_ER_LH_Ag10_no_BF_neg": AgPdModelDefinition(
+        parameter_class=AgPdCOBFERRLHParameters,
+        evaluator=evaluate_agpd_co_bf_er_lh_ag10_no_bf,
     ),
     "CO_BF_ER_LH_capped": AgPdModelDefinition(
         parameter_class=AgPdCOBFERRLHParameters,
@@ -70,14 +83,15 @@ _AGPD_MODEL_REGISTRY = {
         evaluator=evaluate_agpd_co_bf_er_lh,
     ),
 }
-
 _MODEL_CONFIG_ALIASES = {
+    "CO_BF_ER_LH_q1": "CO_BF_ER_LH",
+    "CO_BF_ER_LH_neg": "CO_BF_ER_LH",
     "CO_BF_ER_LH_Ag10_no_BF": "CO_BF_ER_LH",
     "CO_BF_ER_LH_Ag10_no_BF_q1": "CO_BF_ER_LH",
+    "CO_BF_ER_LH_Ag10_no_BF_neg": "CO_BF_ER_LH",
     "CO_BF_ER_LH_capped": "CO_BF_ER_LH",
     "CO_BF_ER_LH_capped_Ag10_no_BF": "CO_BF_ER_LH",
 }
-
 _INDIVIDUAL_CO_MODELS = {
     "CO_LH",
     "CO_ER",
@@ -88,22 +102,29 @@ _INDIVIDUAL_CO_MODELS = {
     "CO_BF_ER_LH",
 }
 _FITTED_CAPS_MODEL = "CO_BF_ER_LH_fitted_caps_Ag10_no_BF"
+_NEGATIVE_BETA_BF_MODELS = {"CO_BF_ER_LH_neg", "CO_BF_ER_LH_Ag10_no_BF_neg"}
 _ALL_MATERIAL_ONLY_MODELS = {
+    "CO_BF_ER_LH_q1",
+    "CO_BF_ER_LH_neg",
     "CO_BF_ER_LH_Ag10_no_BF",
     "CO_BF_ER_LH_Ag10_no_BF_q1",
+    "CO_BF_ER_LH_Ag10_no_BF_neg",
     "CO_BF_ER_LH_capped_Ag10_no_BF",
     _FITTED_CAPS_MODEL,
 }
 _FULL_CO_MODELS = {
     "CO_BF_ER_LH",
+    "CO_BF_ER_LH_q1",
+    "CO_BF_ER_LH_neg",
     "CO_BF_ER_LH_Ag10_no_BF",
     "CO_BF_ER_LH_Ag10_no_BF_q1",
+    "CO_BF_ER_LH_Ag10_no_BF_neg",
     "CO_BF_ER_LH_capped",
     "CO_BF_ER_LH_capped_Ag10_no_BF",
     _FITTED_CAPS_MODEL,
 }
 _CAPPED_CO_MODELS = {"CO_BF_ER_LH_capped", "CO_BF_ER_LH_capped_Ag10_no_BF", _FITTED_CAPS_MODEL}
-_UNIT_INTERVAL_PARAMETERS = {"beta_2_BF", "beta_2_ER", "q"}
+_NORMALIZED_BOUNDED_LINEAR_PARAMETERS = {"beta_2_BF", "beta_2_ER", "q"}
 
 
 def _config_model_name(model_name):
@@ -117,8 +138,11 @@ def available_agpd_models():
 def available_agpd_all_material_models():
     return (
         "CO_BF_ER_LH",
+        "CO_BF_ER_LH_q1",
+        "CO_BF_ER_LH_neg",
         "CO_BF_ER_LH_Ag10_no_BF",
         "CO_BF_ER_LH_Ag10_no_BF_q1",
+        "CO_BF_ER_LH_Ag10_no_BF_neg",
         "CO_BF_ER_LH_capped",
         "CO_BF_ER_LH_capped_Ag10_no_BF",
         _FITTED_CAPS_MODEL,
@@ -142,6 +166,20 @@ def get_agpd_fixed_parameters(model_name):
     return fixed_parameters
 
 
+def _apply_model_prior_variant(config, model_name, profile):
+    if model_name not in _NEGATIVE_BETA_BF_MODELS:
+        return profile
+    try:
+        beta_override = config["prior_variants"]["negative_beta_BF"]["parameters"]["beta_2_BF"]
+    except KeyError as error:
+        raise ValueError("Negative-beta_BF models require prior_variants.negative_beta_BF.parameters.beta_2_BF.") from error
+    projected = dict(profile)
+    projected["parameters"] = dict(profile["parameters"])
+    projected["parameters"]["beta_2_BF"] = dict(beta_override)
+    projected["provenance"] = f"{profile.get('provenance', 'unspecified')}+negative_beta_BF"
+    return projected
+
+
 def get_agpd_prior_profile(config, material, model_name):
     if model_name == _FITTED_CAPS_MODEL:
         return config["fitted_cap_calibration"]
@@ -149,14 +187,12 @@ def get_agpd_prior_profile(config, material, model_name):
         config_model_name = "CO_BF_ER_LH"
     else:
         config_model_name = _config_model_name(model_name)
-
     try:
         profile = config["prior_profiles"][material][config_model_name]
     except KeyError as error:
         raise ValueError(f"No prior profile is defined for material '{material}' and model '{model_name}'.") from error
-
     if model_name not in _INDIVIDUAL_CO_MODELS:
-        return profile
+        return _apply_model_prior_variant(config, model_name, profile)
     definition = get_agpd_model_definition(model_name)
     parameter_names = tuple(field.name for field in fields(definition.parameter_class))
     missing = [name for name in parameter_names if name not in profile["parameters"]]
@@ -273,7 +309,6 @@ def get_agpd_all_material_parameter_specs(config, prior_material, model_name, pa
         cap_spec = config["fitted_cap_calibration"]["theta_CO_max_prior"]
         for material in config["surface_composition"]:
             parameter_specs[f"theta_CO_max_{material}"] = dict(cap_spec)
-
     return parameter_specs
 
 
@@ -283,7 +318,6 @@ def build_agpd_mechanism(model_name, material, config):
     definition = get_agpd_model_definition(model_name)
     if material not in config["surface_composition"]:
         raise ValueError(f"Material '{material}' has no surface-composition configuration.")
-
     profile = get_agpd_prior_profile(config, material, model_name)
     parameter_specs = profile["parameters"]
     _validate_parameter_specs(definition, parameter_specs, f"{material}/{model_name}")
@@ -345,6 +379,24 @@ def _evaluate_all_material_state(
     return definition.evaluator(state=state, parameters=parameters, temperature_K=config["temperature_K"])
 
 
+def _bounded_linear_max_abs_slope(parameter_name, base_value, parameter_specs, x_reference):
+    if not np.isclose(x_reference, 0.5):
+        raise ValueError("Bounded linear_xAg parameters currently require x_reference = 0.5.")
+    specification = parameter_specs[parameter_name]
+    try:
+        lower = float(specification["lower"])
+        upper = float(specification["upper"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError(
+            f"Bounded linear_xAg parameter '{parameter_name}' requires finite lower and upper prior bounds."
+        ) from error
+    if not np.isfinite(lower) or not np.isfinite(upper) or lower >= upper:
+        raise ValueError(
+            f"Bounded linear_xAg parameter '{parameter_name}' has invalid prior bounds [{lower}, {upper}]."
+        )
+    return 2.0 * pt.minimum(base_value - lower, upper - base_value)
+
+
 def build_agpd_all_material_mechanism(
     model_name,
     materials,
@@ -369,7 +421,6 @@ def build_agpd_all_material_mechanism(
     missing = [material for material in materials if material not in config["surface_composition"]]
     if missing:
         raise ValueError(f"Missing surface-composition configuration for materials: {missing}.")
-
     definition = get_agpd_model_definition(model_name)
     profile = get_agpd_prior_profile(config, prior_material, model_name)
     _validate_parameter_specs(definition, profile["parameters"], f"{prior_material}/{model_name}")
@@ -410,10 +461,13 @@ def build_agpd_all_material_mechanism(
             for parameter_name in slope_specs:
                 slope_name = f"{parameter_name}_xAg_slope"
                 slope = slope_values[slope_name]
-                if parameter_name in _UNIT_INTERVAL_PARAMETERS:
-                    if not np.isclose(x_reference, 0.5):
-                        raise ValueError("Bounded linear_xAg parameters currently require x_reference = 0.5.")
-                    max_abs_slope = 2.0 * pt.minimum(prior_values[parameter_name], 1.0 - prior_values[parameter_name])
+                if parameter_name in _NORMALIZED_BOUNDED_LINEAR_PARAMETERS:
+                    max_abs_slope = _bounded_linear_max_abs_slope(
+                        parameter_name=parameter_name,
+                        base_value=prior_values[parameter_name],
+                        parameter_specs=parameter_specs,
+                        x_reference=x_reference,
+                    )
                     slope = slope * max_abs_slope
                 effective_values[parameter_name] = prior_values[parameter_name] + slope * x_shift
         theta_CO_max_override = None

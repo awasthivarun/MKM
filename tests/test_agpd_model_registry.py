@@ -50,8 +50,11 @@ def test_agpd_registry_keeps_individual_co_pathway_subsets_and_all_material_mode
         "CO_BF_LH",
         "CO_BF_ER",
         "CO_BF_ER_LH",
+        "CO_BF_ER_LH_q1",
+        "CO_BF_ER_LH_neg",
         "CO_BF_ER_LH_Ag10_no_BF",
         "CO_BF_ER_LH_Ag10_no_BF_q1",
+        "CO_BF_ER_LH_Ag10_no_BF_neg",
         "CO_BF_ER_LH_capped",
         "CO_BF_ER_LH_capped_Ag10_no_BF",
         "CO_BF_ER_LH_fitted_caps_Ag10_no_BF",
@@ -59,8 +62,11 @@ def test_agpd_registry_keeps_individual_co_pathway_subsets_and_all_material_mode
 
     assert available_agpd_all_material_models() == (
         "CO_BF_ER_LH",
+        "CO_BF_ER_LH_q1",
+        "CO_BF_ER_LH_neg",
         "CO_BF_ER_LH_Ag10_no_BF",
         "CO_BF_ER_LH_Ag10_no_BF_q1",
+        "CO_BF_ER_LH_Ag10_no_BF_neg",
         "CO_BF_ER_LH_capped",
         "CO_BF_ER_LH_capped_Ag10_no_BF",
         "CO_BF_ER_LH_fitted_caps_Ag10_no_BF",

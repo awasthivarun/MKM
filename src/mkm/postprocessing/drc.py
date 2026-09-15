@@ -11,10 +11,11 @@ import xarray as xr
 from mkm.constants import K_B_EV_K
 from mkm.mechanisms.agpd_basic import build_agpd_point_state
 from mkm.models.agpd_basic import (
-    _UNIT_INTERVAL_PARAMETERS,
+    _NORMALIZED_BOUNDED_LINEAR_PARAMETERS,
     get_agpd_fixed_parameters,
     get_agpd_model_definition,
     get_agpd_parameterization,
+    get_agpd_prior_profile,
 )
 from mkm.postprocessing.diagnostics import summarize_samples
 
@@ -111,6 +112,9 @@ _TRANSITION_STATE_CONTROLS["CO_BF_ER_LH_Ag10_no_BF"] = _TRANSITION_STATE_CONTROL
 _TRANSITION_STATE_CONTROLS["CO_BF_ER_LH_capped_Ag10_no_BF"] = _TRANSITION_STATE_CONTROLS["CO_BF_ER_LH"]
 _TRANSITION_STATE_CONTROLS["CO_BF_ER_LH_fitted_caps_Ag10_no_BF"] = _TRANSITION_STATE_CONTROLS["CO_BF_ER_LH"]
 _TRANSITION_STATE_CONTROLS["CO_BF_ER_LH_Ag10_no_BF_q1"] = _TRANSITION_STATE_CONTROLS["CO_BF_ER_LH"]
+_TRANSITION_STATE_CONTROLS["CO_BF_ER_LH_q1"] = _TRANSITION_STATE_CONTROLS["CO_BF_ER_LH"]
+_TRANSITION_STATE_CONTROLS["CO_BF_ER_LH_neg"] = _TRANSITION_STATE_CONTROLS["CO_BF_ER_LH"]
+_TRANSITION_STATE_CONTROLS["CO_BF_ER_LH_Ag10_no_BF_neg"] = _TRANSITION_STATE_CONTROLS["CO_BF_ER_LH"]
 
 
 def transition_state_controls(model_name):
@@ -420,12 +424,13 @@ def compute_composition_transition_state_drc(
     config,
     parameterization,
     step_eV=1e-4,
+    prior_material="Ag10Pd90",
 ):
     """Compute TS DRCs using effective transition-state energies at each composition.
 
     For shared energetics this reduces to the ordinary transition-state DRC.
     For composition-dependent fits, fitted reference values and slopes first
-    generate pointwise effective mechanism parameters. Unit-interval parameters
+    generate pointwise effective mechanism parameters. Bounded parameters
     use the same normalized slope convention as the fitted AgPd model.
 
     The finite-difference perturbation is then applied to the effective
@@ -458,6 +463,10 @@ def compute_composition_transition_state_drc(
         )
 
     controls = transition_state_controls(model_name)
+    bounded_slope_parameters = set(slope_specs) & _NORMALIZED_BOUNDED_LINEAR_PARAMETERS
+    parameter_specs = {}
+    if bounded_slope_parameters:
+        parameter_specs = get_agpd_prior_profile(config, prior_material, model_name)["parameters"]
     parameter_names, function, state = _compile_pointwise_log_rate_evaluator(
         model_name,
         point_inputs,
@@ -517,17 +526,26 @@ def compute_composition_transition_state_drc(
                 reference_value = posterior_draws[parameter_name][chain, draw]
                 slope = posterior_draws[slope_name][chain, draw]
 
-                if parameter_name in _UNIT_INTERVAL_PARAMETERS:
+                if parameter_name in _NORMALIZED_BOUNDED_LINEAR_PARAMETERS:
                     if not np.isclose(x_reference, 0.5):
                         raise ValueError(
                             "Bounded linear_xAg parameters currently require "
                             "x_reference = 0.5."
                         )
-
-                    max_abs_slope = 2.0 * min(
-                        reference_value,
-                        1.0 - reference_value,
-                    )
+                    specification = parameter_specs[parameter_name]
+                    try:
+                        lower = float(specification["lower"])
+                        upper = float(specification["upper"])
+                    except (KeyError, TypeError, ValueError) as error:
+                        raise ValueError(
+                            f"Bounded linear_xAg parameter '{parameter_name}' requires finite prior bounds."
+                        ) from error
+                    if not np.isfinite(lower) or not np.isfinite(upper) or lower >= upper:
+                        raise ValueError(
+                            f"Bounded linear_xAg parameter '{parameter_name}' has invalid prior bounds "
+                            f"[{lower}, {upper}]."
+                        )
+                    max_abs_slope = 2.0 * min(reference_value - lower, upper - reference_value)
                     slope = slope * max_abs_slope
 
                 effective[parameter_name] = (

@@ -10,10 +10,11 @@ import xarray as xr
 from matplotlib.ticker import FormatStrFormatter
 
 from mkm.models.agpd_basic import (
-    _UNIT_INTERVAL_PARAMETERS,
+    _NORMALIZED_BOUNDED_LINEAR_PARAMETERS,
     get_agpd_fixed_parameters,
     get_agpd_model_definition,
     get_agpd_parameterization,
+    get_agpd_prior_profile,
 )
 from mkm.postprocessing.diagnostics import summarize_samples
 from mkm.postprocessing.plotting import (
@@ -108,6 +109,7 @@ def build_agpd_composition_parameter_trends(
     model_name,
     parameterization="linear_xAg",
     n_grid=181,
+    prior_material="Ag10Pd90",
 ):
     """Summarize effective mechanism parameters across the configured xAg range."""
     posterior = _posterior_dataset(inference_data.posterior)
@@ -120,6 +122,10 @@ def build_agpd_composition_parameter_trends(
         model_name=model_name,
         parameterization=parameterization,
     )
+    bounded_slope_parameters = set(slope_specs) & _NORMALIZED_BOUNDED_LINEAR_PARAMETERS
+    parameter_specs = {}
+    if bounded_slope_parameters:
+        parameter_specs = get_agpd_prior_profile(config, prior_material, model_name)["parameters"]
     materials = _composition_x_values(config)
     x_grid = np.linspace(
         float(materials["xAg"].min()),
@@ -138,10 +144,22 @@ def build_agpd_composition_parameter_trends(
 
         if is_x_dependent:
             slope = _scalar_draws(posterior, f"{parameter}_xAg_slope")
-            if parameter in _UNIT_INTERVAL_PARAMETERS:
+            if parameter in _NORMALIZED_BOUNDED_LINEAR_PARAMETERS:
                 if not np.isclose(x_reference, 0.5):
                     raise ValueError("Bounded linear_xAg parameters currently require x_reference = 0.5.")
-                max_abs_slope = 2.0 * np.minimum(base, 1.0 - base)
+                specification = parameter_specs[parameter]
+                try:
+                    lower = float(specification["lower"])
+                    upper = float(specification["upper"])
+                except (KeyError, TypeError, ValueError) as error:
+                    raise ValueError(
+                        f"Bounded linear_xAg parameter '{parameter}' requires finite lower and upper prior bounds."
+                    ) from error
+                if not np.isfinite(lower) or not np.isfinite(upper) or lower >= upper:
+                    raise ValueError(
+                        f"Bounded linear_xAg parameter '{parameter}' has invalid prior bounds [{lower}, {upper}]."
+                    )
+                max_abs_slope = 2.0 * np.minimum(base - lower, upper - base)
                 slope = slope * max_abs_slope
             draws = base[:, None] + slope[:, None] * (x_grid[None, :] - float(x_reference))
         else:

@@ -355,6 +355,17 @@ LOCO/LOMO validation is nested under the corresponding full all-material fit dir
 - posterior diagnostics/plots: `src/mkm/postprocessing/`
 - canonical CLI behavior: `scripts/`
 
+### Adding a new AgPd model variant
+
+When a new AgPd model identity is added, check the following places:
+
+- `src/mkm/models/agpd_basic.py`: registry entry, config alias, model-availability sets/tuples, and any model-specific parameterization logic;
+- `config/models/agpd_basic.yaml`: prior profile and composition-parameterization entries when the new model differs from its parent;
+- `src/mkm/postprocessing/drc.py`: transition-state-control alias when the new model shares an existing mechanism;
+- `scripts/run_agpd_individual_grid.py`: runner selector/comparison membership when the model should be included in automated all-material runs;
+- `tests/test_agpd_model_registry.py` and any model-specific tests: update exact model lists and test the new behavior;
+- search the repository for explicit enumerations of sibling model names, since not every model-specific mapping is derived from the central registry.
+
 ## Data contract
 
 This file documents the AgPd basic-media data contract from raw workbooks through the arrays consumed by PyMC.

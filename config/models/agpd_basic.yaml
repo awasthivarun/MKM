@@ -176,6 +176,16 @@ fitted_cap_calibration:
       lower: -1
       upper: 1
 
+prior_variants:
+  negative_beta_BF:
+    parameters:
+      beta_2_BF:
+        distribution: truncated_normal
+        mu: 0
+        sigma: 1
+        lower: -1
+        upper: 1
+
 composition_parameterizations:
   shared:
     x_reference: 0.50
@@ -230,19 +240,19 @@ composition_parameterizations:
             sigma: 0.1 
             lower: -0.4
             upper: 1 # Increased to prevent hitting the wall 
-          beta_2_BF: # Do not change - this is percentage change
+          beta_2_BF: # Normalized fraction of the maximum symmetric bounded slope
             distribution: truncated_normal
             mu: 0
             sigma: 1
             lower: -1
             upper: 1
-          beta_2_ER: # Do not change - this is percentage change
+          beta_2_ER: # Normalized fraction of the maximum symmetric bounded slope
             distribution: truncated_normal
             mu: 0
             sigma: 1
             lower: -1
             upper: 1
-          q: # Do not change - this is percentage change
+          q: # Normalized fraction of the maximum symmetric bounded slope
             distribution: truncated_normal
             mu: 0
             sigma: 1
