@@ -1,4 +1,4 @@
-"""Run the complete AgPd individual-material finite-rate CO model grid."""
+"""Run the complete AgPd individual-material and all-material finite-rate CO fit grid."""
 
 from argparse import ArgumentParser
 import csv
@@ -15,12 +15,28 @@ import yaml
 ALLOY_MATERIALS = ("Ag10Pd90", "Ag25Pd75", "Ag50Pd50", "Ag75Pd25", "Ag90Pd10")
 ALLOY_MODELS = ("CO_LH", "CO_ER", "CO_BF", "CO_ER_LH", "CO_BF_LH", "CO_BF_ER", "CO_BF_ER_LH")
 PD_MODELS = ("CO_LH", "CO_ER", "CO_ER_LH")
+
+ALL_MATERIAL_PARAMETERIZATION = "linear_xAg"
+ALL_MATERIAL_ERROR_STRUCTURE = "shared"
+ALL_MATERIAL_PRIOR_MATERIAL = "Ag10Pd90"
+ALL_MATERIAL_RUNS = (
+    ("Full", "CO_BF_ER_LH"),
+    ("Ag10_no_BF", "CO_BF_ER_LH_Ag10_no_BF"),
+    ("Ag10_no_BF_q1", "CO_BF_ER_LH_Ag10_no_BF_q1"),
+)
+ALL_MATERIAL_COMPARISON_NAME = "all_materials_shared_models"
+
 TARGET_ACCEPT_SEQUENCE = (0.90, 0.95, 0.99)
 
 DIAGNOSTIC_FIELDS = (
     "grid_started_utc",
+    "fit_scope",
     "material",
     "model",
+    "display_name",
+    "parameterization",
+    "error_structure",
+    "prior_material",
     "attempt",
     "target_accept",
     "terminal_attempt",
@@ -75,6 +91,8 @@ DIAGNOSTIC_FIELDS = (
     "postprocess_status_error",
     "drc_returncode",
     "drc_wall_seconds",
+    "composition_returncode",
+    "composition_wall_seconds",
     "comparison_included",
     "comparison_excluded_reason",
     "comparison_name",
@@ -95,7 +113,15 @@ def parse_args():
     parser.add_argument(
         "--compare-only",
         action="store_true",
-        help="Rebuild per-material model comparisons from the existing grid diagnostics without rerunning fits.",
+        help="Rebuild comparisons from the diagnostics CSV for the selected run scope.",
+    )
+    parser.add_argument(
+        "--all-materials-only",
+        action="store_true",
+        help=(
+            "Run only the three configured all-material linear_xAg fits. "
+            "Their diagnostics are written separately under the all-material shared-error directory."
+        ),
     )
     parser.add_argument("--stop-on-error", action="store_true")
     args = parser.parse_args()
@@ -115,55 +141,149 @@ def _run(command):
     return returncode, perf_counter() - start
 
 
+def _posterior_root(root):
+    return root / "results" / "AgPd_COOx_basic" / "posterior"
+
+
 def _individual_root(root):
-    return root / "results" / "AgPd_COOx_basic" / "posterior" / "individual"
+    return _posterior_root(root) / "individual"
 
 
-def _fit_dir(root, material, model):
-    return _individual_root(root) / material / model
+def _all_material_root(root):
+    return (
+        _posterior_root(root)
+        / "all_materials"
+        / ALL_MATERIAL_PARAMETERIZATION
+        / ALL_MATERIAL_ERROR_STRUCTURE
+    )
 
 
-def _fit_command(root, model, material, target_accept, overwrite):
+def _diagnostics_path(root, all_materials_only):
+    if all_materials_only:
+        return _all_material_root(root) / "all_material_grid_diagnostics.csv"
+    return _individual_root(root) / "individual_grid_diagnostics.csv"
+
+
+def _fit_dir(root, job):
+    if job["fit_scope"] == "individual":
+        return _individual_root(root) / job["material"] / job["model"]
+    return (
+        _posterior_root(root)
+        / "all_materials"
+        / job["parameterization"]
+        / job["error_structure"]
+        / job["model"]
+    )
+
+
+def _fit_command(root, job, target_accept, overwrite):
     command = [
         sys.executable,
         str(root / "scripts" / "fit_agpd_posterior.py"),
-        model,
-        "--material",
-        material,
-        "--error-structure",
-        "material",
-        "--target-accept",
-        f"{target_accept:.2f}",
+        job["model"],
     ]
+    if job["fit_scope"] == "individual":
+        command.extend(
+            [
+                "--material",
+                job["material"],
+                "--error-structure",
+                "material",
+            ]
+        )
+    else:
+        command.extend(
+            [
+                "--all-materials",
+                "--parameterization",
+                job["parameterization"],
+                "--error-structure",
+                job["error_structure"],
+                "--prior-material",
+                job["prior_material"],
+            ]
+        )
+    command.extend(["--target-accept", f"{target_accept:.2f}"])
     if overwrite:
         command.append("--overwrite")
     return command
 
 
-def _postprocess_command(root, model, material):
-    return [
+def _postprocess_command(root, job):
+    command = [
         sys.executable,
         str(root / "scripts" / "postprocess_agpd_posterior.py"),
-        model,
-        "--material",
-        material,
-        "--error-structure",
-        "material",
-        "--plot-level",
-        "full",
+        job["model"],
     ]
+    if job["fit_scope"] == "individual":
+        command.extend(
+            [
+                "--material",
+                job["material"],
+                "--error-structure",
+                "material",
+            ]
+        )
+    else:
+        command.extend(
+            [
+                "--all-materials",
+                "--parameterization",
+                job["parameterization"],
+                "--error-structure",
+                job["error_structure"],
+                "--prior-material",
+                job["prior_material"],
+            ]
+        )
+    command.extend(["--plot-level", "full"])
+    return command
 
 
-def _drc_command(root, model, material):
-    return [
+def _drc_command(root, job):
+    command = [
         sys.executable,
         str(root / "scripts" / "postprocess_agpd_drc.py"),
-        model,
-        "--material",
-        material,
+        job["model"],
+    ]
+    if job["fit_scope"] == "individual":
+        command.extend(
+            [
+                "--material",
+                job["material"],
+                "--error-structure",
+                "material",
+            ]
+        )
+    else:
+        command.extend(
+            [
+                "--all-materials",
+                "--parameterization",
+                job["parameterization"],
+                "--error-structure",
+                job["error_structure"],
+                "--prior-material",
+                job["prior_material"],
+            ]
+        )
+    command.append("--check-half-step")
+    return command
+
+
+def _composition_command(root, job):
+    if job["fit_scope"] != "all_materials":
+        raise ValueError("Composition-parameter plots are only defined for all-material fits.")
+    return [
+        sys.executable,
+        str(root / "scripts" / "plot_agpd_composition_parameters.py"),
+        job["model"],
+        "--parameterization",
+        job["parameterization"],
         "--error-structure",
-        "material",
-        "--check-half-step",
+        job["error_structure"],
+        "--prior-material",
+        job["prior_material"],
     ]
 
 
@@ -171,7 +291,7 @@ def _comparison_name(material):
     return f"{material}_all_models"
 
 
-def _comparison_command(root, material, models):
+def _individual_comparison_command(root, material, models):
     command = [
         sys.executable,
         str(root / "scripts" / "compare_agpd_models.py"),
@@ -183,6 +303,61 @@ def _comparison_command(root, material, models):
     for model in models:
         command.extend(["--run", f"{model},{model}"])
     return command
+
+
+def _all_material_comparison_command(root, jobs):
+    command = [
+        sys.executable,
+        str(root / "scripts" / "compare_agpd_models.py"),
+        "--comparison-name",
+        ALL_MATERIAL_COMPARISON_NAME,
+        "--all-materials",
+        "--prior-material",
+        ALL_MATERIAL_PRIOR_MATERIAL,
+    ]
+    for job in jobs:
+        command.extend(
+            [
+                "--run",
+                ",".join(
+                    (
+                        job["display_name"],
+                        job["model"],
+                        job["parameterization"],
+                        job["error_structure"],
+                    )
+                ),
+            ]
+        )
+    return command
+
+
+def _individual_job(material, model):
+    return {
+        "fit_scope": "individual",
+        "material": material,
+        "model": model,
+        "display_name": model,
+        "parameterization": "",
+        "error_structure": "material",
+        "prior_material": material,
+    }
+
+
+def _all_material_job(display_name, model):
+    return {
+        "fit_scope": "all_materials",
+        "material": "",
+        "model": model,
+        "display_name": display_name,
+        "parameterization": ALL_MATERIAL_PARAMETERIZATION,
+        "error_structure": ALL_MATERIAL_ERROR_STRUCTURE,
+        "prior_material": ALL_MATERIAL_PRIOR_MATERIAL,
+    }
+
+
+def _all_material_jobs():
+    return tuple(_all_material_job(display_name, model) for display_name, model in ALL_MATERIAL_RUNS)
 
 
 def _as_float(value):
@@ -213,16 +388,11 @@ def _as_bool(value):
 def _read_diagnostics(path):
     if not path.exists():
         raise FileNotFoundError(
-            f"Grid diagnostics do not exist: {path}. Run the full individual grid before using --compare-only."
+            f"Grid diagnostics do not exist: {path}. Run the full fit grid before using --compare-only."
         )
-
     with open(path, "r", newline="") as file:
         rows = list(csv.DictReader(file))
-
-    return [
-        {field: row.get(field, "") for field in DIAGNOSTIC_FIELDS}
-        for row in rows
-    ]
+    return [{field: row.get(field, "") for field in DIAGNOSTIC_FIELDS} for row in rows]
 
 
 def _read_metadata(run_dir):
@@ -336,8 +506,7 @@ def _sampling_status(record):
     if record["treedepth_class"] == "severe":
         hard_failures.append("max-treedepth fraction >= 5%")
 
-    # R-hat and ESS are intentionally warnings, not automatic failures. Broad or numerically
-    # redundant kinetic parameters can mix poorly while leaving the model predictions effectively unchanged.
+    # R-hat and ESS remain warnings rather than automatic failures, matching the previous grid runner.
     if record["rhat_class"] in {"mild", "high", "severe"}:
         cautions.append(f"R-hat {record['rhat_class']}")
     if record["ess_bulk_class"] in {"caution", "low"}:
@@ -356,11 +525,16 @@ def _sampling_status(record):
     return "PASS", ""
 
 
-def _attempt_record(grid_started_utc, material, model, attempt, target_accept):
+def _attempt_record(grid_started_utc, job, attempt, target_accept):
     return {field: "" for field in DIAGNOSTIC_FIELDS} | {
         "grid_started_utc": grid_started_utc,
-        "material": material,
-        "model": model,
+        "fit_scope": job["fit_scope"],
+        "material": job["material"],
+        "model": job["model"],
+        "display_name": job["display_name"],
+        "parameterization": job["parameterization"],
+        "error_structure": job["error_structure"],
+        "prior_material": job["prior_material"],
         "attempt": attempt,
         "target_accept": target_accept,
         "terminal_attempt": False,
@@ -477,14 +651,14 @@ def _write_diagnostics(path, records):
         writer.writerows(records)
 
 
-def _run_one_fit(root, args, grid_started_utc, diagnostics_path, records, material, model):
-    run_dir = _fit_dir(root, material, model)
+def _run_one_fit(root, args, grid_started_utc, diagnostics_path, records, job):
+    run_dir = _fit_dir(root, job)
 
     for attempt, target_accept in enumerate(TARGET_ACCEPT_SEQUENCE, start=1):
-        record = _attempt_record(grid_started_utc, material, model, attempt, target_accept)
+        record = _attempt_record(grid_started_utc, job, attempt, target_accept)
         overwrite = args.overwrite if attempt == 1 else True
 
-        fit_returncode, fit_seconds = _run(_fit_command(root, model, material, target_accept, overwrite))
+        fit_returncode, fit_seconds = _run(_fit_command(root, job, target_accept, overwrite))
         record["fit_returncode"] = fit_returncode
         record["fit_wall_seconds"] = f"{fit_seconds:.3f}"
 
@@ -504,9 +678,7 @@ def _run_one_fit(root, args, grid_started_utc, diagnostics_path, records, materi
             record["terminal_attempt"] = True
         elif n_divergent and target_accept < TARGET_ACCEPT_SEQUENCE[-1]:
             record["sampling_status"] = "RETRY_DIVERGENCES"
-            record["status_reasons"] = (
-                f"{n_divergent} divergence(s); retrying at the next target_accept"
-            )
+            record["status_reasons"] = f"{n_divergent} divergence(s); retrying at the next target_accept"
             records.append(record)
             _write_diagnostics(diagnostics_path, records)
             continue
@@ -524,7 +696,7 @@ def _run_one_fit(root, args, grid_started_utc, diagnostics_path, records, materi
         records.append(record)
         _write_diagnostics(diagnostics_path, records)
 
-        post_returncode, post_seconds = _run(_postprocess_command(root, model, material))
+        post_returncode, post_seconds = _run(_postprocess_command(root, job))
         record["postprocess_returncode"] = post_returncode
         record["postprocess_wall_seconds"] = f"{post_seconds:.3f}"
         _populate_postprocessing_status(record, run_dir)
@@ -532,10 +704,16 @@ def _run_one_fit(root, args, grid_started_utc, diagnostics_path, records, materi
             _exclude_from_comparison(record, "PSIS-LOO failed during postprocessing")
         _write_diagnostics(diagnostics_path, records)
 
-        drc_returncode, drc_seconds = _run(_drc_command(root, model, material))
+        drc_returncode, drc_seconds = _run(_drc_command(root, job))
         record["drc_returncode"] = drc_returncode
         record["drc_wall_seconds"] = f"{drc_seconds:.3f}"
         _write_diagnostics(diagnostics_path, records)
+
+        if job["fit_scope"] == "all_materials":
+            composition_returncode, composition_seconds = _run(_composition_command(root, job))
+            record["composition_returncode"] = composition_returncode
+            record["composition_wall_seconds"] = f"{composition_seconds:.3f}"
+            _write_diagnostics(diagnostics_path, records)
 
         return record
 
@@ -544,9 +722,7 @@ def _run_one_fit(root, args, grid_started_utc, diagnostics_path, records, materi
 
 def _run_material_comparison(root, diagnostics_path, records, material, final_records):
     eligible_models = [
-        model
-        for model, record in final_records.items()
-        if record.get("comparison_included") is True
+        model for model, record in final_records.items() if record.get("comparison_included") is True
     ]
     comparison_name = _comparison_name(material)
     comparison_models = ";".join(eligible_models)
@@ -556,7 +732,7 @@ def _run_material_comparison(root, diagnostics_path, records, material, final_re
         returncode = ""
         seconds = ""
     else:
-        returncode, elapsed = _run(_comparison_command(root, material, eligible_models))
+        returncode, elapsed = _run(_individual_comparison_command(root, material, eligible_models))
         seconds = f"{elapsed:.3f}"
         status = "COMPLETE" if returncode == 0 else "COMPARISON_ERROR"
 
@@ -571,11 +747,61 @@ def _run_material_comparison(root, diagnostics_path, records, material, final_re
     return returncode
 
 
+def _run_all_material_comparison(root, diagnostics_path, records, final_records):
+    jobs_by_model = {job["model"]: job for job in _all_material_jobs()}
+    eligible_jobs = [
+        jobs_by_model[model]
+        for model, record in final_records.items()
+        if model in jobs_by_model and record.get("comparison_included") is True
+    ]
+    comparison_models = ";".join(f"{job['display_name']}={job['model']}" for job in eligible_jobs)
+
+    if len(eligible_jobs) < 2:
+        status = "SKIPPED_FEWER_THAN_TWO_ELIGIBLE_MODELS"
+        returncode = ""
+        seconds = ""
+    else:
+        returncode, elapsed = _run(_all_material_comparison_command(root, eligible_jobs))
+        seconds = f"{elapsed:.3f}"
+        status = "COMPLETE" if returncode == 0 else "COMPARISON_ERROR"
+
+    for record in final_records.values():
+        record["comparison_name"] = ALL_MATERIAL_COMPARISON_NAME
+        record["comparison_models"] = comparison_models
+        record["comparison_returncode"] = returncode
+        record["comparison_wall_seconds"] = seconds
+        record["comparison_status"] = status
+
+    _write_diagnostics(diagnostics_path, records)
+    return returncode
+
+
+def _record_scope(record):
+    scope = str(record.get("fit_scope", "")).strip()
+    return scope or "individual"
+
+
 def _terminal_records_by_model(records, material):
     final_records = {}
     valid_models = set(_material_models(material))
     for record in records:
+        if _record_scope(record) != "individual":
+            continue
         if record.get("material") != material:
+            continue
+        if record.get("model") not in valid_models:
+            continue
+        if not _as_bool(record.get("terminal_attempt")):
+            continue
+        final_records[record["model"]] = record
+    return final_records
+
+
+def _terminal_all_material_records_by_model(records):
+    final_records = {}
+    valid_models = {model for _, model in ALL_MATERIAL_RUNS}
+    for record in records:
+        if _record_scope(record) != "all_materials":
             continue
         if record.get("model") not in valid_models:
             continue
@@ -587,65 +813,83 @@ def _terminal_records_by_model(records, material):
 
 def _run_compare_only(root, args, diagnostics_path):
     records = _read_diagnostics(diagnostics_path)
-    materials = (*ALLOY_MATERIALS, "Pd100")
     comparison_failures = []
-    n_materials = 0
+    n_comparisons = 0
 
     print(f"Rebuilding model comparisons from: {diagnostics_path}", flush=True)
 
-    for material in materials:
+    for material in (*ALLOY_MATERIALS, "Pd100"):
         final_records = _terminal_records_by_model(records, material)
         if not final_records:
             print(f"Skipping {material}: no terminal fit records in diagnostics.", flush=True)
             continue
 
-        n_materials += 1
         eligible_models = [
-            model
-            for model, record in final_records.items()
-            if _as_bool(record.get("comparison_included"))
+            model for model, record in final_records.items() if _as_bool(record.get("comparison_included"))
         ]
         print(
             f"\n{material}: rebuilding {_comparison_name(material)} with "
             f"{len(eligible_models)}/{len(final_records)} eligible model(s).",
             flush=True,
         )
-
-        returncode = _run_material_comparison(
-            root,
-            diagnostics_path,
-            records,
-            material,
-            final_records,
-        )
+        n_comparisons += 1
+        returncode = _run_material_comparison(root, diagnostics_path, records, material, final_records)
         if returncode not in ("", None, 0):
             comparison_failures.append((material, returncode))
             if args.stop_on_error:
                 break
 
+    if not (args.stop_on_error and comparison_failures):
+        final_records = _terminal_all_material_records_by_model(records)
+        if final_records:
+            eligible_models = [
+                model for model, record in final_records.items() if _as_bool(record.get("comparison_included"))
+            ]
+            print(
+                f"\nAll materials: rebuilding {ALL_MATERIAL_COMPARISON_NAME} with "
+                f"{len(eligible_models)}/{len(final_records)} eligible model(s).",
+                flush=True,
+            )
+            n_comparisons += 1
+            returncode = _run_all_material_comparison(root, diagnostics_path, records, final_records)
+            if returncode not in ("", None, 0):
+                comparison_failures.append(("all_materials", returncode))
+        else:
+            print("Skipping all-material comparison: no terminal all-material fit records in diagnostics.", flush=True)
+
     print("\n" + "=" * 80)
     print(f"Diagnostics updated at: {diagnostics_path}")
-    if n_materials == 0:
-        print("No material comparisons were rebuilt.")
+    if n_comparisons == 0:
+        print("No model comparisons were rebuilt.")
         raise SystemExit(1)
     if comparison_failures:
         print(f"Comparison failures recorded: {len(comparison_failures)}")
-        for material, returncode in comparison_failures:
-            print(f"  {material}: exit {returncode}")
+        for name, returncode in comparison_failures:
+            print(f"  {name}: exit {returncode}")
         raise SystemExit(1)
-
-    print(f"Rebuilt comparisons for {n_materials} material(s).")
+    print(f"Rebuilt {n_comparisons} comparison(s).")
 
 
 def _material_models(material):
     return PD_MODELS if material == "Pd100" else ALLOY_MODELS
 
 
+def _collect_command_failures(record):
+    failures = []
+    stages = ["fit", "postprocess", "drc"]
+    if record.get("fit_scope") == "all_materials":
+        stages.append("composition")
+    for stage in stages:
+        returncode = record.get(f"{stage}_returncode")
+        if returncode not in ("", None, 0):
+            failures.append((stage, returncode))
+    return failures
+
+
 def main():
     args = parse_args()
     root = Path(__file__).resolve().parents[1]
-    individual_root = _individual_root(root)
-    diagnostics_path = individual_root / "individual_grid_diagnostics.csv"
+    diagnostics_path = _diagnostics_path(root, args.all_materials_only)
 
     if args.compare_only:
         _run_compare_only(root, args, diagnostics_path)
@@ -655,11 +899,15 @@ def main():
     records = []
     _write_diagnostics(diagnostics_path, records)
 
-    materials = (*ALLOY_MATERIALS, "Pd100")
-    total_jobs = sum(len(_material_models(material)) for material in materials)
+    materials = () if args.all_materials_only else (*ALLOY_MATERIALS, "Pd100")
+    individual_jobs = sum(len(_material_models(material)) for material in materials)
+    all_material_jobs = len(ALL_MATERIAL_RUNS)
+    total_jobs = individual_jobs + all_material_jobs
     print(
-        f"Queued {total_jobs} individual fits. Divergences trigger target_accept retries at "
-        f"{TARGET_ACCEPT_SEQUENCE}; terminal fits get full postprocessing and half-step DRC checks.",
+        f"Queued {individual_jobs} individual fits plus {all_material_jobs} all-material fits "
+        f"({total_jobs} total). Divergences trigger target_accept retries at {TARGET_ACCEPT_SEQUENCE}; "
+        "terminal fits get full postprocessing and half-step DRC checks; all-material fits also get "
+        "composition-parameter plots.",
         flush=True,
     )
     print(f"Persistent diagnostics: {diagnostics_path}", flush=True)
@@ -671,31 +919,25 @@ def main():
 
     for material in materials:
         final_records = {}
-        print(f"\n{'#' * 80}\nMATERIAL: {material}\n{'#' * 80}", flush=True)
+        print(f"\n{'#' * 80}\nINDIVIDUAL MATERIAL: {material}\n{'#' * 80}", flush=True)
 
         for model in _material_models(material):
             completed_jobs += 1
-            print(f"\n{'=' * 80}\n[{completed_jobs}/{total_jobs}] {material} / {model}\n{'=' * 80}", flush=True)
-            record = _run_one_fit(
-                root,
-                args,
-                grid_started_utc,
-                diagnostics_path,
-                records,
-                material,
-                model,
+            job = _individual_job(material, model)
+            print(
+                f"\n{'=' * 80}\n[{completed_jobs}/{total_jobs}] {material} / {model}\n{'=' * 80}",
+                flush=True,
             )
+            record = _run_one_fit(root, args, grid_started_utc, diagnostics_path, records, job)
             final_records[model] = record
 
             if record["sampling_status"] in {"FIT_ERROR", "FAIL_DIAGNOSTICS", "FAIL_SAMPLER_HEALTH"}:
-                hard_failures.append((material, model, record["sampling_status"]))
+                hard_failures.append(("individual", material, model, record["sampling_status"]))
 
-            for stage in ("fit", "postprocess", "drc"):
-                returncode = record.get(f"{stage}_returncode")
-                if returncode not in ("", None, 0):
-                    command_failures.append((material, model, stage, returncode))
-                    if args.stop_on_error:
-                        stop_requested = True
+            for stage, returncode in _collect_command_failures(record):
+                command_failures.append(("individual", material, model, stage, returncode))
+                if args.stop_on_error:
+                    stop_requested = True
 
             if stop_requested:
                 break
@@ -709,12 +951,46 @@ def main():
                 final_records,
             )
             if comparison_returncode not in ("", None, 0):
-                command_failures.append((material, "", "comparison", comparison_returncode))
+                command_failures.append(("individual", material, "", "comparison", comparison_returncode))
                 if args.stop_on_error:
                     stop_requested = True
 
         if stop_requested:
             break
+
+    all_material_final_records = {}
+    if not stop_requested:
+        print(f"\n{'#' * 80}\nALL-MATERIAL FITS\n{'#' * 80}", flush=True)
+        for job in _all_material_jobs():
+            completed_jobs += 1
+            print(
+                f"\n{'=' * 80}\n[{completed_jobs}/{total_jobs}] "
+                f"{job['display_name']} ({job['model']})\n{'=' * 80}",
+                flush=True,
+            )
+            record = _run_one_fit(root, args, grid_started_utc, diagnostics_path, records, job)
+            all_material_final_records[job["model"]] = record
+
+            if record["sampling_status"] in {"FIT_ERROR", "FAIL_DIAGNOSTICS", "FAIL_SAMPLER_HEALTH"}:
+                hard_failures.append(("all_materials", "", job["display_name"], record["sampling_status"]))
+
+            for stage, returncode in _collect_command_failures(record):
+                command_failures.append(("all_materials", "", job["display_name"], stage, returncode))
+                if args.stop_on_error:
+                    stop_requested = True
+
+            if stop_requested:
+                break
+
+    if not stop_requested and all_material_final_records:
+        comparison_returncode = _run_all_material_comparison(
+            root,
+            diagnostics_path,
+            records,
+            all_material_final_records,
+        )
+        if comparison_returncode not in ("", None, 0):
+            command_failures.append(("all_materials", "", "", "comparison", comparison_returncode))
 
     print("\n" + "=" * 80)
     print(f"Diagnostics saved to: {diagnostics_path}")
@@ -725,7 +1001,16 @@ def main():
     if hard_failures or command_failures:
         raise SystemExit(1)
 
-    print(f"Completed all {total_jobs} individual fits, postprocessing/DRC, and material comparisons.")
+    if args.all_materials_only:
+        print(
+            f"Completed all {all_material_jobs} all-material fits with shared error structure, "
+            "including full postprocessing, DRC, composition plots, and model comparison."
+        )
+    else:
+        print(
+            f"Completed all {individual_jobs} individual fits and {all_material_jobs} all-material fits, "
+            "including postprocessing, DRC, requested comparisons, and all-material composition plots."
+        )
 
 
 if __name__ == "__main__":
