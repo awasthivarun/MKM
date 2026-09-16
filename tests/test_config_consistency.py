@@ -1,6 +1,8 @@
 import yaml
 
 from mkm.inference.likelihoods import RATE_NORMAL, available_error_structures
+from mkm.project_paths import ProjectPaths
+from mkm.workflows.agpd_basic import load_agpd_model_config
 from mkm.models.agpd_basic import (
     available_agpd_all_material_models,
     available_agpd_parameterizations,
@@ -13,16 +15,20 @@ def _load_yaml(path):
         return yaml.safe_load(file)
 
 
+def _load_model_config():
+    return load_agpd_model_config(ProjectPaths.discover(__file__))
+
+
 def test_agpd_preprocessing_and_model_metadata_are_consistent():
     preprocessing = _load_yaml("config/preprocessing/agpd_basic.yaml")
-    model = _load_yaml("config/models/agpd_basic.yaml")
+    model = _load_model_config()
 
     assert preprocessing["dataset_name"] == model["dataset_name"]
     assert float(preprocessing["temperature_K"]) == float(model["temperature_K"])
 
 
 def test_agpd_config_exposes_only_current_rate_likelihood_contract():
-    config = _load_yaml("config/models/agpd_basic.yaml")
+    config = _load_model_config()
     likelihood = config["likelihood"]
 
     assert likelihood["name"] == RATE_NORMAL
@@ -35,7 +41,7 @@ def test_agpd_config_exposes_only_current_rate_likelihood_contract():
 
 
 def test_capped_co_coverage_configuration_is_complete():
-    config = _load_yaml("config/models/agpd_basic.yaml")
+    config = _load_model_config()
 
     caps = config["co_coverage_cap"]
 
@@ -48,7 +54,7 @@ def test_capped_co_coverage_configuration_is_complete():
 
 
 def test_every_configured_all_material_profile_has_complete_parameter_specs():
-    config = _load_yaml("config/models/agpd_basic.yaml")
+    config = _load_model_config()
 
     for model_name in available_agpd_all_material_models():
         for parameterization in available_agpd_parameterizations(
@@ -70,7 +76,7 @@ def test_pd100_reduced_model_prior_matches_reduced_parameter_set():
     from mkm.mechanisms.pd_basic import PdCOERLHParameters
     from mkm.models.agpd_basic import get_agpd_prior_profile
 
-    config = _load_yaml("config/models/agpd_basic.yaml")
+    config = _load_model_config()
     profile = get_agpd_prior_profile(
         config,
         "Pd100",
@@ -84,7 +90,7 @@ def test_pd100_reduced_model_prior_matches_reduced_parameter_set():
 
 
 def test_active_composition_parameterizations_have_expected_slope_sets():
-    config = _load_yaml("config/models/agpd_basic.yaml")
+    config = _load_model_config()
     profiles = config["composition_parameterizations"]
 
     assert set(profiles) == {"shared", "linear_xAg"}
@@ -107,7 +113,7 @@ def test_active_composition_parameterizations_have_expected_slope_sets():
 
 
 def test_prior_profiles_keep_only_canonical_co_sources():
-    config = _load_yaml("config/models/agpd_basic.yaml")
+    config = _load_model_config()
     profiles = config["prior_profiles"]
 
     for material in ("Ag10Pd90", "Ag25Pd75", "Ag50Pd50", "Ag75Pd25", "Ag90Pd10", "Pd100"):
@@ -115,7 +121,7 @@ def test_prior_profiles_keep_only_canonical_co_sources():
 
 
 def test_full_linear_xag_contains_all_mechanism_slopes():
-    config = _load_yaml("config/models/agpd_basic.yaml")
+    config = _load_model_config()
 
     slopes = config[
         "composition_parameterizations"

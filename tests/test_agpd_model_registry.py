@@ -6,6 +6,8 @@ import pymc as pm
 import pytest
 import yaml
 
+from mkm.project_paths import ProjectPaths
+from mkm.workflows.agpd_basic import load_agpd_model_config
 from mkm.model_inputs import ModelPointInputs
 from mkm.models.agpd_basic import (
     available_agpd_all_material_models,
@@ -23,8 +25,7 @@ from mkm.models.agpd_basic import (
 
 
 def _config():
-    with open("config/models/agpd_basic.yaml", "r") as file:
-        return yaml.safe_load(file)
+    return load_agpd_model_config(ProjectPaths.discover(__file__))
 
 
 def _point_inputs(materials):

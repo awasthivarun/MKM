@@ -4,6 +4,8 @@ import pymc as pm
 import pytest
 import yaml
 
+from mkm.project_paths import ProjectPaths
+from mkm.workflows.agpd_basic import load_agpd_model_config
 from mkm.model_inputs import ModelInputArrays
 from mkm.workflows.agpd_fit import build_fit_mechanism, resolve_agpd_fit_specification
 from mkm.workflows.agpd_validation import (
@@ -16,8 +18,7 @@ from mkm.workflows.agpd_validation import (
 
 
 def _config():
-    with open("config/models/agpd_basic.yaml", "r") as file:
-        return yaml.safe_load(file)
+    return load_agpd_model_config(ProjectPaths.discover(__file__))
 
 
 def _selected_frame():

@@ -122,6 +122,22 @@ class ProjectPaths:
         return self.config_dir / "models" / "agpd_basic.yaml"
 
     @property
+    def agpd_prior_config_path(self) -> Path:
+        return self.config_dir / "priors" / "agpd_basic.yaml"
+
+    @property
+    def agpd_experimental_model_config_path(self) -> Path:
+        return self.config_dir / "models" / "experimental" / "agpd_caps.yaml"
+
+    @property
+    def agpd_model_config_paths(self) -> tuple[Path, ...]:
+        return (
+            self.agpd_model_config_path,
+            self.agpd_prior_config_path,
+            self.agpd_experimental_model_config_path,
+        )
+
+    @property
     def agpd_preprocessing_config_path(self) -> Path:
         filename = "agpd_basic.yaml" if self.agpd_data_variant == "base" else "agpd_basic_maxtof.yaml"
         return self.config_dir / "preprocessing" / filename

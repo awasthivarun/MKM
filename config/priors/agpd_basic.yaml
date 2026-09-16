@@ -1,0 +1,84 @@
+prior_variants:
+  # Sensitivity/phenomenological variant: beta_2_BF may be negative. In the current barrier equation,
+  # negative values make the BF barrier increase with anodic potential and should not be interpreted
+  # as a conventional Butler-Volmer symmetry factor constrained to [0, 1].
+  negative_beta_BF:
+    parameters:
+      beta_2_BF:
+        distribution: truncated_normal
+        mu: 0
+        sigma: 1
+        lower: -1
+        upper: 1
+
+prior_profiles:
+  Ag10Pd90: &shared_prior_profile
+    CO_BF_ER_LH:
+      provenance: weak_regularization
+      parameters:
+        deltaG1_0: # Wide range for CO ads energy 
+          distribution: truncated_normal
+          mu: -0.2 # CO strong binding
+          sigma: 0.2
+          lower: -0.5
+          upper: 0.05 # OOM analysis - dead zone
+        deltaG4_0: # Wide range for OH ads energy on Pd
+          distribution: truncated_normal
+          mu: 0
+          sigma: 0.2
+          lower: -0.25 # OOM analysis - dead zone
+          upper: 0.5
+        deltaG5_0: # Wide range for OH ads energy on Ag
+          distribution: truncated_normal
+          mu: 0
+          sigma: 0.2
+          lower: -0.5
+          upper: 0.5
+        Gact1_0: # Flat reasonable bounds
+          distribution: truncated_normal
+          mu: 0.5
+          sigma: 0.1
+          lower: 0.3
+          upper: 0.7
+        Gact2_BF_0: # Flat reasonable bounds
+          distribution: truncated_normal
+          mu: 0.7
+          sigma: 0.1
+          lower: 0.6 
+          upper: 0.85 # Computational regularization against a known high-barrier mode; test broader support for sensitivity
+        Gact2_ER_0: # Flat reasonable bounds
+          distribution: truncated_normal
+          mu: 0.7
+          sigma: 0.1
+          lower: 0.6
+          upper: 0.85 # Computational regularization against a known high-barrier mode; test broader support for sensitivity
+        Gact2_LH_0: # Flat reasonable bounds
+          distribution: truncated_normal
+          mu: 0.7
+          sigma: 0.1
+          lower: 0.6
+          upper: 1.0
+        beta_2_BF: # Flat unrestricted
+          distribution: truncated_normal
+          mu: 0.5
+          sigma: 1
+          lower: 0
+          upper: 1
+        beta_2_ER: # Flat unrestricted
+          distribution: truncated_normal
+          mu: 0.5
+          sigma: 1
+          lower: 0
+          upper: 1
+        q: # Flat unrestricted
+          distribution: truncated_normal
+          mu: 0.5
+          sigma: 1
+          lower: 0
+          upper: 1
+
+  Ag25Pd75: *shared_prior_profile
+  Ag50Pd50: *shared_prior_profile
+  Ag75Pd25: *shared_prior_profile
+  Ag90Pd10: *shared_prior_profile
+  Pd100: *shared_prior_profile

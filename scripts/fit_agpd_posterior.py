@@ -11,7 +11,9 @@ from mkm.workflows.agpd_fit import (
     build_agpd_fit_model,
     fit_materials,
     fit_output_dir,
+    resolved_model_metadata,
     resolved_parameterization_metadata,
+    resolved_prior_metadata,
     resolve_agpd_fit_specification,
 )
 from mkm.workflows.agpd_posterior import validate_agpd_run_metadata
@@ -110,6 +112,7 @@ def main():
             error_structure=specification.error_structure,
             data_path=paths.agpd_selected_path,
             model_config_path=paths.agpd_model_config_path,
+            model_config_paths=paths.agpd_model_config_paths,
             sampler=sampler,
             parameterization=specification.parameterization,
             parameterization_specification=resolved_parameterization_metadata(
@@ -117,6 +120,8 @@ def main():
                 config,
             ),
             prior_material=specification.prior_material,
+            model_specification=resolved_model_metadata(specification),
+            prior_specification=resolved_prior_metadata(specification, config),
         )
 
     def checkpoint_validator(metadata):

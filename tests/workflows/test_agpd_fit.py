@@ -3,6 +3,8 @@ from copy import deepcopy
 import pytest
 import yaml
 
+from mkm.project_paths import ProjectPaths
+from mkm.workflows.agpd_basic import load_agpd_model_config
 from mkm.workflows.agpd_fit import (
     all_parameter_specs,
     rate_normal_likelihood_kwargs,
@@ -12,8 +14,7 @@ from mkm.workflows.agpd_fit import (
 
 
 def _config():
-    with open("config/models/agpd_basic.yaml", "r") as file:
-        return yaml.safe_load(file)
+    return load_agpd_model_config(ProjectPaths.discover(__file__))
 
 
 def test_individual_fit_uses_one_material_labelled_error_pair():

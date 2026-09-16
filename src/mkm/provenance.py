@@ -37,6 +37,12 @@ def sha256_file(path: str | Path, chunk_size: int = 1024 * 1024) -> str:
     return digest.hexdigest()
 
 
+def sha256_mapping(mapping: dict) -> str:
+    """Stable SHA256 for a YAML-serializable resolved specification."""
+    payload = yaml.safe_dump(mapping, sort_keys=True).encode("utf-8")
+    return sha256(payload).hexdigest()
+
+
 def git_commit(root: str | Path) -> str | None:
     try:
         result = subprocess.run(
@@ -73,14 +79,23 @@ def build_fit_metadata(
     data_path: str | Path,
     model_config_path: str | Path,
     sampler: dict,
+    model_config_paths=None,
     parameterization: str | None = None,
     parameterization_specification: dict | None = None,
     prior_material: str | None = None,
     sampling_health: dict | None = None,
+    model_specification: dict | None = None,
+    prior_specification: dict | None = None,
 ):
     root = Path(root)
     data_path = Path(data_path)
     model_config_path = Path(model_config_path)
+    if model_config_paths is None:
+        model_config_paths = (model_config_path,)
+    else:
+        model_config_paths = tuple(Path(path) for path in model_config_paths)
+        if model_config_path not in model_config_paths:
+            raise ValueError("model_config_path must be included in model_config_paths.")
     materials = tuple(materials)
 
     if fit_scope not in {"individual", "all_materials"}:
@@ -113,11 +128,23 @@ def build_fit_metadata(
         "parameterization": parameterization,
         "parameterization_specification": parameterization_specification,
         "prior_material": prior_material,
+        "model_specification": model_specification,
+        "prior_specification": prior_specification,
+        "resolved_fit_sha256": sha256_mapping({
+            "model_specification": model_specification,
+            "parameterization_specification": parameterization_specification,
+            "prior_specification": prior_specification,
+            "error_structure": error_structure,
+            "likelihood": "rate_normal",
+        }),
         "inputs": {
             "data_path": str(data_path.relative_to(root)),
             "data_sha256": sha256_file(data_path),
             "model_config_path": str(model_config_path.relative_to(root)),
-            "model_config_sha256": sha256_file(model_config_path),
+            "model_config_paths": [str(path.relative_to(root)) for path in model_config_paths],
+            "model_config_sha256": sha256_mapping({
+                str(path.relative_to(root)): sha256_file(path) for path in model_config_paths
+            }),
         },
         "sampler": dict(sampler),
         "sampling_health": dict(sampling_health or {}),

@@ -5,6 +5,8 @@ import pandas as pd
 import xarray as xr
 import yaml
 
+from mkm.project_paths import ProjectPaths
+from mkm.workflows.agpd_basic import load_agpd_model_config
 from mkm.postprocessing.composition_parameters import (
     build_agpd_composition_parameter_trends,
 )
@@ -167,8 +169,7 @@ def test_lognormal_prior_statistics_use_median_parameterization():
 
 
 def test_shared_all_material_parameter_trends_do_not_invent_slopes():
-    with open("config/models/agpd_basic.yaml", "r") as file:
-        config = yaml.safe_load(file)
+    config = load_agpd_model_config(ProjectPaths.discover(__file__))
 
     parameter_values = {
         "deltaG1_0": -0.4,

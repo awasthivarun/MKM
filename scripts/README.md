@@ -232,7 +232,7 @@ Ag10 with BF disabled:
 python scripts/fit_agpd_posterior.py CO_BF_ER_LH_Ag10_no_BF --all-materials --parameterization linear_xAg --error-structure material
 ```
 
-Coverage-cap variants are registered but are currently intended for exploratory sensitivity analysis rather than the main model path. See `MODEL_REGISTRY.md` and the comments in `config/models/agpd_basic.yaml`.
+Coverage-cap variants are registered but are currently intended for exploratory sensitivity analysis rather than the main model path. See `MODEL_REGISTRY.md` and the comments in `config/models/experimental/agpd_caps.yaml`.
 
 ## PowerShell chaining
 

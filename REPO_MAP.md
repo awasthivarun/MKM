@@ -29,7 +29,7 @@ src/mkm/model_inputs.py
         +-----------------------+
         |                       |
         v                       v
-src/mkm/models/agpd_basic.py    src/mkm/mechanisms/agpd_basic.py
+src/mkm/models/agpd_registry.py + agpd_basic.py    src/mkm/mechanisms/agpd_basic/
         |                       |
         +-----------+-----------+
                     |
@@ -113,7 +113,7 @@ Only observed combinations are represented.
 
 Converts model tables into contiguous NumPy index arrays and model-point mechanism inputs. Replicate observations map back to shared model-point means.
 
-### `src/mkm/mechanisms/agpd_basic.py`
+### `src/mkm/mechanisms/agpd_basic/`
 
 Owns the chemical mathematics:
 
@@ -134,6 +134,10 @@ This file should contain chemistry, not PyMC prior choices or filesystem behavio
 ### `src/mkm/mechanisms/pd_basic.py`
 
 Owns the reduced pure-Pd ER+LH evaluator used for prediction-only pure-Pd states in all-material validation.
+
+### `src/mkm/models/agpd_registry.py`
+
+Declarative source of truth for AgPd model variants: active pathways, fit scopes, fixed parameters, named prior variants, coverage-cap mode, and material-specific pathway masks.
 
 ### `src/mkm/models/agpd_basic.py`
 
@@ -176,6 +180,10 @@ Generic PyMC assembly: creates coordinates, evaluates the mechanism, stores dete
 Sampling/reconstruction utilities used by the posterior lifecycle.
 
 ## Workflow orchestration
+
+### `src/mkm/workflows/agpd_postprocess/`
+
+Postprocessing orchestration split into `workflow.py`, `products.py`, `plots.py`, and `status.py`; the CLI script is intentionally thin.
 
 ### `src/mkm/workflows/agpd_basic.py`
 
@@ -342,10 +350,10 @@ LOCO/LOMO validation is nested under the corresponding full all-material fit dir
 - interpolation/truncation: `src/mkm/preprocessing/`
 - experimental alpha/orders: `src/mkm/preprocessing/observables.py`
 - model data indexing: `src/mkm/model_data.py`, `src/mkm/model_inputs.py`
-- a mechanism equation: `src/mkm/mechanisms/agpd_basic.py`
-- pathway parameter dataclasses: `src/mkm/mechanisms/agpd_basic.py`
-- model registry / special variants: `src/mkm/models/agpd_basic.py`
-- base priors / slope priors / likelihood priors: `config/models/agpd_basic.yaml`
+- a mechanism equation: `src/mkm/mechanisms/agpd_basic/`
+- pathway parameter dataclasses: `src/mkm/mechanisms/agpd_basic/finite_co.py`
+- model registry / special variants: `src/mkm/models/agpd_registry.py`
+- base/slope/likelihood config: `config/models/agpd_basic.yaml`; canonical priors/variants: `config/priors/agpd_basic.yaml`; exploratory cap config: `config/models/experimental/agpd_caps.yaml`
 - PyMC prior factory: `src/mkm/inference/priors.py`
 - likelihood equation: `src/mkm/inference/likelihoods.py`
 - fit-scope rules: `src/mkm/workflows/agpd_fit.py`
@@ -359,8 +367,9 @@ LOCO/LOMO validation is nested under the corresponding full all-material fit dir
 
 When a new AgPd model identity is added, check the following places:
 
-- `src/mkm/models/agpd_basic.py`: registry entry, config alias, model-availability sets/tuples, and any model-specific parameterization logic;
-- `config/models/agpd_basic.yaml`: prior profile and composition-parameterization entries when the new model differs from its parent;
+- `src/mkm/models/agpd_registry.py`: one declarative model specification; `src/mkm/models/agpd_basic.py`: prior/parameterization resolution and model assembly;
+- `config/models/agpd_basic.yaml`: composition-parameterization entries when the new model differs from its parent;
+- `config/priors/agpd_basic.yaml`: canonical prior profiles and named prior-variant overrides;
 - `src/mkm/postprocessing/drc.py`: transition-state-control alias when the new model shares an existing mechanism;
 - `scripts/run_agpd_individual_grid.py`: runner selector/comparison membership when the model should be included in automated all-material runs;
 - `tests/test_agpd_model_registry.py` and any model-specific tests: update exact model lists and test the new behavior;

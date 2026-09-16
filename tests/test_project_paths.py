@@ -166,3 +166,12 @@ def test_invalid_scope_or_error_structure_is_rejected(tmp_path):
             parameterization="shared",
             error_structure="unknown",
         )
+
+
+def test_agpd_model_config_bundle_paths_are_explicit(tmp_path):
+    paths = ProjectPaths(root=tmp_path)
+    assert paths.agpd_model_config_paths == (
+        tmp_path / "config" / "models" / "agpd_basic.yaml",
+        tmp_path / "config" / "priors" / "agpd_basic.yaml",
+        tmp_path / "config" / "models" / "experimental" / "agpd_caps.yaml",
+    )

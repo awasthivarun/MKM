@@ -2,6 +2,8 @@ import numpy as np
 import pytensor
 import yaml
 
+from mkm.project_paths import ProjectPaths
+from mkm.workflows.agpd_basic import load_agpd_model_config
 from mkm.mechanisms.agpd_basic import (
     AgPdCOBFERRLHParameters,
     build_agpd_point_state,
@@ -17,8 +19,7 @@ from mkm.postprocessing.drc import transition_state_controls
 
 
 def _config():
-    with open("config/models/agpd_basic.yaml", "r") as file:
-        return yaml.safe_load(file)
+    return load_agpd_model_config(ProjectPaths.discover(__file__))
 
 
 def test_ag10_no_er_masks_er_only_for_ag10():

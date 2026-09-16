@@ -7,6 +7,7 @@ from mkm.inference.model import build_pymc_model
 from mkm.models.agpd_basic import (
     available_agpd_all_material_models,
     available_agpd_models,
+    agpd_model_metadata,
     available_agpd_parameterizations,
     build_agpd_all_material_mechanism,
     build_agpd_mechanism,
@@ -184,6 +185,14 @@ def resolved_parameterization_metadata(specification, config):
         specification.parameterization,
     )
 
+
+
+def resolved_model_metadata(specification):
+    return agpd_model_metadata(specification.model_name)
+
+
+def resolved_prior_metadata(specification, config):
+    return all_parameter_specs(specification, config)
 
 def rate_normal_likelihood_kwargs(config):
     likelihood = config["likelihood"]

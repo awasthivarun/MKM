@@ -81,3 +81,38 @@ def test_all_material_fit_metadata_requires_resolved_parameterization_contents(t
         prior_material="Ag10Pd90",
     )
     assert metadata["parameterization_specification"] == specification
+
+
+def test_sha256_mapping_is_key_order_stable():
+    from mkm.provenance import sha256_mapping
+
+    assert sha256_mapping({"b": 2, "a": 1}) == sha256_mapping({"a": 1, "b": 2})
+
+
+def test_fit_metadata_hashes_complete_config_bundle(tmp_path, monkeypatch):
+    from mkm.provenance import sha256_mapping
+
+    data_path = tmp_path / "data.parquet"
+    base = tmp_path / "model.yaml"
+    priors = tmp_path / "priors.yaml"
+    data_path.write_text("data")
+    base.write_text("base")
+    priors.write_text("priors")
+    monkeypatch.setattr("mkm.provenance.git_commit", lambda root: "abc123")
+    monkeypatch.setattr("mkm.provenance.package_versions", lambda: {})
+
+    metadata = build_fit_metadata(
+        root=tmp_path,
+        fit_scope="individual",
+        materials=("Ag10Pd90",),
+        model_name="CO_ER",
+        error_structure="material",
+        data_path=data_path,
+        model_config_path=base,
+        model_config_paths=(base, priors),
+        sampler={},
+        prior_material="Ag10Pd90",
+    )
+    expected = sha256_mapping({"model.yaml": sha256_file(base), "priors.yaml": sha256_file(priors)})
+    assert metadata["inputs"]["model_config_sha256"] == expected
+    assert metadata["inputs"]["model_config_paths"] == ["model.yaml", "priors.yaml"]

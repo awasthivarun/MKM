@@ -37,6 +37,15 @@ raw workbooks
   -> LOCO / LOMO refit validation
 ```
 
+
+### Architecture note (September 2026 refactor)
+
+AgPd model identity is now declarative. `src/mkm/models/agpd_registry.py` owns pathway membership, fit scope, fixed parameters, prior variants, coverage-cap mode, and material-specific pathway modifiers. `src/mkm/models/agpd_basic.py` resolves priors/parameterizations and builds PyMC mechanisms from that specification. Negative-`beta_2_BF` models therefore reuse the same kinetic equations and differ through the named `negative_beta_BF` prior variant.
+
+The AgPd mechanism implementation is split into `state.py`, `electrochem.py`, `surface.py`, `finite_co.py`, and `legacy_qea.py` under `src/mkm/mechanisms/agpd_basic/`. The public import path `mkm.mechanisms.agpd_basic` is preserved. The finite-rate BF/ER/LH family now uses one common evaluator; pathway masks and optional CO caps are modifiers rather than duplicated kinetic implementations.
+
+Run metadata stores the resolved model specification, resolved prior specification, and a resolved-fit hash in addition to the full configuration-bundle hash. This separates fit-defining provenance from unrelated edits elsewhere in configuration files.
+
 ## Active likelihood
 
 The only active likelihood is Normal in linear rate space:
@@ -116,7 +125,7 @@ $$
 
 before applying the linear composition shift. This keeps the effective parameter inside `[0,1]` over the full composition interval when `x_reference = 0.5`. Therefore the stored posterior slope for these bounded parameters is not directly the total physical change across composition.
 
-The exact set and prior domains of active slopes are configuration-driven in `config/models/agpd_basic.yaml`.
+The exact set and prior domains of active slopes are configuration-driven by `config/models/agpd_basic.yaml` and `config/priors/agpd_basic.yaml`.
 
 ## Shared prior source
 
@@ -233,7 +242,7 @@ High-value future directions include hierarchical/correlated residual structures
 
 ## Physical and mathematical conventions
 
-This file documents the physical and mathematical conventions used by the current AgPd basic-media model. The equations in `src/mkm/mechanisms/agpd_basic.py` and values in `config/models/agpd_basic.yaml` remain authoritative.
+This file documents the physical and mathematical conventions used by the current AgPd basic-media model. The equations in `src/mkm/mechanisms/agpd_basic/` and values in `config/models/agpd_basic.yaml`, `config/priors/agpd_basic.yaml`, and `config/models/experimental/agpd_caps.yaml` remain authoritative.
 
 ### Units and reference states
 
@@ -488,7 +497,7 @@ The implementation uses finite perturbations of transition-state free energies a
 
 ## Model registry
 
-This file documents the AgPd basic-media model registry implemented in `src/mkm/models/agpd_basic.py` and `src/mkm/mechanisms/agpd_basic.py`.
+This file documents the AgPd basic-media model registry implemented in `src/mkm/models/agpd_basic.py` and `src/mkm/mechanisms/agpd_basic/`.
 
 ### Ordinary individual finite-rate CO models
 
@@ -596,7 +605,7 @@ $$
 p(x)=p_{0.5}+s_p(x-0.5).
 $$
 
-The current YAML may assign slopes to any subset of mechanism parameters. The exact current list and prior bounds should be read directly from `config/models/agpd_basic.yaml` rather than duplicated here.
+The current YAML may assign slopes to any subset of mechanism parameters. The exact current list and prior bounds should be read directly from `config/models/agpd_basic.yaml` and `config/priors/agpd_basic.yaml` rather than duplicated here.
 
 For `beta_2_BF`, `beta_2_ER`, and `q`, the sampled slope is internally scaled by
 

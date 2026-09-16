@@ -8,14 +8,16 @@ from mkm.inference.posterior import (
     compute_posterior_deterministics,
     load_inference_data,
 )
-from mkm.provenance import read_run_metadata, sha256_file
+from mkm.provenance import read_run_metadata, sha256_file, sha256_mapping
 from mkm.workflows.agpd_basic import build_agpd_model_data
 from mkm.workflows.agpd_fit import (
     all_parameter_specs,
     build_agpd_fit_model,
     fit_materials,
     fit_output_dir,
+    resolved_model_metadata,
     resolved_parameterization_metadata,
+    resolved_prior_metadata,
 )
 from mkm.workflows.posterior_lifecycle import (
     RUN_STATUS_COMPLETE,
@@ -37,6 +39,16 @@ class AgPdPosteriorRun:
 
 
 def expected_agpd_run_metadata(specification, materials, config):
+    model_specification = resolved_model_metadata(specification)
+    parameterization_specification = resolved_parameterization_metadata(specification, config)
+    prior_specification = resolved_prior_metadata(specification, config)
+    resolved_fit = {
+        "model_specification": model_specification,
+        "parameterization_specification": parameterization_specification,
+        "prior_specification": prior_specification,
+        "error_structure": specification.error_structure,
+        "likelihood": RATE_NORMAL,
+    }
     return {
         "fit_scope": specification.fit_scope,
         "materials": list(materials),
@@ -44,11 +56,11 @@ def expected_agpd_run_metadata(specification, materials, config):
         "likelihood": RATE_NORMAL,
         "error_structure": specification.error_structure,
         "parameterization": specification.parameterization,
-        "parameterization_specification": resolved_parameterization_metadata(
-            specification,
-            config,
-        ),
+        "parameterization_specification": parameterization_specification,
         "prior_material": specification.prior_material,
+        "model_specification": model_specification,
+        "prior_specification": prior_specification,
+        "resolved_fit_sha256": sha256_mapping(resolved_fit),
     }
 
 
@@ -62,11 +74,20 @@ def validate_agpd_run_metadata(
     allowed_statuses=(RUN_STATUS_COMPLETE,),
 ):
     expected = expected_agpd_run_metadata(specification, materials, config)
+    legacy_optional = {"model_specification", "prior_specification", "resolved_fit_sha256"}
     mismatches = {
         key: (metadata.get(key), value)
         for key, value in expected.items()
-        if metadata.get(key) != value
+        if (key not in legacy_optional or key in metadata) and metadata.get(key) != value
     }
+    missing_resolved = sorted(key for key in legacy_optional if key not in metadata)
+    if missing_resolved:
+        warnings.warn(
+            "Posterior metadata predate resolved model/prior identity fields "
+            f"{missing_resolved}. Legacy identity checks will be used for this run.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
 
     input_metadata = metadata.get("inputs", {})
 
@@ -77,11 +98,13 @@ def validate_agpd_run_metadata(
             current_data_hash,
         )
 
-    current_config_hash = sha256_file(paths.agpd_model_config_path)
+    current_config_hash = sha256_mapping({
+        str(path.relative_to(paths.root)): sha256_file(path) for path in paths.agpd_model_config_paths
+    })
     stored_config_hash = input_metadata.get("model_config_sha256")
     if stored_config_hash != current_config_hash:
         warnings.warn(
-            "Model config file hash differs from the hash stored for this posterior. "
+            "Model configuration bundle hash differs from the hash stored for this posterior. "
             "The requested run identity and resolved parameterization specification "
             "still match, so loading will continue. Do not interpret this as proof "
             "that other run-defining config entries, such as base priors, are unchanged.",

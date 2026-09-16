@@ -15,8 +15,18 @@ def load_yaml(path: str | Path):
         return yaml.safe_load(file)
 
 
+def _merge_config_sections(*configs):
+    merged = {}
+    for config in configs:
+        overlap = set(merged) & set(config)
+        if overlap:
+            raise ValueError(f"AgPd config sections define duplicate top-level keys: {sorted(overlap)}.")
+        merged.update(config)
+    return merged
+
+
 def load_agpd_model_config(paths: ProjectPaths):
-    return load_yaml(paths.agpd_model_config_path)
+    return _merge_config_sections(*(load_yaml(path) for path in paths.agpd_model_config_paths))
 
 
 def load_agpd_preprocessing_config(paths: ProjectPaths):

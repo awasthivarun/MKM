@@ -5,6 +5,8 @@ import pytest
 import pytensor.tensor as pt
 import yaml
 
+from mkm.project_paths import ProjectPaths
+from mkm.workflows.agpd_basic import load_agpd_model_config
 from mkm.models.agpd_basic import (
     _bounded_linear_max_abs_slope,
     available_agpd_all_material_models,
@@ -15,8 +17,7 @@ from mkm.models.agpd_basic import (
 
 
 def _config():
-    with open("config/models/agpd_basic.yaml", "r") as file:
-        return yaml.safe_load(file)
+    return load_agpd_model_config(ProjectPaths.discover(__file__))
 
 
 def test_negative_beta_models_are_available_for_all_material_fitting():

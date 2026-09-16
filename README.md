@@ -109,6 +109,8 @@ src/mkm/                 reusable scientific/inference/postprocessing code
 tests/                   unit, integration, workflow, sampling, and plotting tests
 CURRENT_STATE.md         current implementation, conventions, and model registry
 REPO_MAP.md              architecture, data contract, and code ownership
+config/models/           physical/model/parameterization config
+config/priors/           canonical priors and named prior variants
 ```
 
 ## Interpretation boundary
