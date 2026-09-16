@@ -348,3 +348,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+    from postprocess_agpd_validation import main as postprocess_validation_refit
+
+    postprocess_validation_refit()

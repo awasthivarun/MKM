@@ -732,6 +732,7 @@ def evaluate_agpd_co_bf_er_lh(
     temperature_K,
     theta_CO_max=None,
     bf_activity=None,
+    er_activity=None,
 ):
     if np.any(state.Pd_fraction <= 0):
         raise ValueError("CO-BF-ER-LH requires a positive Pd fraction.")
@@ -787,6 +788,13 @@ def evaluate_agpd_co_bf_er_lh(
         raise ValueError(
             "CO-BF-ER-LH requires an active BF pathway at a positive Ag fraction in at least one model point."
         )
+    if er_activity is None:
+        er_activity = np.ones_like(state.Pd_fraction)
+    er_activity = np.asarray(er_activity, dtype=float)
+    if er_activity.shape != state.Pd_fraction.shape:
+        raise ValueError("ER pathway activity must have the same shape as the model points.")
+    if not np.all(np.isfinite(er_activity)) or np.any(er_activity < 0.0) or np.any(er_activity > 1.0):
+        raise ValueError("ER pathway activity must be finite and lie in [0, 1].")
 
     log_k_BF_app = (
         log_k2_BF
@@ -794,7 +802,11 @@ def evaluate_agpd_co_bf_er_lh(
         + log_surface_fraction(state.Ag_fraction)
         + log_surface_fraction(bf_activity)
     )
-    log_k_ER_app = log_k2_ER + pt.as_tensor_variable(state.ln_a_OH)
+    log_k_ER_app = (
+        log_k2_ER
+        + pt.as_tensor_variable(state.ln_a_OH)
+        + log_surface_fraction(er_activity)
+    )
     term_OH_Pd = log_K4 + pt.as_tensor_variable(state.ln_a_OH)
     log_k_LH_app = log_k2_LH + term_OH_Pd + log_surface_fraction(state.Pd_fraction)
 
@@ -875,6 +887,26 @@ def evaluate_agpd_co_bf_er_lh_ag10_no_bf(
         bf_activity=bf_activity,
     )
 
+
+
+def evaluate_agpd_co_bf_er_lh_ag10_no_er(
+    state: AgPdPointState,
+    parameters: AgPdCOBFERRLHParameters,
+    temperature_K,
+):
+    if state.materials is None or state.material_index is None:
+        raise ValueError("CO_BF_ER_LH_Ag10_no_ER requires material identity in the AgPd point state.")
+    er_activity_by_material = np.asarray(
+        [0.0 if material == "Ag10Pd90" else 1.0 for material in state.materials],
+        dtype=float,
+    )
+    er_activity = er_activity_by_material[state.material_index]
+    return evaluate_agpd_co_bf_er_lh(
+        state=state,
+        parameters=parameters,
+        temperature_K=temperature_K,
+        er_activity=er_activity,
+    )
 
 def evaluate_agpd_co_bf_er_lh_capped(
     state: AgPdPointState,

@@ -305,13 +305,13 @@ prior_profiles:
           mu: 0.7
           sigma: 0.1
           lower: 0.6 
-          upper: 1.0 
+          upper: 0.85 # Aggressive fighting multimodality
         Gact2_ER_0: # Flat reasonable bounds
           distribution: truncated_normal
           mu: 0.7
           sigma: 0.1
           lower: 0.6
-          upper: 1.0
+          upper: 0.85 # Aggressive fighting multimodality
         Gact2_LH_0: # Flat reasonable bounds
           distribution: truncated_normal
           mu: 0.7

@@ -25,6 +25,7 @@ ALL_MATERIAL_RUNS = (
     ("Full_q1", "CO_BF_ER_LH_q1"),
     ("Full_neg", "CO_BF_ER_LH_neg"),
     ("Ag10_no_BF", "CO_BF_ER_LH_Ag10_no_BF"),
+    ("Ag10_no_ER", "CO_BF_ER_LH_Ag10_no_ER"),
     ("Ag10_no_BF_q1", "CO_BF_ER_LH_Ag10_no_BF_q1"),
     ("Ag10_no_BF_neg", "CO_BF_ER_LH_Ag10_no_BF_neg"),
 )
