@@ -12,10 +12,13 @@ from mkm.constants import K_B_EV_K
 from mkm.mechanisms.agpd_basic import build_agpd_point_state
 from mkm.models.agpd_basic import (
     _NORMALIZED_BOUNDED_LINEAR_PARAMETERS,
+    agpd_independent_parameter_name,
     get_agpd_fixed_parameters,
+    get_agpd_material_parameter_names,
     get_agpd_model_definition,
     get_agpd_parameterization,
     get_agpd_prior_profile,
+    is_agpd_independent_parameterization,
 )
 from mkm.postprocessing.diagnostics import summarize_samples
 
@@ -418,6 +421,106 @@ def compute_transition_state_drc(
     )
 
 
+def _compute_independent_transition_state_drc(
+    inference_data,
+    model_name,
+    point_inputs,
+    model_points,
+    config,
+    parameterization,
+    step_eV,
+):
+    controls = transition_state_controls(model_name)
+    parameter_names, function, state = _compile_pointwise_log_rate_evaluator(
+        model_name,
+        point_inputs,
+        config,
+    )
+    posterior = _posterior_dataset(inference_data.posterior)
+    fixed_parameters = get_agpd_fixed_parameters(model_name)
+    materials = tuple(point_inputs.materials)
+    active_names = {
+        material: set(get_agpd_material_parameter_names(model_name, material))
+        for material in materials
+    }
+    independent_names = tuple(
+        agpd_independent_parameter_name(parameter_name, material)
+        for material in materials
+        for parameter_name in get_agpd_material_parameter_names(model_name, material)
+    )
+    posterior_draws = _posterior_scalar_parameter_draws(posterior, independent_names)
+
+    n_chains = int(posterior.sizes["chain"])
+    n_draws = int(posterior.sizes["draw"])
+    n_points = len(point_inputs.E_V_SHE)
+    X_TS = np.empty((n_chains, n_draws, len(controls), n_points), dtype=float)
+    kBT_eV = K_B_EV_K * float(config["temperature_K"])
+
+    for chain in range(n_chains):
+        for draw in range(n_draws):
+            effective = {}
+            for parameter_name in parameter_names:
+                if parameter_name in fixed_parameters:
+                    effective[parameter_name] = np.full(
+                        n_points,
+                        float(fixed_parameters[parameter_name]),
+                        dtype=float,
+                    )
+                    continue
+
+                active_materials = [
+                    material for material in materials if parameter_name in active_names[material]
+                ]
+                fallback = (
+                    posterior_draws[agpd_independent_parameter_name(parameter_name, active_materials[0])][
+                        chain, draw
+                    ]
+                    if active_materials
+                    else 0.0
+                )
+                values = np.full(n_points, float(fallback), dtype=float)
+                for material_index, material in enumerate(materials):
+                    if parameter_name not in active_names[material]:
+                        continue
+                    name = agpd_independent_parameter_name(parameter_name, material)
+                    values[state.material_index == material_index] = posterior_draws[name][chain, draw]
+                effective[parameter_name] = values
+
+            for control_index, control in enumerate(controls):
+                plus = dict(effective)
+                minus = dict(effective)
+                plus[control.parameter] = effective[control.parameter] + step_eV
+                minus[control.parameter] = effective[control.parameter] - step_eV
+                ln_rate_plus = _evaluate_parameter_set(function, parameter_names, plus)
+                ln_rate_minus = _evaluate_parameter_set(function, parameter_names, minus)
+                derivative = (ln_rate_plus - ln_rate_minus) / (2.0 * step_eV)
+                X_TS[chain, draw, control_index] = -kBT_eV * derivative
+
+    coords = {
+        "chain": np.asarray(posterior.coords["chain"]),
+        "draw": np.asarray(posterior.coords["draw"]),
+        "control": [control.name for control in controls],
+        "model_point": np.arange(n_points, dtype=np.int64),
+        "control_parameter": ("control", [control.parameter for control in controls]),
+        "control_label": ("control", [control.label for control in controls]),
+    }
+    dataset = xr.Dataset(
+        data_vars={"X_TS": (("chain", "draw", "control", "model_point"), X_TS)},
+        coords=coords,
+        attrs={
+            "model_name": model_name,
+            "parameterization": parameterization,
+            "temperature_K": float(config["temperature_K"]),
+            "step_eV": step_eV,
+            "definition": "X_TS = -k_B*T*d ln(rate)/d G_TS_effective(material)",
+        },
+    )
+    summary = _summarize_transition_state_draws(dataset, model_points=model_points)
+    checks = _build_transition_state_checks(dataset, step_eV=step_eV)
+    checks.insert(1, "parameterization", parameterization)
+    return TransitionStateDRC(draws=dataset, summary=summary, checks=checks)
+
+
 def compute_composition_transition_state_drc(
     inference_data,
     model_name,
@@ -450,6 +553,19 @@ def compute_composition_transition_state_drc(
         )
 
     step_eV = float(step_eV)
+    if is_agpd_independent_parameterization(config, model_name, parameterization):
+        if not np.isfinite(step_eV) or step_eV <= 0:
+            raise ValueError("DRC perturbation step must be finite and positive.")
+        return _compute_independent_transition_state_drc(
+            inference_data=inference_data,
+            model_name=model_name,
+            point_inputs=point_inputs,
+            model_points=model_points,
+            config=config,
+            parameterization=parameterization,
+            step_eV=step_eV,
+        )
+
     if not np.isfinite(step_eV) or step_eV <= 0:
         raise ValueError("DRC perturbation step must be finite and positive.")
 

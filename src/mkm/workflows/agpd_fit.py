@@ -14,6 +14,7 @@ from mkm.models.agpd_basic import (
     get_agpd_all_material_parameter_specs,
     get_agpd_parameterization_metadata,
     get_agpd_prior_profile,
+    is_agpd_independent_parameterization,
 )
 from mkm.workflows.agpd_basic import (
     available_agpd_materials,
@@ -34,6 +35,7 @@ class AgPdFitSpecification:
     parameterization: str | None
     error_structure: str
     prior_material: str | None
+    excluded_materials: tuple[str, ...] = ()
 
     @property
     def is_all_materials(self):
@@ -56,6 +58,7 @@ def resolve_agpd_fit_specification(
     parameterization="shared",
     error_structure="material",
     prior_material="Ag10Pd90",
+    excluded_materials=(),
 ):
     supported_errors = tuple(config["likelihood"]["supported_error_structures"])
     unknown_errors = set(supported_errors) - set(available_error_structures())
@@ -69,7 +72,17 @@ def resolve_agpd_fit_specification(
             f"Configured structures: {supported_errors}."
         )
 
+    configured_materials = available_agpd_materials(config)
+    requested_exclusions = tuple(dict.fromkeys(str(material) for material in excluded_materials))
+    unknown_exclusions = [material for material in requested_exclusions if material not in configured_materials]
+    if unknown_exclusions:
+        raise ValueError(f"Unknown excluded AgPd materials: {unknown_exclusions}.")
+    resolved_exclusions = tuple(material for material in configured_materials if material in requested_exclusions)
+
     if all_materials:
+        active_materials = tuple(material for material in configured_materials if material not in resolved_exclusions)
+        if len(active_materials) < 2:
+            raise ValueError("All-material fits require at least two included materials after exclusions.")
         if model_name not in available_agpd_all_material_models():
             raise ValueError(
                 f"Model '{model_name}' is not available for all-material fitting. "
@@ -82,14 +95,22 @@ def resolve_agpd_fit_specification(
                 f"Parameterization '{parameterization}' is not configured for model "
                 f"'{model_name}'. Available parameterizations: {available_parameterizations}."
             )
-        if prior_material not in config.get("prior_profiles", {}):
+        independent_materials = is_agpd_independent_parameterization(config, model_name, parameterization)
+        if independent_materials and error_structure != "shared":
+            raise ValueError(
+                "Independent all-material fits require error_structure='shared' so all material likelihoods "
+                "are coupled through one sigma_rate_abs / sigma_rate_rel pair."
+            )
+        if not independent_materials and prior_material not in config.get("prior_profiles", {}):
             raise ValueError(f"No prior profile is configured for '{prior_material}'.")
 
+        resolved_prior_material = None if independent_materials else prior_material
         get_agpd_all_material_parameter_specs(
             config=config,
-            prior_material=prior_material,
+            prior_material=resolved_prior_material,
             model_name=model_name,
             parameterization=parameterization,
+            materials=active_materials,
         )
 
         return AgPdFitSpecification(
@@ -98,9 +119,12 @@ def resolve_agpd_fit_specification(
             material=None,
             parameterization=parameterization,
             error_structure=error_structure,
-            prior_material=prior_material,
+            prior_material=resolved_prior_material,
+            excluded_materials=resolved_exclusions,
         )
 
+    if resolved_exclusions:
+        raise ValueError("Material exclusions are only supported for --all-materials fits.")
     if model_name not in available_agpd_models():
         raise ValueError(
             f"Unknown AgPd model '{model_name}'. Available models: {available_agpd_models()}."
@@ -128,12 +152,14 @@ def resolve_agpd_fit_specification(
         parameterization=None,
         error_structure="material",
         prior_material=material,
+        excluded_materials=(),
     )
 
 
 def fit_materials(specification, config):
     if specification.is_all_materials:
-        return available_agpd_materials(config)
+        excluded = set(specification.excluded_materials)
+        return tuple(material for material in available_agpd_materials(config) if material not in excluded)
     return (specification.material,)
 
 
@@ -165,6 +191,7 @@ def fit_parameter_specs(specification, config):
             prior_material=specification.prior_material,
             model_name=specification.model_name,
             parameterization=specification.parameterization,
+            materials=fit_materials(specification, config),
         )
 
     return dict(
@@ -183,6 +210,7 @@ def resolved_parameterization_metadata(specification, config):
         config,
         specification.model_name,
         specification.parameterization,
+        materials=fit_materials(specification, config),
     )
 
 
@@ -265,4 +293,5 @@ def fit_output_dir(paths, specification):
         material=specification.material,
         parameterization=specification.parameterization,
         error_structure=specification.error_structure,
+        excluded_materials=specification.excluded_materials,
     )

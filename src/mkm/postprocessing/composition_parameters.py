@@ -11,10 +11,13 @@ from matplotlib.ticker import FormatStrFormatter
 
 from mkm.models.agpd_basic import (
     _NORMALIZED_BOUNDED_LINEAR_PARAMETERS,
+    agpd_independent_parameter_name,
     get_agpd_fixed_parameters,
     get_agpd_model_definition,
+    get_agpd_material_parameter_names,
     get_agpd_parameterization,
     get_agpd_prior_profile,
+    is_agpd_independent_parameterization,
 )
 from mkm.postprocessing.diagnostics import summarize_samples
 from mkm.postprocessing.plotting import (
@@ -92,13 +95,15 @@ def _scalar_draws(posterior, name):
     return values
 
 
-def _composition_x_values(config):
+def _composition_x_values(config, materials=None):
+    included = None if materials is None else set(materials)
     records = [
         {
             "material": material,
             "xAg": float(composition["Ag_fraction"]),
         }
         for material, composition in config["surface_composition"].items()
+        if included is None or material in included
     ]
     return pd.DataFrame(records).sort_values("xAg").reset_index(drop=True)
 
@@ -110,6 +115,7 @@ def build_agpd_composition_parameter_trends(
     parameterization="linear_xAg",
     n_grid=181,
     prior_material="Ag10Pd90",
+    materials=None,
 ):
     """Summarize effective mechanism parameters across the configured xAg range."""
     posterior = _posterior_dataset(inference_data.posterior)
@@ -117,6 +123,48 @@ def build_agpd_composition_parameter_trends(
     parameter_names = tuple(field.name for field in fields(definition.parameter_class))
     fixed_parameters = get_agpd_fixed_parameters(model_name)
     n_samples = int(posterior.sizes["chain"]) * int(posterior.sizes["draw"])
+    composition = _composition_x_values(config, materials)
+    if composition.empty:
+        raise ValueError("Composition trends require at least one included material.")
+
+    if is_agpd_independent_parameterization(config, model_name, parameterization):
+        records = []
+        for parameter in parameter_names:
+            for row in composition.itertuples(index=False):
+                relevant = set(get_agpd_material_parameter_names(model_name, row.material, include_fixed=True))
+                if parameter not in relevant:
+                    continue
+                if parameter in fixed_parameters:
+                    draws = np.full(n_samples, float(fixed_parameters[parameter]), dtype=float)
+                    is_fixed = True
+                else:
+                    variable = agpd_independent_parameter_name(parameter, row.material)
+                    if variable not in posterior:
+                        raise ValueError(
+                            f"Posterior is missing independent material parameter '{variable}'."
+                        )
+                    draws = _scalar_draws(posterior, variable)
+                    is_fixed = False
+                summary = summarize_samples(draws[:, None])
+                records.append(
+                    {
+                        "parameterization": parameterization,
+                        "parameter": parameter,
+                        "material": row.material,
+                        "xAg": float(row.xAg),
+                        "x_dependent": True,
+                        "independent": True,
+                        "fixed": is_fixed,
+                        "mean": float(summary["mean"][0]),
+                        "sd": float(summary["sd"][0]),
+                        "median": float(summary["median"][0]),
+                        "hdi80_lower": float(summary["hdi80_lower"][0]),
+                        "hdi80_upper": float(summary["hdi80_upper"][0]),
+                        "hdi95_lower": float(summary["hdi95_lower"][0]),
+                        "hdi95_upper": float(summary["hdi95_upper"][0]),
+                    }
+                )
+        return pd.DataFrame(records)
     x_reference, slope_specs = get_agpd_parameterization(
         config=config,
         model_name=model_name,
@@ -126,7 +174,7 @@ def build_agpd_composition_parameter_trends(
     parameter_specs = {}
     if bounded_slope_parameters:
         parameter_specs = get_agpd_prior_profile(config, prior_material, model_name)["parameters"]
-    materials = _composition_x_values(config)
+    materials = composition
     x_grid = np.linspace(
         float(materials["xAg"].min()),
         float(materials["xAg"].max()),
@@ -170,8 +218,10 @@ def build_agpd_composition_parameter_trends(
                 {
                     "parameterization": parameterization,
                     "parameter": parameter,
+                    "material": None,
                     "xAg": float(x_ag),
                     "x_dependent": bool(is_x_dependent),
+                    "independent": False,
                     "fixed": bool(is_fixed),
                     "mean": float(summary["mean"][index]),
                     "sd": float(summary["sd"][index]),
@@ -186,10 +236,31 @@ def build_agpd_composition_parameter_trends(
 
 
 def _plot_parameter_panel(ax, trends, parameter_specs, title, ylabel, material_x, x_reference, x_limits):
+    independent = bool(trends.get("independent", pd.Series(dtype=bool)).any())
     for parameter, label in parameter_specs:
         frame = trends.loc[trends["parameter"] == parameter].sort_values("xAg")
         if frame.empty:
             continue
+
+        if independent:
+            line, = ax.plot(frame["xAg"], frame["median"], "-o", linewidth=1.5, markersize=COMPOSITION_MARKER_SIZE, label=label)
+            ax.errorbar(
+                frame["xAg"],
+                frame["median"],
+                yerr=np.vstack(
+                    [
+                        frame["median"] - frame["hdi95_lower"],
+                        frame["hdi95_upper"] - frame["median"],
+                    ]
+                ),
+                fmt="none",
+                color=line.get_color(),
+                linewidth=1.0,
+                capsize=2,
+                zorder=3,
+            )
+            continue
+
         linestyle = "-" if bool(frame["x_dependent"].iloc[0]) else "--"
         line, = ax.plot(frame["xAg"], frame["median"], linestyle=linestyle, linewidth=2.0, label=label)
         ax.fill_between(
@@ -292,15 +363,19 @@ def plot_agpd_composition_parameter_overview(
     output_path: str | Path,
     *,
     error_structure=None,
+    materials=None,
 ):
     """Plot physical parameter trends only; error parameters use standard posterior plots."""
-    composition = _composition_x_values(config)
+    composition = _composition_x_values(config, materials)
     material_x = composition["xAg"].to_numpy(dtype=float)
-    x_reference, _ = get_agpd_parameterization(
-        config=config,
-        model_name=model_name,
-        parameterization=parameterization,
-    )
+    if is_agpd_independent_parameterization(config, model_name, parameterization):
+        x_reference = None
+    else:
+        x_reference, _ = get_agpd_parameterization(
+            config=config,
+            model_name=model_name,
+            parameterization=parameterization,
+        )
 
     x_min = float(material_x.min())
     x_max = float(material_x.max())

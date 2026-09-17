@@ -19,6 +19,8 @@ from mkm.models.agpd_registry import (
 )
 
 _NORMALIZED_BOUNDED_LINEAR_PARAMETERS = {"beta_2_BF", "beta_2_ER", "q"}
+INDEPENDENT_PARAMETERIZATION = "independent"
+PURE_PD_MATERIAL = "Pd100"
 
 
 def get_agpd_fixed_parameters(model_name):
@@ -156,18 +158,81 @@ def get_agpd_parameterization(config, model_name, parameterization="shared"):
     return x_reference, {name: spec for name, spec in slope_specs.items() if name not in fixed_parameters}
 
 
-def get_agpd_parameterization_metadata(config, model_name, parameterization):
-    x_reference, slope_specs = get_agpd_parameterization(config, model_name, parameterization)
-    metadata = {"name": parameterization, "x_reference": x_reference, "slopes": slope_specs}
+def _parameterization_model_specification(config, model_name, parameterization):
+    definition = get_agpd_model_definition(model_name)
+    try:
+        return config["composition_parameterizations"][parameterization]["models"][definition.config_model_name]
+    except KeyError:
+        return None
+
+
+def is_agpd_independent_parameterization(config, model_name, parameterization):
+    specification = _parameterization_model_specification(config, model_name, parameterization)
+    return bool(specification and specification.get("independent_materials", False))
+
+
+def agpd_independent_parameter_name(parameter_name, material):
+    return f"{parameter_name}_{material}"
+
+
+def get_agpd_material_parameter_names(model_name, material, *, include_fixed=False):
+    definition = get_agpd_model_definition(model_name)
+    parameter_names = {field.name for field in fields(definition.parameter_class)}
+    fixed_parameters = set(get_agpd_fixed_parameters(model_name))
+
+    if material == PURE_PD_MATERIAL and definition.pure_pd_prediction_reduction:
+        parameter_names &= {field.name for field in fields(PdCOERLHParameters)}
+    if material in definition.bf_disabled_materials:
+        parameter_names -= {"deltaG5_0", "beta_2_BF", "q", "Gact2_BF_0"}
+    if material in definition.er_disabled_materials:
+        parameter_names -= {"beta_2_ER", "Gact2_ER_0"}
+
+    return tuple(
+        field.name
+        for field in fields(definition.parameter_class)
+        if field.name in parameter_names and (include_fixed or field.name not in fixed_parameters)
+    )
+
+
+def get_agpd_independent_parameter_specs(config, model_name, materials=None):
+    definition = get_agpd_model_definition(model_name)
+    materials = tuple(config["surface_composition"] if materials is None else materials)
+    parameter_specs = {}
+    for material in materials:
+        profile = get_agpd_prior_profile(config, material, model_name)
+        _validate_parameter_specs(definition, profile["parameters"], f"{material}/{model_name}")
+        for parameter_name in get_agpd_material_parameter_names(model_name, material):
+            parameter_specs[agpd_independent_parameter_name(parameter_name, material)] = dict(
+                profile["parameters"][parameter_name]
+            )
+    return parameter_specs
+
+
+def get_agpd_parameterization_metadata(config, model_name, parameterization, materials=None):
+    if is_agpd_independent_parameterization(config, model_name, parameterization):
+        metadata = {
+            "name": parameterization,
+            "independent_materials": True,
+            "materials": list(config["surface_composition"] if materials is None else materials),
+        }
+    else:
+        x_reference, slope_specs = get_agpd_parameterization(config, model_name, parameterization)
+        metadata = {"name": parameterization, "x_reference": x_reference, "slopes": slope_specs}
     fixed_parameters = get_agpd_fixed_parameters(model_name)
     if fixed_parameters:
         metadata["fixed_parameters"] = fixed_parameters
     return metadata
 
 
-def get_agpd_all_material_parameter_specs(config, prior_material, model_name, parameterization="shared"):
-    profile = get_agpd_prior_profile(config, prior_material, model_name)
+def get_agpd_all_material_parameter_specs(
+    config, prior_material, model_name, parameterization="shared", materials=None
+):
     definition = get_agpd_model_definition(model_name)
+    active_materials = tuple(config["surface_composition"] if materials is None else materials)
+    if is_agpd_independent_parameterization(config, model_name, parameterization):
+        return get_agpd_independent_parameter_specs(config, model_name, active_materials)
+
+    profile = get_agpd_prior_profile(config, prior_material, model_name)
     _validate_parameter_specs(definition, profile["parameters"], f"{prior_material}/{model_name}")
     parameter_specs = _free_parameter_specs(model_name, profile["parameters"])
     _, slope_specs = get_agpd_parameterization(config, model_name, parameterization)
@@ -175,7 +240,7 @@ def get_agpd_all_material_parameter_specs(config, prior_material, model_name, pa
         parameter_specs[f"{parameter_name}_xAg_slope"] = specification
     if definition.coverage_cap_mode == "fitted":
         cap_spec = config["fitted_cap_calibration"]["theta_CO_max_prior"]
-        for material in config["surface_composition"]:
+        for material in active_materials:
             parameter_specs[f"theta_CO_max_{material}"] = dict(cap_spec)
     return parameter_specs
 
@@ -298,16 +363,21 @@ def build_agpd_all_material_mechanism(
     if missing:
         raise ValueError(f"Missing surface-composition configuration for materials: {missing}.")
 
-    profile = get_agpd_prior_profile(config, prior_material, model_name)
-    _validate_parameter_specs(definition, profile["parameters"], f"{prior_material}/{model_name}")
-    parameter_specs = _free_parameter_specs(model_name, profile["parameters"])
+    independent_materials = is_agpd_independent_parameterization(config, model_name, parameterization)
+    if independent_materials:
+        parameter_specs = get_agpd_independent_parameter_specs(config, model_name, materials)
+        x_reference, slope_specs = 0.5, {}
+    else:
+        profile = get_agpd_prior_profile(config, prior_material, model_name)
+        _validate_parameter_specs(definition, profile["parameters"], f"{prior_material}/{model_name}")
+        parameter_specs = _free_parameter_specs(model_name, profile["parameters"])
+        x_reference, slope_specs = get_agpd_parameterization(config, model_name, parameterization)
     fixed_parameters = get_agpd_fixed_parameters(model_name)
-    x_reference, slope_specs = get_agpd_parameterization(config, model_name, parameterization)
     slope_prior_specs = {f"{name}_xAg_slope": spec for name, spec in slope_specs.items()}
     cap_prior_specs = {}
     if definition.coverage_cap_mode == "fitted":
         cap_spec = config["fitted_cap_calibration"]["theta_CO_max_prior"]
-        cap_prior_specs = {f"theta_CO_max_{material}": dict(cap_spec) for material in config["surface_composition"]}
+        cap_prior_specs = {f"theta_CO_max_{material}": dict(cap_spec) for material in materials}
 
     def mechanism(point_inputs):
         if tuple(point_inputs.materials) != materials:
@@ -323,7 +393,37 @@ def build_agpd_all_material_mechanism(
             for name, value in fixed_parameters.items()
         }
         state = build_agpd_point_state(inputs=point_inputs, config=config)
-        effective_values = {**fixed_values, **prior_values}
+        if independent_materials:
+            effective_values = {}
+            all_parameter_names = tuple(field.name for field in fields(definition.parameter_class))
+            active_names = {
+                material: set(get_agpd_material_parameter_names(model_name, material))
+                for material in materials
+            }
+            for parameter_name in all_parameter_names:
+                if parameter_name in fixed_values:
+                    effective_values[parameter_name] = fixed_values[parameter_name]
+                    continue
+
+                active_materials = [
+                    material for material in materials if parameter_name in active_names[material]
+                ]
+                fallback = (
+                    prior_values[agpd_independent_parameter_name(parameter_name, active_materials[0])]
+                    if active_materials
+                    else pt.as_tensor_variable(0.0)
+                )
+                pointwise_value = pt.zeros_like(pt.as_tensor_variable(state.Ag_fraction))
+                for material_index, material in enumerate(materials):
+                    value = fallback
+                    if parameter_name in active_names[material]:
+                        value = prior_values[agpd_independent_parameter_name(parameter_name, material)]
+                    material_mask = pt.as_tensor_variable((state.material_index == material_index).astype(float))
+                    pointwise_value = pointwise_value + value * material_mask
+                effective_values[parameter_name] = pointwise_value
+        else:
+            effective_values = {**fixed_values, **prior_values}
+
         if slope_specs:
             x_shift = pt.as_tensor_variable(state.Ag_fraction) - x_reference
             for parameter_name in slope_specs:
@@ -369,11 +469,15 @@ __all__ = [
     "available_agpd_parameterizations",
     "build_agpd_all_material_mechanism",
     "build_agpd_mechanism",
+    "agpd_independent_parameter_name",
     "get_agpd_all_material_parameter_specs",
+    "get_agpd_independent_parameter_specs",
+    "get_agpd_material_parameter_names",
     "get_agpd_fixed_parameters",
     "get_agpd_model_definition",
     "get_agpd_parameterization",
     "get_agpd_parameterization_metadata",
     "get_agpd_prior_profile",
     "get_agpd_prior_variant",
+    "is_agpd_independent_parameterization",
 ]

@@ -66,6 +66,16 @@ For a full-data run intended as the source/reference for **LOMO**, fit the same 
 
 ```powershell
 python scripts/fit_agpd_posterior.py CO_BF_ER_LH --all-materials --parameterization linear_xAg --error-structure shared
+
+Independent per-material mechanism parameters with one shared error pair:
+
+```powershell
+python scripts/fit_agpd_posterior.py CO_BF_ER_LH --all-materials --parameterization independent --error-structure shared --overwrite
+```
+
+This fit samples 10 mechanism parameters independently for each alloy and the six active ER/LH/Pd parameters
+for Pd100. The four Ag/BF-only Pd100 parameters (`deltaG5_0`, `beta_2_BF`, `q`, `Gact2_BF_0`) are not sampled.
+The mechanism therefore has 56 free physical parameters plus the shared `sigma_rate_abs` and `sigma_rate_rel` pair.
 ```
 
 LOMO cannot extrapolate independent material-specific error parameters to a material omitted from training.
@@ -241,3 +251,13 @@ Windows PowerShell 5 does not support `&&`. To run postprocessing followed by DR
 ```powershell
 python scripts/postprocess_agpd_posterior.py CO_BF_ER --material Ag50Pd50 --plot-level full; if ($?) { python scripts/postprocess_agpd_drc.py CO_BF_ER --material Ag50Pd50 --check-half-step }
 ```
+
+### All-material exclusions and one-command postprocessing
+
+All-material fits can omit selected material datasets without changing the processed data files:
+
+```powershell
+python scripts/fit_agpd_posterior.py CO_BF_ER_LH --all-materials --parameterization independent --error-structure shared --exclude-materials Ag10Pd90 Ag90Pd10 --overwrite
+```
+
+The corresponding result stays in the usual all-material directory and uses a compact model-leaf suffix such as `CO_BF_ER_LH__no_Ag10Pd90_Ag90Pd10`. Pass the same `--exclude-materials` list when postprocessing. `postprocess_agpd_posterior.py` now runs the standard products, transition-state DRC products, and all-material composition-parameter products in one command by default. Use `--skip-drc` or `--skip-composition` only when needed.

@@ -157,7 +157,7 @@ For prediction-only pure-Pd states used by validation, the all-material wrapper 
 ### Ag10 no-BF variants
 
 `CO_BF_ER_LH_Ag10_no_BF` uses the full parameterization but masks BF activity to zero on `Ag10Pd90`. Other alloy materials retain BF normally. BF-specific parameters are therefore learned from the remaining BF-active alloys, not from Ag10.
-* `CO_BF_ER_LH_Ag10_no_ER` â€” full model with ER disabled only for Ag10Pd90
+* `CO_BF_ER_LH_Ag10_no_ER` — full model with ER disabled only for Ag10Pd90
 
 Equivalent masking is used by the capped/fitted-cap Ag10-no-BF variants.
 

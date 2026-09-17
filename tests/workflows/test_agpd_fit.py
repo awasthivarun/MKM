@@ -7,6 +7,7 @@ from mkm.project_paths import ProjectPaths
 from mkm.workflows.agpd_basic import load_agpd_model_config
 from mkm.workflows.agpd_fit import (
     all_parameter_specs,
+    fit_materials,
     rate_normal_likelihood_kwargs,
     resolved_parameterization_metadata,
     resolve_agpd_fit_specification,
@@ -293,3 +294,67 @@ def test_named_composition_profiles_resolve_for_shared_error(
         "sigma_rate_abs",
         "sigma_rate_rel",
     }.issubset(specs)
+
+
+def test_independent_all_material_fit_has_56_mechanism_parameters_and_two_shared_errors():
+    config = _config()
+    specification = resolve_agpd_fit_specification(
+        config,
+        model_name="CO_BF_ER_LH",
+        all_materials=True,
+        parameterization="independent",
+        error_structure="shared",
+    )
+
+    specs = all_parameter_specs(specification, config)
+    mechanism_specs = {name for name in specs if not name.startswith("sigma_rate_")}
+    assert specification.prior_material is None
+    assert len(mechanism_specs) == 56
+    assert len(specs) == 58
+    assert {"sigma_rate_abs", "sigma_rate_rel"}.issubset(specs)
+
+    metadata = resolved_parameterization_metadata(specification, config)
+    assert metadata == {
+        "name": "independent",
+        "independent_materials": True,
+        "materials": list(config["surface_composition"]),
+    }
+
+
+def test_independent_all_material_fit_requires_shared_error_pair():
+    with pytest.raises(ValueError, match="require error_structure='shared'"):
+        resolve_agpd_fit_specification(
+            _config(),
+            model_name="CO_BF_ER_LH",
+            all_materials=True,
+            parameterization="independent",
+            error_structure="material",
+        )
+
+
+def test_all_material_fit_can_exclude_material_datasets_without_extra_parameter_blocks():
+    config = _config()
+    specification = resolve_agpd_fit_specification(
+        config,
+        model_name="CO_BF_ER_LH",
+        all_materials=True,
+        parameterization="independent",
+        error_structure="shared",
+        excluded_materials=("Ag10Pd90", "Ag90Pd10"),
+    )
+    assert specification.excluded_materials == ("Ag10Pd90", "Ag90Pd10")
+    assert fit_materials(specification, config) == ("Pd100", "Ag25Pd75", "Ag50Pd50", "Ag75Pd25")
+    specs = all_parameter_specs(specification, config)
+    assert len(specs) == 38
+    assert not any(name.endswith("_Ag10Pd90") or name.endswith("_Ag90Pd10") for name in specs)
+
+
+def test_material_exclusions_are_rejected_for_individual_fits():
+    with pytest.raises(ValueError, match="only supported for --all-materials"):
+        resolve_agpd_fit_specification(
+            _config(),
+            model_name="CO_ER_LH",
+            material="Ag25Pd75",
+            error_structure="material",
+            excluded_materials=("Ag10Pd90",),
+        )

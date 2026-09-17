@@ -218,10 +218,10 @@ def _compute_loo_stage(run, tables_dir, status_rows):
                 model_name=run.specification.model_name,
             )
     except Exception as error:
-        warning_text = warning_text(caught) if "caught" in locals() else ""
+        captured_warnings = warning_text(caught) if "caught" in locals() else ""
         message = f"{type(error).__name__}: {error}"
-        if warning_text:
-            message = f"{message}; warnings: {warning_text}"
+        if captured_warnings:
+            message = f"{message}; warnings: {captured_warnings}"
         status_rows.append(status_row("loo", "error", message))
         return None, None
 
@@ -233,15 +233,15 @@ def _compute_loo_stage(run, tables_dir, status_rows):
     good_k = float(row["good_k"])
     max_pareto_k = float(row["max_pareto_k"])
     n_bad = int(row["n_pareto_k_above_good_k"])
-    warning_text = warning_text(caught)
-    has_warning = bool(row["warning"]) or n_bad > 0 or bool(warning_text)
+    captured_warnings = warning_text(caught)
+    has_warning = bool(row["warning"]) or n_bad > 0 or bool(captured_warnings)
     status_rows.append(
         status_row(
             "loo",
             "warning" if has_warning else "complete",
             "PSIS-LOO completed with reliability warning(s)." if has_warning else "",
             warning_count=len(caught),
-            warnings=warning_text,
+            warnings=captured_warnings,
             good_k=good_k,
             max_pareto_k=max_pareto_k,
             n_pareto_k_above_good_k=n_bad,
@@ -282,23 +282,23 @@ def _compute_loo_pit_stage(run, loo, tables_dir, status_rows):
                 run.inputs,
             )
     except Exception as error:
-        warning_text = warning_text(caught) if "caught" in locals() else ""
+        captured_warnings = warning_text(caught) if "caught" in locals() else ""
         message = f"{type(error).__name__}: {error}"
-        if warning_text:
-            message = f"{message}; warnings: {warning_text}"
+        if captured_warnings:
+            message = f"{message}; warnings: {captured_warnings}"
         status_rows.append(status_row("loo_pit", "error", message, max_pareto_k=max_pareto_k))
         return None
 
     calibration.summary.to_csv(tables_dir / "loo_pit_summary.csv", index=False)
     calibration.pointwise.to_parquet(tables_dir / "loo_pit_pointwise.parquet", index=False)
-    warning_text = warning_text(caught)
+    captured_warnings = warning_text(caught)
     status_rows.append(
         status_row(
             "loo_pit",
-            "warning" if warning_text else "complete",
-            "LOO-PIT completed with numerical warning(s)." if warning_text else "",
+            "warning" if captured_warnings else "complete",
+            "LOO-PIT completed with numerical warning(s)." if captured_warnings else "",
             warning_count=len(caught),
-            warnings=warning_text,
+            warnings=captured_warnings,
             max_pareto_k=max_pareto_k,
         )
     )

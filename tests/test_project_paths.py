@@ -152,6 +152,19 @@ def test_validation_paths_distinguish_loco_and_lomo(tmp_path):
     )
 
 
+
+def test_all_material_exclusions_use_compact_fit_leaf_suffix(tmp_path):
+    paths = ProjectPaths(root=tmp_path)
+    result = paths.agpd_posterior_output_dir(
+        fit_scope="all_materials",
+        model_name="CO_BF_ER_LH",
+        parameterization="independent",
+        error_structure="shared",
+        excluded_materials=("Ag10Pd90", "Ag90Pd10"),
+    )
+    assert result.name == "CO_BF_ER_LH__no_Ag10Pd90_Ag90Pd10"
+    assert result.parent.name == "shared"
+
 def test_invalid_scope_or_error_structure_is_rejected(tmp_path):
     paths = ProjectPaths(root=tmp_path)
     with pytest.raises(ValueError, match="Unknown fit scope"):

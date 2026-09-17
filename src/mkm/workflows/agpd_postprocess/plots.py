@@ -24,14 +24,17 @@ from mkm.postprocessing.plotting import (
     plot_pointwise_loo,
     plot_pointwise_variables,
     plot_sampling_energy,
-    plot_sampling_correlations,
     plot_sampling_pairs,
     plot_sampling_rank,
     plot_sampling_trace,
     plot_second_order_difference,
 )
+from mkm.postprocessing.diagnostics import build_parameter_dependence_matrices
 from mkm.postprocessing.sampling import sampling_parameter_names
 from .status import safe_plot, status_row
+
+
+PAIR_PLOT_PARAMETER_LIMIT = 30
 def _make_plots(
     run,
     config,
@@ -338,20 +341,48 @@ def _make_plots(
                 )
             )
         else:
-            plot(
-                "sampling_pairs",
-                plot_sampling_pairs,
-                run.inference_data,
-                pair_names,
-                figures_dir / "sampling_pairs.png",
-            )
-            plot(
-                "sampling_correlations",
-                plot_sampling_correlations,
-                run.inference_data,
-                pair_names,
-                figures_dir / "sampling_correlations.png",
-            )
+            try:
+                covariance, correlation = build_parameter_dependence_matrices(
+                    run.inference_data.posterior, pair_names
+                )
+                tables_dir = figures_dir.parent / "tables"
+                tables_dir.mkdir(parents=True, exist_ok=True)
+                covariance.to_csv(tables_dir / "posterior_covariance_matrix.csv")
+                correlation.to_csv(tables_dir / "posterior_correlation_matrix.csv")
+            except Exception as error:
+                status_rows.append(
+                    status_row(
+                        "sampling_dependence_matrices",
+                        "error",
+                        f"{type(error).__name__}: {error}",
+                    )
+                )
+            else:
+                n_parameters = int(covariance.shape[0])
+                status_rows.append(
+                    status_row(
+                        "sampling_dependence_matrices",
+                        "complete",
+                        f"Saved numeric covariance and correlation matrices for {n_parameters} parameters.",
+                    )
+                )
+                if n_parameters <= PAIR_PLOT_PARAMETER_LIMIT:
+                    plot(
+                        "sampling_pairs",
+                        plot_sampling_pairs,
+                        run.inference_data,
+                        pair_names,
+                        figures_dir / "sampling_pairs.png",
+                    )
+                else:
+                    status_rows.append(
+                        status_row(
+                            "plot:sampling_pairs",
+                            "skipped_large_parameter_set",
+                            f"Skipped pair plot for {n_parameters} parameters; limit is "
+                            f"{PAIR_PLOT_PARAMETER_LIMIT}.",
+                        )
+                    )
 
         if loo is not None:
             loo_pit_values = (

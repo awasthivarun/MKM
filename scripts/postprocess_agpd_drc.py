@@ -28,6 +28,7 @@ def parse_args():
         default="material",
     )
     parser.add_argument("--prior-material", default="Ag10Pd90")
+    parser.add_argument("--exclude-materials", nargs="*", default=())
     parser.add_argument("--step-eV", type=float, default=1e-4)
     parser.add_argument("--check-half-step", action="store_true")
     parser.add_argument("--save-draws", action="store_true")
@@ -65,6 +66,7 @@ def main():
         parameterization=args.parameterization,
         error_structure=args.error_structure,
         prior_material=args.prior_material,
+        excluded_materials=args.exclude_materials,
     )
     run = load_agpd_posterior_run(
         paths,

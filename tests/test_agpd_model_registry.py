@@ -280,7 +280,7 @@ def test_parameterization_profiles_are_configuration_driven():
         )
     )
 
-    assert base_parameterizations == {"shared", "linear_xAg"}
+    assert base_parameterizations == {"shared", "linear_xAg", "independent"}
     assert capped_parameterizations == base_parameterizations
     assert available_agpd_parameterizations(
         config,
@@ -531,3 +531,38 @@ def test_unknown_model_or_parameterization_is_rejected():
             "CO_BF_ER_LH",
             "unknown",
         )
+
+
+def test_independent_all_material_parameterization_samples_each_material_separately():
+    config = _config()
+    model_name = "CO_BF_ER_LH"
+    materials = tuple(config["surface_composition"])
+
+    specs = get_agpd_all_material_parameter_specs(
+        config,
+        prior_material=None,
+        model_name=model_name,
+        parameterization="independent",
+    )
+    assert len(specs) == 56
+    assert "deltaG1_0_Pd100" in specs
+    assert "Gact2_LH_0_Pd100" in specs
+    for inactive in ("deltaG5_0_Pd100", "beta_2_BF_Pd100", "q_Pd100", "Gact2_BF_0_Pd100"):
+        assert inactive not in specs
+    for material in materials:
+        if material == "Pd100":
+            continue
+        assert sum(name.endswith(f"_{material}") for name in specs) == 10
+
+    mechanism = build_agpd_all_material_mechanism(
+        model_name,
+        materials,
+        config,
+        prior_material=None,
+        parameterization="independent",
+    )
+    with pm.Model() as model:
+        result = mechanism(_point_inputs(materials))
+
+    assert result.ln_rate.ndim == 1
+    assert len(model.free_RVs) == 56

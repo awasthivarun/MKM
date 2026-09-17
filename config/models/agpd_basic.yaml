@@ -40,6 +40,13 @@ composition_parameterizations:
       CO_BF_ER_LH:
         slopes: {}
 
+  independent:
+    # One independent mechanism-parameter set per material in a single joint fit.
+    # The intended likelihood uses one shared sigma_abs / sigma_rel pair across all materials.
+    models:
+      CO_BF_ER_LH:
+        independent_materials: true
+
   linear_xAg:
     x_reference: 0.50
     models:

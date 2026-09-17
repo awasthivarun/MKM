@@ -339,19 +339,20 @@ def plot_sampling_trace(inference_data, parameter_names, output_path: str | Path
     plotted_names = list(data.posterior.data_vars)
     nrows = math.ceil(len(plotted_names) / 3)
     with plt.rc_context({"axes.prop_cycle": DEFAULT_COLOR_CYCLE, "font.weight": "normal"}):
-        pc = azp.plot_trace(
-            data,
-            var_names=plotted_names,
-            group="posterior",
-            backend="matplotlib",
-            aes_by_visuals={"divergence": ["color"]},
-            visuals={"divergence": {"marker": "|", "size": 30}},
-            col_wrap=3,
-            figure_kwargs={
-                "figsize": (TRACE_FIGURE_WIDTH_IN, TRACE_PANEL_HEIGHT_IN * nrows + TRACE_EXTRA_HEIGHT_IN),
-                "layout": "none",
-            },
-        )
+        with azb.rc_context({"plot.max_subplots": max(40, len(plotted_names))}):
+            pc = azp.plot_trace(
+                data,
+                var_names=plotted_names,
+                group="posterior",
+                backend="matplotlib",
+                aes_by_visuals={"divergence": ["color"]},
+                visuals={"divergence": {"marker": "|", "size": 30}},
+                col_wrap=3,
+                figure_kwargs={
+                    "figsize": (TRACE_FIGURE_WIDTH_IN, TRACE_PANEL_HEIGHT_IN * nrows + TRACE_EXTRA_HEIGHT_IN),
+                    "layout": "none",
+                },
+            )
         fig = pc.get_target(plotted_names[0], {}).figure
         for ax in fig.axes:
             ax.grid(False)
@@ -409,23 +410,24 @@ def plot_sampling_rank(inference_data, parameter_names, output_path: str | Path)
     plotted_names = list(data.posterior.data_vars)
     nrows = math.ceil(len(plotted_names) / 3)
     with plt.rc_context({"axes.prop_cycle": DEFAULT_COLOR_CYCLE, "font.weight": "normal"}):
-        pc = azp.plot_rank(
-            data,
-            var_names=plotted_names,
-            group="posterior",
-            backend="matplotlib",
-            envelope_prob=0.99,
-            stats={"ecdf_pit": {"n_simulations": 1000}},
-            col_wrap=3,
-            visuals={
-                "xlabel": False,
-                "credible_interval": {"color": "#D9D9D9", "alpha": 0.42},
-            },
-            figure_kwargs={
-                "figsize": (RANK_FIGURE_WIDTH_IN, RANK_PANEL_HEIGHT_IN * nrows + RANK_EXTRA_HEIGHT_IN),
-                "layout": "none",
-            },
-        )
+        with azb.rc_context({"plot.max_subplots": max(40, len(plotted_names))}):
+            pc = azp.plot_rank(
+                data,
+                var_names=plotted_names,
+                group="posterior",
+                backend="matplotlib",
+                envelope_prob=0.99,
+                stats={"ecdf_pit": {"n_simulations": 1000}},
+                col_wrap=3,
+                visuals={
+                    "xlabel": False,
+                    "credible_interval": {"color": "#D9D9D9", "alpha": 0.42},
+                },
+                figure_kwargs={
+                    "figsize": (RANK_FIGURE_WIDTH_IN, RANK_PANEL_HEIGHT_IN * nrows + RANK_EXTRA_HEIGHT_IN),
+                    "layout": "none",
+                },
+            )
         fig = pc.get_target(plotted_names[0], {}).figure
         visible_axes = [ax for ax in fig.axes if ax.get_visible()]
         for ax, variable in zip(visible_axes, plotted_names, strict=False):

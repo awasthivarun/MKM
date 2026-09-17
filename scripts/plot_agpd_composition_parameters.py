@@ -23,6 +23,7 @@ def parse_args():
         default="material",
     )
     parser.add_argument("--prior-material", default="Ag10Pd90")
+    parser.add_argument("--exclude-materials", nargs="*", default=())
     parser.add_argument("--n-grid", type=int, default=181)
     return parser.parse_args()
 
@@ -38,6 +39,7 @@ def main():
         parameterization=args.parameterization,
         error_structure=args.error_structure,
         prior_material=args.prior_material,
+        excluded_materials=args.exclude_materials,
     )
     run = load_agpd_posterior_run(
         paths,
@@ -56,6 +58,8 @@ def main():
         model_name=specification.model_name,
         parameterization=specification.parameterization,
         n_grid=args.n_grid,
+        prior_material=specification.prior_material or "Ag10Pd90",
+        materials=run.inputs.materials,
     )
     trends_path = composition_dir / "composition_parameter_trends.parquet"
     trends.to_parquet(trends_path, index=False)
@@ -67,6 +71,8 @@ def main():
         model_name=specification.model_name,
         parameterization=specification.parameterization,
         output_path=figure_path,
+        error_structure=specification.error_structure,
+        materials=run.inputs.materials,
     )
 
     print(f"Composition parameter trends saved to: {trends_path}")

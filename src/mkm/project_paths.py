@@ -182,6 +182,7 @@ class ProjectPaths:
         material: str | None = None,
         parameterization: str | None = None,
         error_structure: str | None = None,
+        excluded_materials=(),
     ) -> Path:
         self._validate_fit_scope(fit_scope)
 
@@ -192,7 +193,11 @@ class ProjectPaths:
         if parameterization is None or error_structure is None:
             raise ValueError("All-material fit paths require parameterization and error structure.")
         self._validate_error_structure(error_structure)
-        return Path("all_materials") / parameterization / error_structure / model_name
+        excluded_materials = tuple(excluded_materials)
+        leaf = model_name
+        if excluded_materials:
+            leaf = f"{model_name}__no_{'_'.join(excluded_materials)}"
+        return Path("all_materials") / parameterization / error_structure / leaf
 
     def agpd_posterior_output_dir(self, **fit_specification) -> Path:
         return self.agpd_posterior_root / self._agpd_fit_relative_dir(**fit_specification)

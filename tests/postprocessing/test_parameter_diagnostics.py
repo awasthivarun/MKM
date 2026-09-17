@@ -205,3 +205,35 @@ def test_shared_all_material_parameter_trends_do_not_invent_slopes():
     assert not trends["x_dependent"].any()
     for _, frame in trends.groupby("parameter"):
         assert frame["median"].nunique() == 1
+
+
+def test_independent_parameter_trends_are_discrete_material_posteriors():
+    config = load_agpd_model_config(ProjectPaths.discover(__file__))
+    materials = ("Pd100", "Ag25Pd75", "Ag50Pd50")
+    values = {}
+    for material, delta_g in zip(materials, (-0.30, -0.20, -0.10)):
+        values[f"deltaG1_0_{material}"] = (("chain", "draw"), np.full((2, 3), delta_g))
+    # Populate every active independent parameter required by the trend builder.
+    from mkm.models.agpd_basic import get_agpd_material_parameter_names
+    defaults = {
+        "deltaG1_0": -0.2, "deltaG4_0": 0.0, "deltaG5_0": 0.0,
+        "beta_2_BF": 0.5, "beta_2_ER": 0.5, "q": 0.5,
+        "Gact1_0": 0.5, "Gact2_BF_0": 0.7, "Gact2_ER_0": 0.7, "Gact2_LH_0": 0.7,
+    }
+    for material in materials:
+        for parameter in get_agpd_material_parameter_names("CO_BF_ER_LH", material):
+            name = f"{parameter}_{material}"
+            if name not in values:
+                values[name] = (("chain", "draw"), np.full((2, 3), defaults[parameter]))
+    posterior = xr.Dataset(values)
+    trends = build_agpd_composition_parameter_trends(
+        SimpleNamespace(posterior=posterior),
+        config,
+        model_name="CO_BF_ER_LH",
+        parameterization="independent",
+        materials=materials,
+    )
+    delta_g = trends.loc[trends["parameter"] == "deltaG1_0"].sort_values("xAg")
+    assert delta_g["material"].tolist() == list(materials)
+    assert np.allclose(delta_g["median"], [-0.30, -0.20, -0.10])
+    assert delta_g["independent"].all()

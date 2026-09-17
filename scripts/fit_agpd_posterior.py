@@ -40,6 +40,12 @@ def parse_args():
         default="material",
     )
     parser.add_argument("--prior-material", default=DEFAULT_PRIOR_MATERIAL)
+    parser.add_argument(
+        "--exclude-materials",
+        nargs="*",
+        default=(),
+        help="All-material only: omit these material datasets from the fit.",
+    )
     parser.add_argument("--draws", type=int, default=1000)
     parser.add_argument("--tune", type=int, default=1000)
     parser.add_argument("--chains", type=int, default=4)
@@ -86,6 +92,7 @@ def main():
         parameterization=args.parameterization,
         error_structure=args.error_structure,
         prior_material=args.prior_material,
+        excluded_materials=args.exclude_materials,
     )
 
     materials = fit_materials(specification, config)
@@ -100,6 +107,8 @@ def main():
         print(f"Model: {specification.model_name}")
         print(f"Parameterization: {specification.parameterization}")
         print(f"Error structure: {specification.error_structure}")
+        if specification.excluded_materials:
+            print(f"Excluded materials: {', '.join(specification.excluded_materials)}")
         print("Likelihood: Normal in linear rate space")
         print("sigma = sigma_rate_abs + sigma_rate_rel * model_rate")
 

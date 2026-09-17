@@ -93,8 +93,9 @@ def test_active_composition_parameterizations_have_expected_slope_sets():
     config = _load_model_config()
     profiles = config["composition_parameterizations"]
 
-    assert set(profiles) == {"shared", "linear_xAg"}
+    assert set(profiles) == {"shared", "linear_xAg", "independent"}
     assert profiles["shared"]["models"]["CO_BF_ER_LH"]["slopes"] == {}
+    assert profiles["independent"]["models"]["CO_BF_ER_LH"]["independent_materials"] is True
 
     expected_slopes = {
         "deltaG1_0",

@@ -7,7 +7,11 @@ from mkm.project_paths import ProjectPaths
 from mkm.workflows.agpd_basic import load_agpd_model_config
 from mkm.workflows.agpd_fit import resolve_agpd_fit_specification
 from mkm.workflows.agpd_posterior import load_agpd_posterior_run
-from mkm.workflows.agpd_postprocess import postprocess_agpd_run
+from mkm.workflows.agpd_postprocess import (
+    postprocess_agpd_composition,
+    postprocess_agpd_drc,
+    postprocess_agpd_run,
+)
 
 
 def parse_args():
@@ -18,11 +22,23 @@ def parse_args():
     parser.add_argument("--parameterization", default="shared")
     parser.add_argument("--error-structure", choices=("shared", "material"), default="material")
     parser.add_argument("--prior-material", default="Ag10Pd90")
+    parser.add_argument(
+        "--exclude-materials",
+        nargs="*",
+        default=(),
+        help="All-material only: load the fit that omitted these material datasets.",
+    )
     parser.add_argument("--random-seed", type=int, default=1)
     parser.add_argument("--skip-loo", action="store_true")
     parser.add_argument("--skip-observables", action="store_true")
     parser.add_argument("--second-order-step-v", type=float, default=0.05)
     parser.add_argument("--plot-level", choices=("none", "core", "full"), default="core")
+    parser.add_argument("--skip-drc", action="store_true")
+    parser.add_argument("--drc-step-eV", type=float, default=1e-4)
+    parser.add_argument("--check-drc-half-step", action="store_true")
+    parser.add_argument("--save-drc-draws", action="store_true")
+    parser.add_argument("--skip-composition", action="store_true")
+    parser.add_argument("--composition-n-grid", type=int, default=181)
     return parser.parse_args()
 
 
@@ -38,6 +54,7 @@ def main():
         parameterization=args.parameterization,
         error_structure=args.error_structure,
         prior_material=args.prior_material,
+        excluded_materials=args.exclude_materials,
     )
     run = load_agpd_posterior_run(
         paths,
@@ -56,6 +73,22 @@ def main():
         second_order_step_v=args.second_order_step_v,
         plot_level=args.plot_level,
     )
+    if not args.skip_drc:
+        drc = postprocess_agpd_drc(
+            run,
+            config,
+            paths,
+            step_eV=args.drc_step_eV,
+            check_half_step=args.check_drc_half_step,
+            save_draws=args.save_drc_draws,
+            make_plots=args.plot_level != "none",
+        )
+        print(drc.checks.to_string(index=False))
+    if specification.is_all_materials and not args.skip_composition:
+        postprocess_agpd_composition(
+            run, config, paths, n_grid=args.composition_n_grid
+        )
+
     print(f"Postprocessing products saved to: {run.output_dir}")
     print(f"Postprocessing status: {overall}")
 

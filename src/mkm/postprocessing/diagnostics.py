@@ -176,6 +176,37 @@ def _parameter_components(posterior, name):
         yield label, component
 
 
+def build_parameter_dependence_matrices(posterior, parameter_names):
+    """Return numeric covariance and correlation matrices for configured posterior parameters."""
+    labels = []
+    columns = []
+    for name in parameter_names:
+        if name not in posterior:
+            raise ValueError(f"Posterior is missing sampling parameter '{name}'.")
+        for label, component in _parameter_components(posterior, name):
+            values = np.asarray(component, dtype=float).reshape(-1)
+            if not np.all(np.isfinite(values)):
+                raise ValueError(f"Sampling parameter '{label}' contains non-finite values.")
+            labels.append(label)
+            columns.append(values)
+
+    if not columns:
+        raise ValueError("No sampling parameters were available for dependence diagnostics.")
+    samples = np.column_stack(columns)
+    if samples.shape[0] < 2:
+        raise ValueError("At least two posterior samples are required for covariance diagnostics.")
+
+    covariance = np.atleast_2d(np.cov(samples, rowvar=False, ddof=1))
+    with np.errstate(invalid="ignore", divide="ignore"):
+        correlation = np.atleast_2d(np.corrcoef(samples, rowvar=False))
+
+    covariance = pd.DataFrame(covariance, index=labels, columns=labels)
+    correlation = pd.DataFrame(correlation, index=labels, columns=labels)
+    covariance.index.name = "parameter"
+    correlation.index.name = "parameter"
+    return covariance, correlation
+
+
 def _scalar_statistic(value):
     array = np.asarray(value, dtype=float).reshape(-1)
     if array.size != 1:
