@@ -112,6 +112,7 @@ def summarize_prior_model_points(prior_predictive, model_points):
     variables = [
         "ln_rate_model",
         "theta_CO",
+        "theta_COOH",
         "theta_OH_Pd",
         "theta_empty_Pd",
         "theta_OH_Ag",
@@ -119,6 +120,10 @@ def summarize_prior_model_points(prior_predictive, model_points):
         "rate_fraction_BF",
         "rate_fraction_ER",
         "rate_fraction_LH",
+        "net_pathway_fraction_BF",
+        "net_pathway_fraction_ER",
+        "net_pathway_fraction_LH",
+        "ssa_relative_residual_COOH",
     ]
 
     for name in variables:

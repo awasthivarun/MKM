@@ -99,6 +99,15 @@ _TRANSITION_STATE_CONTROLS = {
         TransitionStateControl(name="ER", parameter="Gact2_ER_0", label="ER"),
         TransitionStateControl(name="LH", parameter="Gact2_LH_0", label="LH"),
     ),
+    "CO_BF_ER_LH_3_OH": (
+        TransitionStateControl(name="CO_adsorption", parameter="Gact1_0", label="CO ads"),
+        TransitionStateControl(name="OH_Pd", parameter="Gact4_0", label="OH* ads"),
+        TransitionStateControl(name="OH_Ag", parameter="Gact5_0", label="OH# ads"),
+        TransitionStateControl(name="BF", parameter="Gact2_BF_0", label="BF"),
+        TransitionStateControl(name="ER", parameter="Gact2_ER_0", label="ER"),
+        TransitionStateControl(name="LH", parameter="Gact2_LH_0", label="LH"),
+        TransitionStateControl(name="CO2", parameter="Gact3_0", label="CO2"),
+    ),
     "CO_BF_ER_LH_capped": (
         TransitionStateControl(
             name="CO_adsorption",
@@ -138,10 +147,14 @@ def _compile_log_rate_evaluator(model_name, point_inputs, config):
     parameter_symbols = {name: pt.dscalar(name) for name in parameter_names}
     parameters = definition.parameter_class(**parameter_symbols)
     state = build_agpd_point_state(inputs=point_inputs, config=config)
+    evaluator_kwargs = {}
+    if definition.config_model_name == "CO_BF_ER_LH_3_OH":
+        evaluator_kwargs["full_ssa_config"] = config.get("full_ssa", {})
     evaluated = definition.evaluator(
         state=state,
         parameters=parameters,
         temperature_K=config["temperature_K"],
+        **evaluator_kwargs,
     )
 
     function = pytensor.function(
@@ -167,10 +180,14 @@ def _compile_pointwise_log_rate_evaluator(model_name, point_inputs, config):
     parameter_symbols = {name: pt.dvector(name) for name in parameter_names}
     parameters = definition.parameter_class(**parameter_symbols)
     state = build_agpd_point_state(inputs=point_inputs, config=config)
+    evaluator_kwargs = {}
+    if definition.config_model_name == "CO_BF_ER_LH_3_OH":
+        evaluator_kwargs["full_ssa_config"] = config.get("full_ssa", {})
     evaluated = definition.evaluator(
         state=state,
         parameters=parameters,
         temperature_K=config["temperature_K"],
+        **evaluator_kwargs,
     )
 
     function = pytensor.function(

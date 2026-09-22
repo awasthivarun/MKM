@@ -51,6 +51,7 @@ def test_agpd_registry_keeps_individual_co_pathway_subsets_and_all_material_mode
         "CO_BF_LH",
         "CO_BF_ER",
         "CO_BF_ER_LH",
+        "CO_BF_ER_LH_3_OH",
         "CO_BF_ER_LH_q1",
         "CO_BF_ER_LH_neg",
         "CO_BF_ER_LH_Ag10_no_BF",
@@ -64,6 +65,7 @@ def test_agpd_registry_keeps_individual_co_pathway_subsets_and_all_material_mode
 
     assert available_agpd_all_material_models() == (
         "CO_BF_ER_LH",
+        "CO_BF_ER_LH_3_OH",
         "CO_BF_ER_LH_q1",
         "CO_BF_ER_LH_neg",
         "CO_BF_ER_LH_Ag10_no_BF",
@@ -260,8 +262,8 @@ def test_individual_co_priors_use_one_canonical_parent_per_material_family():
 def test_yaml_keeps_only_canonical_individual_co_prior_profiles():
     config = _config()
     for material in ("Ag10Pd90", "Ag25Pd75", "Ag50Pd50", "Ag75Pd25", "Ag90Pd10"):
-        assert set(config["prior_profiles"][material]) == {"CO_BF_ER_LH"}
-    assert set(config["prior_profiles"]["Pd100"]) == {"CO_BF_ER_LH"}
+        assert set(config["prior_profiles"][material]) == {"CO_BF_ER_LH", "CO_BF_ER_LH_3_OH"}
+    assert set(config["prior_profiles"]["Pd100"]) == {"CO_BF_ER_LH", "CO_BF_ER_LH_3_OH"}
 
 
 def test_parameterization_profiles_are_configuration_driven():
@@ -566,3 +568,21 @@ def test_independent_all_material_parameterization_samples_each_material_separat
 
     assert result.ln_rate.ndim == 1
     assert len(model.free_RVs) == 56
+
+
+def test_full_ssa_independent_parameterization_has_96_mechanism_parameters():
+    config = _config()
+    model_name = "CO_BF_ER_LH_3_OH"
+    materials = tuple(config["surface_composition"])
+    specs = get_agpd_all_material_parameter_specs(
+        config, prior_material=None, model_name=model_name, parameterization="independent"
+    )
+    assert len(specs) == 96
+    assert sum(name.endswith("_Pd100") for name in specs) == 11
+    for material in materials:
+        if material != "Pd100":
+            assert sum(name.endswith(f"_{material}") for name in specs) == 17
+    assert "deltaG5_0_Pd100" not in specs
+    assert "Gact5_0_Pd100" not in specs
+    assert "Gact2_BF_0_Pd100" not in specs
+    assert available_agpd_parameterizations(config, model_name) == ("independent",)

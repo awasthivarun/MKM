@@ -37,6 +37,12 @@ from .finite_co import (
     evaluate_agpd_co_lh,
     solve_pd_co_ssa_qea_oh,
 )
+
+from .full_ssa import (
+    AgPdCOBFERRLH3OHParameters,
+    AgPdCOBFERRLH3OHResult,
+    evaluate_agpd_co_bf_er_lh_3_oh,
+)
 from .legacy_qea import (
     AgPdBFERRLHParameters,
     AgPdBFERRLHResult,

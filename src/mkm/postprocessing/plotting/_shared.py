@@ -19,13 +19,17 @@ from mkm.postprocessing.sampling import build_sampling_datatree
 
 PATHWAY_COLORS = {
     "CO_adsorption": "#CC79A7",
+    "OH_Pd": "#E69F00",
+    "OH_Ag": "#56B4E9",
     "BF": "#0072B2",
     "ER": "#D55E00",
     "LH": "#009E73",
+    "CO2": "#000000",
 }
 
 COVERAGE_COLORS = {
     "theta_CO": "#0072B2",
+    "theta_COOH": "#CC79A7",
     "theta_OH_Pd": "#D55E00",
     "theta_empty_Pd": "#777777",
     "theta_OH_Ag": "#009E73",
@@ -34,6 +38,7 @@ COVERAGE_COLORS = {
 
 POINTWISE_LABELS = {
     "theta_CO": "CO",
+    "theta_COOH": "COOH",
     "theta_OH_Pd": "OH",
     "theta_empty_Pd": r"$[\ast]$",
     "theta_OH_Ag": "OH",
@@ -41,6 +46,9 @@ POINTWISE_LABELS = {
     "rate_fraction_BF": "BF",
     "rate_fraction_ER": "ER",
     "rate_fraction_LH": "LH",
+    "net_pathway_fraction_BF": "BF",
+    "net_pathway_fraction_ER": "ER",
+    "net_pathway_fraction_LH": "LH",
 }
 
 # Material hue is the visual identity for experiment-vs-model plots. Chemistry-specific plots

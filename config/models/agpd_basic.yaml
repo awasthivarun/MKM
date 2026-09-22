@@ -33,6 +33,15 @@ surface_assumptions:
   surface_composition_equals_bulk: true
   random_mixing: true
 
+full_ssa:
+  # Numerical settings for CO_BF_ER_LH_3_OH. These are part of the resolved model configuration.
+  # The solver iterates on the small common COOH-forming affinity rather than on theta_COOH itself.
+  affinity_iterations: 24
+  affinity_damping: 1.0
+  # Thermodynamic bookkeeping for the irreversible CO2-forming step only. It does not enter the forward rate.
+  # This corresponds to an overall standard CO + 2OH- -> CO2 + H2O + 2e- free energy near -1.86 eV.
+  overall_reaction_deltaG_0_eV: -1.86
+
 composition_parameterizations:
   shared:
     x_reference: 0.50
@@ -45,6 +54,8 @@ composition_parameterizations:
     # The intended likelihood uses one shared sigma_abs / sigma_rel pair across all materials.
     models:
       CO_BF_ER_LH:
+        independent_materials: true
+      CO_BF_ER_LH_3_OH:
         independent_materials: true
 
   linear_xAg:

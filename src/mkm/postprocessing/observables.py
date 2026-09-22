@@ -107,7 +107,15 @@ def summarize_pointwise_pathway_fractions(inference_data, model_points):
     posterior = _get_posterior(inference_data)
     results = {}
 
-    for name in ["rate_fraction_BF", "rate_fraction_ER", "rate_fraction_LH"]:
+    names = (
+        "rate_fraction_BF",
+        "rate_fraction_ER",
+        "rate_fraction_LH",
+        "net_pathway_fraction_BF",
+        "net_pathway_fraction_ER",
+        "net_pathway_fraction_LH",
+    )
+    for name in names:
         if name not in posterior:
             continue
 

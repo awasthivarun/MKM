@@ -7,6 +7,7 @@ from scipy.stats import lognorm, norm, truncnorm
 
 COVERAGE_VARIABLES = (
     "theta_CO",
+    "theta_COOH",
     "theta_CO_site_occupation",
     "theta_OH_Pd",
     "theta_empty_Pd",
@@ -18,6 +19,12 @@ PATHWAY_FRACTION_VARIABLES = (
     "rate_fraction_BF",
     "rate_fraction_ER",
     "rate_fraction_LH",
+)
+
+NET_PATHWAY_FRACTION_VARIABLES = (
+    "net_pathway_fraction_BF",
+    "net_pathway_fraction_ER",
+    "net_pathway_fraction_LH",
 )
 
 ERROR_VARIABLES = (
@@ -320,6 +327,8 @@ def build_balance_summary(posterior):
             + flatten_posterior_samples(posterior["theta_OH_Pd"])
             + flatten_posterior_samples(posterior["theta_empty_Pd"])
         )
+        if "theta_COOH" in posterior:
+            balance = balance + flatten_posterior_samples(posterior["theta_COOH"])
         error = balance - 1.0
         records.append(
             {
@@ -344,15 +353,29 @@ def build_balance_summary(posterior):
             }
         )
     fraction_names = [name for name in PATHWAY_FRACTION_VARIABLES if name in posterior]
+    fraction_label = "pathway_fraction_sum"
+    if not fraction_names:
+        fraction_names = [name for name in NET_PATHWAY_FRACTION_VARIABLES if name in posterior]
+        fraction_label = "net_pathway_fraction_sum"
     if fraction_names:
         total = sum(flatten_posterior_samples(posterior[name]) for name in fraction_names)
         error = total - 1.0
         records.append(
             {
                 "check_type": "balance",
-                "variable": "pathway_fraction_sum",
+                "variable": fraction_label,
                 "max_abs_error": float(np.max(np.abs(error))),
                 "q999_abs_error": float(np.quantile(np.abs(error), 0.999)),
+            }
+        )
+    if "ssa_relative_residual_COOH" in posterior:
+        residual = flatten_posterior_samples(posterior["ssa_relative_residual_COOH"])
+        records.append(
+            {
+                "check_type": "solver",
+                "variable": "ssa_relative_residual_COOH",
+                "max_abs_error": float(np.max(np.abs(residual))),
+                "q999_abs_error": float(np.quantile(np.abs(residual), 0.999)),
             }
         )
     return pd.DataFrame(records)

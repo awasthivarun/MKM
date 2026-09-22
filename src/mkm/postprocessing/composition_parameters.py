@@ -51,16 +51,23 @@ _PARAMETER_PANELS = {
         ("deltaG1_0", "CO*"),
         ("deltaG4_0", "OH*"),
         ("deltaG5_0", "OH#"),
+        ("deltaG3_0", "COOH*"),
     ),
     "barriers": (
         ("Gact1_0", "CO ads"),
+        ("Gact4_0", "OH* ads"),
+        ("Gact5_0", "OH# ads"),
         ("Gact2_ER_0", "ER"),
         ("Gact2_BF_0", "BF"),
         ("Gact2_LH_0", "LH"),
+        ("Gact3_0", "CO2"),
     ),
     "beta": (
+        ("beta_4", "OH* ads"),
+        ("beta_5", "OH# ads"),
         ("beta_2_ER", "ER"),
         ("beta_2_BF", "BF"),
+        ("beta_3", "CO2"),
         ("beta_2", "shared"),
     ),
     "q": (("q", "q"),),
@@ -243,7 +250,14 @@ def _plot_parameter_panel(ax, trends, parameter_specs, title, ylabel, material_x
             continue
 
         if independent:
-            line, = ax.plot(frame["xAg"], frame["median"], "-o", linewidth=1.5, markersize=COMPOSITION_MARKER_SIZE, label=label)
+            line, = ax.plot(
+                frame["xAg"],
+                frame["median"],
+                "-o",
+                linewidth=1.5,
+                markersize=COMPOSITION_MARKER_SIZE,
+                label=label,
+            )
             ax.errorbar(
                 frame["xAg"],
                 frame["median"],

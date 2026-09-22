@@ -77,6 +77,120 @@ prior_profiles:
           lower: 0
           upper: 1
 
+    CO_BF_ER_LH_3_OH:
+      provenance: downhill_COOH+coupling_DRC_regularization
+      parameters:
+        deltaG1_0:
+          distribution: truncated_normal
+          mu: -0.2
+          sigma: 0.2
+          lower: -0.5
+          upper: 0.05
+        deltaG4_0:
+          distribution: truncated_normal
+          mu: 0.0
+          sigma: 0.2
+          lower: -0.25
+          upper: 0.5
+        deltaG5_0:
+          distribution: truncated_normal
+          mu: 0.0
+          sigma: 0.2
+          lower: -0.5
+          upper: 0.5
+        deltaG3_0:
+          # COOH* is thermodynamically favored relative to CO* + OH- over most prior draws.
+          # This intentionally replaces the Spivey COOH/CO scaling-center prior for the full SSA model.
+          distribution: truncated_normal
+          mu: -0.75
+          sigma: 0.08
+          lower: -0.95
+          upper: -0.50
+        q:
+          distribution: truncated_normal
+          mu: 0.5
+          sigma: 1.0
+          lower: 0.0
+          upper: 1.0
+        Gact1_0:
+          # CO adsorption/desorption is normally fast relative to COOH formation, but the upper tail
+          # still permits adsorption control in edge cases.
+          distribution: truncated_normal
+          mu: 0.40
+          sigma: 0.08
+          lower: 0.20
+          upper: 0.65
+        Gact4_0:
+          # Pd OH adsorption/desorption is normally fast relative to COOH formation.
+          distribution: truncated_normal
+          mu: 0.40
+          sigma: 0.08
+          lower: 0.20
+          upper: 0.65
+        Gact5_0:
+          # Ag OH adsorption/desorption is normally fast relative to COOH formation.
+          distribution: truncated_normal
+          mu: 0.40
+          sigma: 0.08
+          lower: 0.20
+          upper: 0.65
+        Gact2_BF_0:
+          distribution: truncated_normal
+          mu: 0.70
+          sigma: 0.10
+          lower: 0.55
+          upper: 0.95
+        Gact2_ER_0:
+          distribution: truncated_normal
+          mu: 0.70
+          sigma: 0.10
+          lower: 0.55
+          upper: 0.95
+        Gact2_LH_0:
+          # LH is allowed a substantially larger high-barrier tail than BF or ER.
+          distribution: truncated_normal
+          mu: 0.75
+          sigma: 0.15
+          lower: 0.55
+          upper: 1.25
+        Gact3_0:
+          # Fast irreversible COOH* removal keeps theta_COOH small and normally gives step 3 low TS DRC.
+          # The upper tail still allows decomposition control in edge cases.
+          distribution: truncated_normal
+          mu: 0.30
+          sigma: 0.08
+          lower: 0.10
+          upper: 0.55
+        beta_4:
+          distribution: truncated_normal
+          mu: 0.5
+          sigma: 0.5
+          lower: 0.0
+          upper: 1.0
+        beta_5:
+          distribution: truncated_normal
+          mu: 0.5
+          sigma: 0.5
+          lower: 0.0
+          upper: 1.0
+        beta_2_BF:
+          distribution: truncated_normal
+          mu: 0.5
+          sigma: 0.5
+          lower: 0.0
+          upper: 1.0
+        beta_2_ER:
+          distribution: truncated_normal
+          mu: 0.5
+          sigma: 0.5
+          lower: 0.0
+          upper: 1.0
+        beta_3:
+          distribution: truncated_normal
+          mu: 0.5
+          sigma: 0.5
+          lower: 0.0
+          upper: 1.0
   Ag25Pd75: *shared_prior_profile
   Ag50Pd50: *shared_prior_profile
   Ag75Pd25: *shared_prior_profile

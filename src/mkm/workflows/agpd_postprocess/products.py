@@ -21,6 +21,7 @@ from .status import LOO_PIT_MAX_PARETO_K, status_row, warning_text
 
 POINTWISE_VARIABLES = (
     "theta_CO",
+    "theta_COOH",
     "theta_OH_Pd",
     "theta_empty_Pd",
     "theta_OH_Ag",
@@ -28,7 +29,13 @@ POINTWISE_VARIABLES = (
     "rate_fraction_BF",
     "rate_fraction_ER",
     "rate_fraction_LH",
+    "net_pathway_fraction_BF",
+    "net_pathway_fraction_ER",
+    "net_pathway_fraction_LH",
+    "ssa_relative_residual_COOH",
 )
+
+
 def _summarize_model_points(run):
     result = run.model_data.model_points.copy()
     posterior = run.inference_data.posterior

@@ -101,6 +101,47 @@ CO_ER_LH
 
 because BF-specific parameters are structurally inactive on `Pd100`.
 
+### Fully finite-rate `CO_BF_ER_LH_3_OH` model
+
+`CO_BF_ER_LH_3_OH` is an all-material, independent-parameter stress-test model. It replaces the
+OH quasi-equilibria and fast-COOH approximation with finite kinetics for all elementary steps:
+
+```text
+CO + * <-> CO*
+OH- + * <-> OH* + e-
+OH- + # <-> OH# + q e-
+CO* + OH# <-> COOH* + # + (1-q)e-
+CO* + OH- <-> COOH* + e-
+CO* + OH* <-> COOH* + *
+COOH* + OH- -> CO2 + H2O + e- + *
+```
+
+`CO*`, `COOH*`, `OH*`, and `OH#` are all placed in steady state. `CO2` is an irreversible sink.
+CO and COOH occupy Pd sites, OH* occupies a Pd site, and OH# occupies an Ag site. The site balances are
+
+$$
+\theta_*+\theta_{\mathrm{CO}}+\theta_{\mathrm{COOH}}+\theta_{\mathrm{OH*}}=1,
+$$
+
+$$
+\theta_\#+\theta_{\mathrm{OH\#}}=1.
+$$
+
+The three COOH-forming routes share one `COOH*` state, so their reaction free energies are derived from common
+state free energies and close thermodynamic cycles exactly. Reverse rate constants for the six reversible steps
+follow exact detailed balance; reverse barriers are never fitted independently. The final irreversible step has a
+forward barrier and a thermodynamically derived reaction free energy for bookkeeping, but its reaction free energy
+does not enter the forward rate. Water activity is one and CO2 activity is zero.
+
+The four SSA equations are analytically reduced to one unknown, `theta_COOH`. A fixed-count damped Newton update
+solves that remaining scalar equation with PyTensor-differentiable algebra. The other coverages are analytic
+functions of `theta_COOH`. Postprocessing records a dimensionless COOH-balance residual so solver convergence can
+be checked over posterior draws rather than assumed.
+
+The initial parameterization is intentionally `independent` only. Each alloy has 17 mechanism parameters; Pd100
+omits the six Ag/OH#/BF-specific parameters and has 11. The six-material fit therefore has 96 mechanism parameters
+plus the shared `sigma_rate_abs` and `sigma_rate_rel`, for 98 free parameters total.
+
 ## All-material composition inference
 
 All-material fits are handled by the same `fit_agpd_posterior.py` workflow using `--all-materials`; there is no separate composition-fitting script.

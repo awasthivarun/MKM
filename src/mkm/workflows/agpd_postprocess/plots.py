@@ -84,6 +84,9 @@ def _make_plots(
         "rate_fraction_BF": PATHWAY_COLORS["BF"],
         "rate_fraction_ER": PATHWAY_COLORS["ER"],
         "rate_fraction_LH": PATHWAY_COLORS["LH"],
+        "net_pathway_fraction_BF": PATHWAY_COLORS["BF"],
+        "net_pathway_fraction_ER": PATHWAY_COLORS["ER"],
+        "net_pathway_fraction_LH": PATHWAY_COLORS["LH"],
     }
 
     for material in run.inputs.materials:
@@ -128,11 +131,14 @@ def _make_plots(
         )
 
         if level == "full":
+            pd_coverages = ["theta_CO", "theta_OH_Pd", "theta_empty_Pd"]
+            if "theta_COOH_median" in points.columns:
+                pd_coverages.insert(1, "theta_COOH")
             plot(
                 f"{material}/coverages_Pd",
                 plot_pointwise_variables,
                 points,
-                ("theta_CO", "theta_OH_Pd", "theta_empty_Pd"),
+                tuple(pd_coverages),
                 material_dir / "coverages_Pd.png",
                 title="Pd site coverages",
                 ylabel="Pd-site coverage",
@@ -158,14 +164,26 @@ def _make_plots(
                     context_label=material_context,
                 )
 
+            if "net_pathway_fraction_BF_median" in points.columns:
+                pathway_variables = (
+                    "net_pathway_fraction_BF",
+                    "net_pathway_fraction_ER",
+                    "net_pathway_fraction_LH",
+                )
+                pathway_title = "Net pathway flux fractions"
+                pathway_ylabel = "net flux / CO2 rate"
+            else:
+                pathway_variables = ("rate_fraction_BF", "rate_fraction_ER", "rate_fraction_LH")
+                pathway_title = "Pathway rate fractions"
+                pathway_ylabel = "rate fraction"
             plot(
                 f"{material}/rate_fractions",
                 plot_pointwise_variables,
                 points,
-                ("rate_fraction_BF", "rate_fraction_ER", "rate_fraction_LH"),
+                pathway_variables,
                 material_dir / "rate_fractions.png",
-                title="Pathway rate fractions",
-                ylabel="rate fraction",
+                title=pathway_title,
+                ylabel=pathway_ylabel,
                 colors=pathway_colors,
                 labels=POINTWISE_LABELS,
                 context_label=material_context,

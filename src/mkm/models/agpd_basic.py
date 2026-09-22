@@ -182,6 +182,8 @@ def get_agpd_material_parameter_names(model_name, material, *, include_fixed=Fal
 
     if material == PURE_PD_MATERIAL and definition.pure_pd_prediction_reduction:
         parameter_names &= {field.name for field in fields(PdCOERLHParameters)}
+    if material == PURE_PD_MATERIAL and definition.pure_pd_inactive_parameters:
+        parameter_names -= set(definition.pure_pd_inactive_parameters)
     if material in definition.bf_disabled_materials:
         parameter_names -= {"deltaG5_0", "beta_2_BF", "q", "Gact2_BF_0"}
     if material in definition.er_disabled_materials:
@@ -316,7 +318,15 @@ def _evaluate_all_material_state(
             bf_activity=_material_activity(state, definition.bf_disabled_materials),
             er_activity=_material_activity(state, definition.er_disabled_materials),
         )
-    return definition.evaluator(state=state, parameters=parameters, temperature_K=config["temperature_K"])
+    evaluator_kwargs = {}
+    if definition.config_model_name == "CO_BF_ER_LH_3_OH":
+        evaluator_kwargs["full_ssa_config"] = config.get("full_ssa", {})
+    return definition.evaluator(
+        state=state,
+        parameters=parameters,
+        temperature_K=config["temperature_K"],
+        **evaluator_kwargs,
+    )
 
 
 def _bounded_linear_max_abs_slope(parameter_name, base_value, parameter_specs, x_reference):

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from mkm.mechanisms.agpd_basic import (
+    AgPdCOBFERRLH3OHParameters,
     AgPdCOBFERRLHParameters,
     AgPdCOBFParameters,
     AgPdCOBFERParameters,
@@ -14,6 +15,7 @@ from mkm.mechanisms.agpd_basic import (
     evaluate_agpd_co_bf,
     evaluate_agpd_co_bf_er,
     evaluate_agpd_co_bf_er_lh,
+    evaluate_agpd_co_bf_er_lh_3_oh,
     evaluate_agpd_co_bf_er_lh_ag10_no_bf,
     evaluate_agpd_co_bf_er_lh_ag10_no_er,
     evaluate_agpd_co_bf_er_lh_capped,
@@ -38,6 +40,7 @@ class AgPdModelDefinition:
     bf_disabled_materials: tuple[str, ...] = ()
     er_disabled_materials: tuple[str, ...] = ()
     pure_pd_prediction_reduction: bool = False
+    pure_pd_inactive_parameters: tuple[str, ...] = ()
 
     @property
     def supports_individual(self):
@@ -90,6 +93,21 @@ AGPD_MODEL_REGISTRY = {
         pathways=("BF", "ER", "LH"),
         fit_scopes=FULL_SCOPES,
         pure_pd_prediction_reduction=True,
+    ),
+    "CO_BF_ER_LH_3_OH": AgPdModelDefinition(
+        parameter_class=AgPdCOBFERRLH3OHParameters,
+        evaluator=evaluate_agpd_co_bf_er_lh_3_oh,
+        pathways=("CO_adsorption", "OH_Pd", "OH_Ag", "BF", "ER", "LH", "CO2"),
+        config_model_name="CO_BF_ER_LH_3_OH",
+        fit_scopes=ALL_ONLY,
+        pure_pd_inactive_parameters=(
+            "deltaG5_0",
+            "q",
+            "Gact5_0",
+            "beta_5",
+            "Gact2_BF_0",
+            "beta_2_BF",
+        ),
     ),
     "CO_BF_ER_LH_q1": AgPdModelDefinition(
         parameter_class=AgPdCOBFERRLHParameters,
@@ -197,4 +215,5 @@ def agpd_model_metadata(model_name):
         "coverage_cap_mode": definition.coverage_cap_mode,
         "bf_disabled_materials": list(definition.bf_disabled_materials),
         "er_disabled_materials": list(definition.er_disabled_materials),
+        "pure_pd_inactive_parameters": list(definition.pure_pd_inactive_parameters),
     }

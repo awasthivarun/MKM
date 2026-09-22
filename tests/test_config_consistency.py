@@ -96,6 +96,7 @@ def test_active_composition_parameterizations_have_expected_slope_sets():
     assert set(profiles) == {"shared", "linear_xAg", "independent"}
     assert profiles["shared"]["models"]["CO_BF_ER_LH"]["slopes"] == {}
     assert profiles["independent"]["models"]["CO_BF_ER_LH"]["independent_materials"] is True
+    assert profiles["independent"]["models"]["CO_BF_ER_LH_3_OH"]["independent_materials"] is True
 
     expected_slopes = {
         "deltaG1_0",
@@ -118,7 +119,7 @@ def test_prior_profiles_keep_only_canonical_co_sources():
     profiles = config["prior_profiles"]
 
     for material in ("Ag10Pd90", "Ag25Pd75", "Ag50Pd50", "Ag75Pd25", "Ag90Pd10", "Pd100"):
-        assert set(profiles[material]) == {"CO_BF_ER_LH"}
+        assert set(profiles[material]) == {"CO_BF_ER_LH", "CO_BF_ER_LH_3_OH"}
 
 
 def test_full_linear_xag_contains_all_mechanism_slopes():

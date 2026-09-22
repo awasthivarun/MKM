@@ -358,3 +358,20 @@ def test_material_exclusions_are_rejected_for_individual_fits():
             error_structure="material",
             excluded_materials=("Ag10Pd90",),
         )
+
+
+def test_full_ssa_independent_fit_has_96_mechanism_parameters_and_two_shared_errors():
+    config = _config()
+    specification = resolve_agpd_fit_specification(
+        config,
+        model_name="CO_BF_ER_LH_3_OH",
+        all_materials=True,
+        parameterization="independent",
+        error_structure="shared",
+    )
+    specs = all_parameter_specs(specification, config)
+    mechanism_specs = {name for name in specs if not name.startswith("sigma_rate_")}
+    assert specification.prior_material is None
+    assert len(mechanism_specs) == 96
+    assert len(specs) == 98
+    assert {"sigma_rate_abs", "sigma_rate_rel"}.issubset(specs)
