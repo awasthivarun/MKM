@@ -1,0 +1,24 @@
+
+dataset_name: PtRu_COOx
+temperature_K: 293.15
+
+materials:
+  - Pt100
+  - Pt66Ru33
+  - Pt50Ru50
+
+electrolyte_concentrations_M: [0.10, 0.25, 0.50, 1.00]
+CO_mole_fractions: [0.001, 0.01, 0.10, 1.00]
+
+# First-pass activity convention; nonideal coefficients are not yet included.
+activity_model: ideal_molarity
+pKw: 14.167
+
+rate_normalization:
+  current_area_basis: Pt_CO_stripping_ECSA
+  electrons_per_CO_oxidation: 2
+  site_charge_density_uC_cm2_Pt: 210.0
+
+analysis_grid:
+  spacing_V: 0.010
+  origin_V: 0.0
