@@ -1,6 +1,6 @@
-# CURRENT_STATE
+ï»¿# CURRENT_STATE
 
-Documentation checkpoint: `7a8c42394fed57e880fbae9d609faefad0c25041` on `rebuild/from-scratch`.
+Source-code baseline: `819c12b` on `rebuild/from-scratch`. PtRu organization updated after this checkpoint.
 
 This file records the **software/scientific workflow state**, not a frozen list of posterior results. Numerical conclusions should be taken from the current `results/` products rather than copied here unless they have become durable project knowledge.
 
@@ -17,7 +17,7 @@ The most developed system is CO oxidation on AgPd in basic media at 293.15 K for
 
 The surface composition is currently taken equal to bulk composition and random mixing is assumed.
 
-## End-to-end workflow implemented
+## AgPd end-to-end workflow implemented
 
 ```text
 raw workbooks
@@ -46,7 +46,241 @@ The AgPd mechanism implementation is split into `state.py`, `electrochem.py`, `s
 
 Run metadata stores the resolved model specification, resolved prior specification, and a resolved-fit hash in addition to the full configuration-bundle hash. This separates fit-defining provenance from unrelated edits elsewhere in configuration files.
 
-## Active likelihood
+## PtRu preprocessing and experimental observables
+
+### Scientific scope and development status
+
+PtRu CO oxidation is being investigated in acidic and basic media at 293.15 K.
+
+The primary Todd datasets include:
+
+- `Pt100`
+- `Pt66Ru33`
+- `Pt50Ru50`
+
+The acidic electrolyte is HClO4 and the basic electrolyte is KOH.
+Both use concentrations of 0.10, 0.25, 0.50, and 1.00 M.
+
+CO mole fractions are 0.001, 0.01, 0.10, and 1.00.
+
+Additional Em Pt/C measurements are processed separately at 0.10 M
+electrolyte, with seven CO mole fractions from 0.001 to 1.00.
+Pt/ATO measurements are deferred.
+
+**Implemented:** Raw-data ingestion, standardization, common-potential
+interpolation, rate plots, and experimental kinetic observables.
+
+**Not implemented:** PtRu microkinetic mechanisms, Bayesian inference,
+posterior postprocessing, and data-selection/truncation rules.
+
+All current PtRu kinetic-observable products use full, untruncated data.
+
+### Experimental replicates
+
+Replicate structures differ between sources:
+
+- Todd acidic: one trace per condition for all three materials.
+- Todd basic PtRu alloys: one trace per condition.
+- Todd basic Pt100: four trials per condition.
+- Em acidic Pt/C: three replicates of the 20% Pt/C preparation.
+- Em basic Pt/C: one 20% Pt/C trace and two 20% Pt/C 1 mg traces.
+
+The two Em basic catalyst preparations are kept separate.
+Todd and Em observations are never pooled during preprocessing.
+
+Trial pairing across different CO pressures or electrolyte
+concentrations is not assumed for PtRu reaction-order calculations.
+
+### Physical and numerical conventions
+
+Temperature: 293.15 K.
+
+The canonical analysis potential is `E_V_SHE`.
+Raw `E_V_RHE` is retained in standardized data for provenance.
+
+Potential conversion uses
+
+$$
+E_{\mathrm{SHE}} =
+E_{\mathrm{RHE}} + \frac{RT}{F}\ln a_{\mathrm{H^+}}.
+$$
+
+The electrolyte activity model is ideal molarity.
+The configured water ion product is `pKw = 14.167`.
+
+In acid, the nominal proton activity is
+
+$$
+a_{\mathrm{H^+}} = C_{\mathrm{HClO_4}}/(1\,\mathrm{M}).
+$$
+
+In base, the nominal hydroxide activity is
+
+$$
+a_{\mathrm{OH^-}} = C_{\mathrm{KOH}}/(1\,\mathrm{M}).
+$$
+
+The complementary ion activity is inferred using the configured Kw.
+
+For CO, the intended activity convention matches AgPd:
+
+$$
+a_{\mathrm{CO}} = y_{\mathrm{CO}}P_{\mathrm{tot}}/P^\circ.
+$$
+
+With the nominal pressures both equal to 1 bar,
+the dimensionless CO activity equals the gas mole fraction.
+
+Todd current densities are referenced to CO-stripping ECSA.
+The preprocessing assumes a site charge density of
+210 microC/cm2 and two electrons per CO oxidation.
+
+For current density in mA/cm2, the normalized rate is
+
+$$
+r\;[\mathrm{s^{-1}}] =
+\frac{j\;[\mathrm{mA/cm^2}]}{0.420}.
+$$
+
+The CO-stripping normalization is treated as a Pt-accessible-site
+basis for PtRu. This does not establish that Ru-bound CO is absent
+under all reaction conditions.
+
+The comparability of Em and Todd current-density area bases
+requires verification before quantitative cross-source inference.
+
+Rates are interpolated using PCHIP in logarithmic rate space
+onto a common 0.01 V SHE grid, without extrapolation.
+
+Experimental potential support is allowed to differ between
+conditions and materials. Rectangular coverage is not imposed.
+
+### Experimental kinetic observables
+
+The PtRu preprocessing calculates three types of observables.
+
+**Apparent transfer coefficient**
+
+$$
+\alpha(E) = \frac{RT}{F}\frac{d\ln r}{dE_{\mathrm{SHE}}}.
+$$
+
+The derivative is calculated separately for each replicate
+using the shared transfer-coefficient utility with second-order
+finite differences. Available replicates are then summarized.
+
+**CO reaction order**
+
+$$
+\delta_{\mathrm{CO}}(E) =
+\frac{\ln\bar r(E,a_2)-\ln\bar r(E,a_1)}
+{\ln(a_2/a_1)}.
+$$
+
+The calculation uses adjacent CO activities and arithmetic
+condition-mean rates at matching SHE potentials.
+
+No cross-pressure replicate pairing is assumed.
+
+**H+ and OH- reaction orders**
+
+At each common potential and CO pressure, a single log-log
+regression is fitted across all four electrolyte concentrations:
+
+$$
+\ln\bar r(E,C_k) = b(E) + \delta_i(E)\ln a_i(C_k),
+$$
+
+where `i` is H+ in acid and OH- in base.
+
+A single slope is used instead of adjacent electrolyte intervals.
+The calculation requires common potential support across
+the four electrolyte concentrations.
+
+Em does not contribute electrolyte reaction orders because
+only one electrolyte concentration is available.
+
+### Replicate uncertainty
+
+Where replicated measurements exist, variability is summarized
+at the experimental-condition level.
+
+For reaction orders, the existing implementation propagates
+replicate log-rate standard deviations assuming independent
+variation between experimental conditions.
+
+The resulting order-SD bands represent propagated replicate
+variability. They are not confidence intervals on the
+condition-mean reaction orders.
+
+If the required replicate SDs are unavailable, the propagated
+order SD is NaN and no band is drawn.
+
+These uncertainties should not be interpreted as validated
+measurement-error distributions for subsequent Bayesian fitting.
+
+The kinetic observables are calculated from the same measured
+rate data and are not independent experimental observations.
+
+### Code organization
+
+Reusable scientific calculations are implemented in:
+
+- `src/mkm/preprocessing/ptru_todd.py`
+- `src/mkm/preprocessing/ptru_em.py`
+- `src/mkm/preprocessing/ptru_observables.py`
+
+Reusable figure construction is implemented in:
+
+- `src/mkm/preprocessing/ptru_plotting.py`
+
+Shared AgPd/PtRu functionality remains in:
+
+- `src/mkm/preprocessing/observables.py`
+- `src/mkm/preprocessing/plotting.py`
+
+The current PtRu entry points are:
+
+- `scripts/process_ptru_todd.py`
+- `scripts/process_ptru_em.py`
+- `scripts/plot_ptru_todd.py`
+- `scripts/process_ptru_observables.py`
+
+The consolidated observable entry point replaces the earlier
+separate alpha, CO-order, and electrolyte-order scripts.
+
+The refactor is intended to preserve existing Parquet schemas,
+numerical results, PNG/SVG figures, filenames, and directories.
+Output equivalence must be checked against the pre-refactor baseline.
+
+### Scientific limitations and unresolved issues
+
+1. Acidic Pt100 contains sharp features in rate derivatives
+   and reaction orders. Their physical origin is unresolved.
+   Contributions unrelated to steady-state CO oxidation are
+   possible but have not been established.
+
+2. PtRu fitting windows and truncation criteria have not
+   been established. No suspicious regions are automatically
+   excluded by the current pipeline.
+
+3. The electrolyte activity model is ideal. Potential effects
+   of activity coefficients and changes in ionic strength
+   have not been assessed.
+
+4. Replicates are sparse or absent for most Todd conditions.
+
+5. The current reaction-order calculations characterize
+   apparent kinetic dependencies, not unique mechanisms.
+
+6. No PtRu likelihood, model parameters, or mechanistic
+   conclusions should be inferred from the existing AgPd
+   inference implementation.
+
+The next scientific milestone is to assess data quality and
+define a reproducible PtRu selection/truncation procedure
+before constructing PtRu microkinetic models.
+## AgPd active likelihood
 
 The only active likelihood is Normal in linear rate space:
 
@@ -198,7 +432,7 @@ For prediction-only pure-Pd states used by validation, the all-material wrapper 
 ### Ag10 no-BF variants
 
 `CO_BF_ER_LH_Ag10_no_BF` uses the full parameterization but masks BF activity to zero on `Ag10Pd90`. Other alloy materials retain BF normally. BF-specific parameters are therefore learned from the remaining BF-active alloys, not from Ag10.
-* `CO_BF_ER_LH_Ag10_no_ER` — full model with ER disabled only for Ag10Pd90
+* `CO_BF_ER_LH_Ag10_no_ER` ï¿½ full model with ER disabled only for Ag10Pd90
 
 Equivalent masking is used by the capped/fitted-cap Ag10-no-BF variants.
 

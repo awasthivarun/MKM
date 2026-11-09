@@ -1,4 +1,4 @@
-# REPO_MAP
+﻿# REPO_MAP
 
 Architecture and ownership guide for the MKM rebuild.
 
@@ -61,6 +61,133 @@ completed all-material posterior
 ```
 
 The old split between individual fitting and separate composition-fitting scripts no longer exists. `fit_agpd_posterior.py`, `postprocess_agpd_posterior.py`, and `postprocess_agpd_drc.py` each handle both scopes through `--all-materials`.
+
+## PtRu experimental preprocessing flow
+
+PtRu currently has an experimental preprocessing and observable-analysis
+pipeline. It does not yet have a microkinetic model or inference workflow.
+
+```text
+Todd / Em raw Excel workbooks
+             |
+             v
+config/preprocessing/ptru_todd.yaml
+             |
+             v
+process_ptru_todd.py / process_ptru_em.py
+             |
+             v
+ptru_todd.py / ptru_em.py
+             |
+             v
+Standardized and full analysis Parquets
+             |
+             +-------------------------+
+             |                         |
+             v                         v
+plot_ptru_todd.py       process_ptru_observables.py
+             |                         |
+             v                         v
+ptru_plotting.py        ptru_observables.py
+             |                         |
+             |                         v
+             |                Shared observables.py
+             |                         |
+             +------------+------------+
+                          |
+                          v
+             Experimental figures and
+             kinetic-observable Parquets
+```
+
+### Configuration
+
+`config/preprocessing/ptru_todd.yaml` owns the experimental
+preprocessing conventions for both Todd and Em:
+
+- temperature (293.15 K);
+- primary Pt/PtRu materials;
+- Todd electrolyte and CO concentration grids;
+- ideal electrolyte-activity convention and pKw;
+- Pt CO-stripping ECSA rate-normalization constants;
+- common SHE analysis-grid spacing and origin.
+
+Em's additional CO concentrations and sample preparations are
+identified from the source-specific data.
+
+PtRu does not currently have a mechanism or prior configuration.
+
+### Module ownership
+
+`src/mkm/preprocessing/ptru_todd.py`
+
+- Todd workbook parsing and validation;
+- raw-data standardization;
+- SHE conversion and rate normalization;
+- PCHIP log-rate interpolation onto the analysis grid.
+
+`src/mkm/preprocessing/ptru_em.py`
+
+- Em Pt/C workbook parsing;
+- sample-preparation and replicate identification;
+- source-specific data standardization.
+
+Em uses the shared Todd analysis-grid construction function.
+
+`src/mkm/preprocessing/ptru_observables.py`
+
+- replicate-resolved transfer coefficients;
+- adjacent-CO-pressure reaction orders;
+- full-range H+ and OH- reaction orders;
+- PtRu-specific grouping and replicate-uncertainty conventions.
+
+Reusable mathematical operations remain in
+`src/mkm/preprocessing/observables.py`.
+
+`src/mkm/preprocessing/ptru_plotting.py`
+
+- experimental rate figures;
+- transfer-coefficient figures;
+- CO reaction-order figures;
+- electrolyte reaction-order figures;
+- PtRu material colors, panel layouts, and tick formatting.
+
+Shared plotting utilities remain in
+`src/mkm/preprocessing/plotting.py`.
+
+### Canonical PtRu scripts
+
+```text
+scripts/process_ptru_todd.py
+scripts/process_ptru_em.py
+scripts/plot_ptru_todd.py
+scripts/process_ptru_observables.py
+```
+
+The consolidated observable script replaces:
+
+```text
+scripts/process_ptru_alpha.py
+scripts/process_ptru_co_orders.py
+scripts/process_ptru_ion_orders.py
+```
+
+The old entry points can be removed after output-equivalence verification.
+
+### Scientific boundaries
+
+The two catalyst families intentionally differ in preprocessing:
+
+- AgPd CO-order calculations use paired replicate information.
+- PtRu CO-order calculations use independent condition-mean rates.
+- AgPd electrolyte orders use three KOH concentrations.
+- PtRu electrolyte orders use four acid/base concentrations.
+- PtRu's current analysis uses full, untruncated experimental data.
+- AgPd has an established selected/truncated analysis dataset.
+- Em Pt/C preparations are processed separately from Todd.
+
+Experimental alpha and reaction orders are derived from rate data.
+They are not independent measurements for likelihood construction.
 
 ## Configuration
 
@@ -277,7 +404,7 @@ Validation posterior-shift summaries and held-out validation plots.
 
 Shared plotting implementation used by posterior, DRC, and validation scripts, including common presentation styling and material/composition overlay figures.
 
-## Canonical scripts
+## Canonical AgPd scripts
 
 ```text
 process_agpd_basic.py
@@ -294,7 +421,7 @@ validate_agpd_posterior.py
 
 See `scripts/README.md` for CLI examples.
 
-## Result hierarchy
+## AgPd result hierarchy
 
 Individual posterior:
 
@@ -345,6 +472,19 @@ LOCO/LOMO validation is nested under the corresponding full all-material fit dir
 
 ## Where do I change...?
 
+### PtRu preprocessing
+
+- Todd raw ingestion: `src/mkm/preprocessing/ptru_todd.py`
+- Em raw ingestion: `src/mkm/preprocessing/ptru_em.py`
+- PtRu preprocessing configuration: `config/preprocessing/ptru_todd.yaml`
+- PtRu alpha and orders: `src/mkm/preprocessing/ptru_observables.py`
+- PtRu experimental plots: `src/mkm/preprocessing/ptru_plotting.py`
+- Shared observable mathematics: `src/mkm/preprocessing/observables.py`
+- Shared plot styling: `src/mkm/preprocessing/plotting.py`
+- PtRu CLI orchestration: `scripts/process_ptru_observables.py`
+
+### AgPd and shared inference implementation
+
 - raw workbook parsing: `src/mkm/preprocessing/agpd_basic.py`
 - preprocessing facts: `config/preprocessing/agpd_basic.yaml`
 - interpolation/truncation: `src/mkm/preprocessing/`
@@ -375,7 +515,117 @@ When a new AgPd model identity is added, check the following places:
 - `tests/test_agpd_model_registry.py` and any model-specific tests: update exact model lists and test the new behavior;
 - search the repository for explicit enumerations of sibling model names, since not every model-specific mapping is derived from the central registry.
 
-## Data contract
+## PtRu processed-data contract
+
+The PtRu data are organized separately by medium:
+
+```text
+data/processed/PtRu_COOx_acidic/
+data/processed/PtRu_COOx_basic/
+```
+
+### Todd products
+
+For either medium, let `<dataset>` denote `PtRu_COOx_acidic`
+or `PtRu_COOx_basic`.
+
+Standardized observations:
+
+```text
+standardized/<dataset>_replicates.parquet
+```
+
+Full interpolated analysis observations:
+
+```text
+analysis/<dataset>_full.parquet
+```
+
+Kinetic observables:
+
+```text
+analysis/<dataset>_alpha_replicates.parquet
+analysis/<dataset>_alpha_summary.parquet
+analysis/<dataset>_delta_CO.parquet
+analysis/<dataset>_delta_Hplus.parquet  (acidic only)
+analysis/<dataset>_delta_OH.parquet     (basic only)
+```
+
+The analysis data use a 0.01 V SHE grid without extrapolation.
+
+Important columns include:
+
+```text
+medium
+material
+C_electrolyte_M
+CO_mole_fraction
+replicate
+analysis_grid_index
+E_V_SHE
+rate_s_inv
+ln_rate
+```
+
+Some experimental conditions have different potential support.
+The resulting analysis tables are intentionally non-rectangular.
+
+### Em products
+
+Em Pt/C datasets retain distinct sample preparations.
+For each `<sample_id>`, the output prefix is:
+
+```text
+<dataset>_Em_<sample_id>
+```
+
+Each sample has standardized and full analysis Parquets,
+alpha replicate and summary Parquets, and a CO-order Parquet.
+
+Em does not produce H+ or OH- orders because its processed
+datasets contain only one electrolyte concentration.
+
+Todd and Em data are not combined during preprocessing.
+
+### Reaction-order uncertainty
+
+Where replicate data exist, reaction-order SDs are propagated
+from within-condition log-rate variability under an independence
+assumption across experimental conditions.
+
+Missing replicate uncertainty remains NaN.
+
+These propagated SDs describe replicate variability rather
+than confidence intervals on fitted mean reaction orders.
+
+### Figure hierarchy
+
+Todd figures:
+
+```text
+figures/preprocessing/<dataset>/<material>/
+```
+
+Em figures:
+
+```text
+figures/preprocessing/<dataset>/Pt100_Em_<sample_id>/
+```
+
+Each source generates rate and observable figures in PNG and SVG.
+
+Figure filenames and directory structure are preserved by the
+PtRu organizational refactor.
+
+### Status
+
+No PtRu selected/truncated dataset has been established.
+No PtRu model-data tables or Bayesian inference workflow exist yet.
+
+The next scientific stage is assessing data quality and defining
+selection rules before implementing PtRu mechanisms.
+
+## AgPd data contract
 
 This file documents the AgPd basic-media data contract from raw workbooks through the arrays consumed by PyMC.
 

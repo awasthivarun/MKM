@@ -1,8 +1,138 @@
-# AgPd workflow scripts
+﻿# MKM workflow scripts
 
 All commands below are intended to be run from the repository root with the `mkm` environment active.
 
 The CLI scripts are deliberately thin. Reusable scientific/inference logic belongs under `src/mkm/`.
+
+## PtRu preprocessing and observables
+
+PtRu preprocessing covers Pt100, Pt66Ru33, and Pt50Ru50 in acidic
+and basic media. Todd and Em measurements are processed separately.
+
+The current PtRu pipeline produces experimental rates, apparent
+transfer coefficients, CO reaction orders, and H+/OH- reaction orders.
+PtRu microkinetic modeling and inference are not yet implemented.
+
+### 1. Process Todd measurements
+
+```powershell
+python scripts/process_ptru_todd.py
+```
+
+Processes Pt/PtRu measurements in HClO4 and KOH.
+
+Outputs:
+
+```text
+data/processed/PtRu_COOx_acidic/
+data/processed/PtRu_COOx_basic/
+```
+
+Each dataset contains standardized replicate observations and
+full interpolated analysis observations.
+
+### 2. Process Em measurements
+
+```powershell
+python scripts/process_ptru_em.py
+```
+
+Processes supplementary Pt/C data in acidic and basic media.
+
+Em sample preparations are kept separate from Todd and from
+one another. Pt/ATO measurements are currently excluded.
+
+Em has one electrolyte concentration (0.10 M), so electrolyte
+reaction orders cannot be calculated for these datasets.
+
+### 3. Generate experimental rate figures
+
+```powershell
+python scripts/plot_ptru_todd.py
+```
+
+Generates linear-scale and logarithmic-scale TOF figures for
+Todd and Em, including available replicate variability.
+
+Outputs:
+
+```text
+figures/preprocessing/PtRu_COOx_acidic/
+figures/preprocessing/PtRu_COOx_basic/
+```
+
+Todd figures are organized by material.
+Em figures are organized by sample preparation.
+
+All figures are saved as PNG and SVG.
+
+### 4. Calculate experimental kinetic observables
+
+```powershell
+python scripts/process_ptru_observables.py
+```
+
+This consolidated script replaces the three earlier entry points:
+
+```text
+process_ptru_alpha.py
+process_ptru_co_orders.py
+process_ptru_ion_orders.py
+```
+
+It calculates:
+
+- Apparent transfer coefficient (alpha), separately for each
+  experimental replicate and then summarized.
+- CO reaction order (delta_CO), using adjacent CO pressures.
+- H+ reaction order (delta_Hplus), for acidic Todd measurements.
+- OH- reaction order (delta_OH), for basic Todd measurements.
+
+Electrolyte orders use one logarithmic slope across all four
+electrolyte concentrations at matching SHE potentials.
+
+PtRu reaction orders do not assume replicate pairing between
+different experimental conditions. Available uncertainty bands
+use propagated replicate variability.
+
+The script writes observable Parquets under each dataset's
+`analysis/` directory and generates the corresponding PNG/SVG
+figures in the existing material or sample-preparation folders.
+
+### Recommended complete PtRu workflow
+
+Run from the repository root in this order:
+
+```powershell
+python scripts/process_ptru_todd.py
+python scripts/process_ptru_em.py
+python scripts/plot_ptru_todd.py
+python scripts/process_ptru_observables.py
+```
+
+The first two commands produce standardized and interpolated
+rate data. The last two generate figures and derived observables.
+
+The PtRu analysis currently uses full, untruncated measurements.
+Data-selection and truncation rules have not yet been finalized.
+
+### PtRu implementation ownership
+
+Reusable code:
+
+```text
+src/mkm/preprocessing/ptru_todd.py
+src/mkm/preprocessing/ptru_em.py
+src/mkm/preprocessing/ptru_observables.py
+src/mkm/preprocessing/ptru_plotting.py
+```
+
+The CLI scripts handle orchestration rather than implementing
+the experimental kinetic calculations or plotting algorithms.
+
+---
+
+## AgPd workflows
 
 ## Preprocessing
 
@@ -261,3 +391,4 @@ python scripts/fit_agpd_posterior.py CO_BF_ER_LH --all-materials --parameterizat
 ```
 
 The corresponding result stays in the usual all-material directory and uses a compact model-leaf suffix such as `CO_BF_ER_LH__no_Ag10Pd90_Ag90Pd10`. Pass the same `--exclude-materials` list when postprocessing. `postprocess_agpd_posterior.py` now runs the standard products, transition-state DRC products, and all-material composition-parameter products in one command by default. Use `--skip-drc` or `--skip-composition` only when needed.
+
