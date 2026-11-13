@@ -1,0 +1,95 @@
+
+# Exploratory Pt100 priors for separate acidic and basic Bayesian fits.
+# Energies are in eV. Electrochemical potentials are referenced to SHE.
+# These are provisional priors, not independently validated literature constraints.
+
+prior_profiles:
+  acidic:
+    provenance: exploratory_weak_regularization
+    parameters:
+      deltaG1_0:
+        distribution: truncated_normal
+        mu: -0.40
+        sigma: 0.30
+        lower: -0.95
+        upper: 0.10
+
+      deltaG4_0:
+        distribution: truncated_normal
+        mu: 0.90
+        sigma: 0.30
+        lower: 0.00
+        upper: 1.60
+
+      Gact1_0:
+        distribution: truncated_normal
+        mu: 0.65
+        sigma: 0.20
+        lower: 0.20
+        upper: 1.40
+
+      Gact2_ER_0:
+        distribution: truncated_normal
+        mu: 1.10
+        sigma: 0.25
+        lower: 0.80
+        upper: 1.80
+
+      Gact2_LH_0:
+        distribution: truncated_normal
+        mu: 0.70
+        sigma: 0.25
+        lower: 0.25
+        upper: 1.50
+
+      beta_2_ER:
+        distribution: truncated_normal
+        mu: 0.50
+        sigma: 0.30
+        lower: 0.00
+        upper: 1.00
+
+  basic:
+    provenance: exploratory_weak_regularization
+    parameters:
+      deltaG1_0:
+        distribution: truncated_normal
+        mu: -0.40
+        sigma: 0.30
+        lower: -0.95
+        upper: 0.10
+
+      deltaG4_0:
+        distribution: truncated_normal
+        mu: 0.10
+        sigma: 0.25
+        lower: -0.65
+        upper: 0.60
+
+      Gact1_0:
+        distribution: truncated_normal
+        mu: 0.65
+        sigma: 0.20
+        lower: 0.20
+        upper: 1.40
+
+      Gact2_ER_0:
+        distribution: truncated_normal
+        mu: 0.80
+        sigma: 0.25
+        lower: 0.30
+        upper: 1.50
+
+      Gact2_LH_0:
+        distribution: truncated_normal
+        mu: 0.70
+        sigma: 0.25
+        lower: 0.25
+        upper: 1.50
+
+      beta_2_ER:
+        distribution: truncated_normal
+        mu: 0.50
+        sigma: 0.30
+        lower: 0.00
+        upper: 1.00

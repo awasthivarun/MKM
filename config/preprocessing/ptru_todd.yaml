@@ -22,3 +22,29 @@ rate_normalization:
 analysis_grid:
   spacing_V: 0.010
   origin_V: 0.0
+
+# Low-potential selection rules for Todd acidic Pt100 only.
+# All other materials, media, and Em datasets remain untruncated.
+truncation:
+  todd:
+    acidic:
+      Pt100:
+        "0.001":
+          method: fixed_potential
+          E_cut_V_SHE_by_electrolyte_M:
+            "0.1": 0.70
+            "0.25": 0.75
+            "0.5": 0.70
+            "1": 0.75
+
+        "0.01":
+          method: fraction_of_max_rate
+          fraction: 0.10
+
+        "0.1":
+          method: fraction_of_max_rate
+          fraction: 0.05
+
+        "1":
+          method: fraction_of_max_rate
+          fraction: 0.05

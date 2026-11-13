@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = ROOT / "config" / "preprocessing" / "ptru_todd.yaml"
 
 
+
 def main():
     with open(CONFIG_PATH, encoding="utf-8") as file:
         config = yaml.safe_load(file)
@@ -19,24 +20,35 @@ def main():
     for medium in ("acidic", "basic"):
         dataset = f"PtRu_COOx_{medium}"
         base = ROOT / "data" / "processed" / dataset
+        analysis_dir = base / "analysis"
         figure_dir = ROOT / "figures" / "preprocessing" / dataset
 
-        # Todd: Pt100, Pt66Ru33, Pt50Ru50.
-        analysis = pd.read_parquet(base / "analysis" / f"{dataset}_full.parquet")
+        # Use full data for plotting so excluded regions remain visible.
+        analysis = pd.read_parquet(analysis_dir / f"{dataset}_full.parquet")
+        truncation = pd.read_parquet(analysis_dir / f"{dataset}_truncation.parquet")
 
         for material in config["materials"]:
             material_analysis = analysis.loc[analysis["material"] == material]
-
             if material_analysis.empty:
                 raise ValueError(f"Missing Todd data for {material} in {medium}")
 
+            material_cutoffs = truncation.loc[
+                (truncation["material"] == material)
+                & (truncation["low_potential_method"] != "none")
+            ]
+
+            cutoffs = {
+                (float(row.C_electrolyte_M), float(row.CO_mole_fraction)): float(row.E_cut_V_SHE)
+                for row in material_cutoffs.itertuples(index=False)
+            }
+
             save_rate_figures(
                 material_analysis, material, medium, config,
-                figure_dir / material,
+                figure_dir / material, cutoffs=cutoffs or None,
             )
 
-        # Em: Pt/C only, with distinct sample preparations.
-        em_paths = sorted((base / "analysis").glob(f"{dataset}_Em_*_full.parquet"))
+        # Em remains untruncated and separate from Todd.
+        em_paths = sorted(analysis_dir.glob(f"{dataset}_Em_*_full.parquet"))
 
         if not em_paths:
             print(f"No processed Em data found for {medium}; skipping Em plots.")

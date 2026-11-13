@@ -955,3 +955,75 @@ rate_fraction_LH
 ```
 
 Only variables meaningful for the active pathway set are emitted.
+
+### PtRu data selection and truncation
+
+The PtRu preprocessing pipeline now preserves full experimental data and
+generates separate selected datasets using configurable low-potential cutoffs.
+
+Selection is implemented in:
+
+- `config/preprocessing/ptru_todd.yaml`
+- `src/mkm/preprocessing/ptru_selection.py`
+- `scripts/process_ptru_todd.py`
+
+**Currently, truncation applies only to Todd acidic Pt100.**
+
+| CO concentration | Low-potential cutoff |
+|---|---|
+| 0.1% | 0.70 V SHE at 0.10 and 0.50 M HClO4; 0.75 V SHE at 0.25 and 1.00 M |
+| 1% | First potential reaching 10% of maximum TOF |
+| 10% | First potential reaching 5% of maximum TOF |
+| 100% | First potential reaching 5% of maximum TOF |
+
+For relative-rate thresholds, the maximum TOF is calculated independently
+for each electrolyte concentration and CO pressure using the full
+interpolated condition-mean rate curve.
+
+All points at or above the cutoff are retained. No high-potential
+truncation is currently applied.
+
+Other Todd materials, Todd basic measurements, and Em Pt/C measurements
+remain untruncated.
+
+These are working experimental-selection criteria, not proof that all
+excluded currents originate from processes other than CO oxidation.
+
+#### Full and selected outputs
+
+Todd preprocessing generates:
+
+- `<dataset>_full.parquet`
+- `<dataset>_selected.parquet`
+- `<dataset>_truncation.parquet`
+
+Full-data observables are preserved. Selected-data products include:
+
+- `<dataset>_alpha_replicates_selected.parquet`
+- `<dataset>_alpha_summary_selected.parquet`
+- `<dataset>_delta_CO_selected.parquet`
+- `<dataset>_delta_Hplus_selected.parquet` (acidic)
+- `<dataset>_delta_OH_selected.parquet` (basic)
+
+Transfer coefficients are differentiated on full curves before selection.
+This avoids introducing new numerical derivative boundaries at the cutoffs.
+
+CO and electrolyte reaction orders are calculated again using selected
+rates and the common potential support of the required conditions.
+
+#### Figure conventions
+
+- Linear and logarithmic TOF: excluded data shown in gray,
+  retained data colored, with cutoff boundaries indicated.
+- Transfer coefficient: selected data only.
+- CO reaction order: selected data only.
+- H+ and OH- reaction orders: selected data only.
+
+Full experimental data remain available for provenance and sensitivity
+analysis.
+
+#### Validation status
+
+The selection and observable-workflow changes have been implemented,
+but numerical and figure-output verification remains pending.
+

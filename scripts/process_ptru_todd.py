@@ -1,6 +1,9 @@
 
+"""Process Todd's Pt/PtRu experimental data and apply configured truncation rules."""
+
 import yaml
 
+from mkm.preprocessing.ptru_selection import select_ptru_analysis
 from mkm.preprocessing.ptru_todd import build_todd_analysis_grid, load_todd_dataset
 from mkm.project_paths import ProjectPaths
 
@@ -20,21 +23,31 @@ def main():
 
         standardized = load_todd_dataset(paths.raw_data_dir, medium, config)
         analysis_full = build_todd_analysis_grid(standardized, config)
+        analysis_selected, truncation = select_ptru_analysis(analysis_full, config)
 
         standardized_dir.mkdir(parents=True, exist_ok=True)
         analysis_dir.mkdir(parents=True, exist_ok=True)
 
         standardized_path = standardized_dir / f"{dataset_name}_replicates.parquet"
-        analysis_path = analysis_dir / f"{dataset_name}_full.parquet"
+        full_path = analysis_dir / f"{dataset_name}_full.parquet"
+        selected_path = analysis_dir / f"{dataset_name}_selected.parquet"
+        truncation_path = analysis_dir / f"{dataset_name}_truncation.parquet"
 
         standardized.to_parquet(standardized_path, index=False)
-        analysis_full.to_parquet(analysis_path, index=False)
+        analysis_full.to_parquet(full_path, index=False)
+        analysis_selected.to_parquet(selected_path, index=False)
+        truncation.to_parquet(truncation_path, index=False)
 
         print(f"\n{dataset_name}")
         print(f"  Standardized observations: {len(standardized):,}")
         print(f"  Full analysis observations: {len(analysis_full):,}")
+        print(f"  Selected observations: {len(analysis_selected):,}")
+        print(f"  Excluded observations: {len(analysis_full) - len(analysis_selected):,}")
+        print(f"  Truncated conditions: {(truncation['low_potential_method'] != 'none').sum():,}")
         print(f"  Saved: {standardized_path}")
-        print(f"  Saved: {analysis_path}")
+        print(f"  Saved: {full_path}")
+        print(f"  Saved: {selected_path}")
+        print(f"  Saved: {truncation_path}")
 
 
 if __name__ == "__main__":

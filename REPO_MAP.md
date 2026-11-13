@@ -182,7 +182,7 @@ The two catalyst families intentionally differ in preprocessing:
 - PtRu CO-order calculations use independent condition-mean rates.
 - AgPd electrolyte orders use three KOH concentrations.
 - PtRu electrolyte orders use four acid/base concentrations.
-- PtRu's current analysis uses full, untruncated experimental data.
+- PtRu retains full data and separately generates selected analysis datasets.
 - AgPd has an established selected/truncated analysis dataset.
 - Em Pt/C preparations are processed separately from Todd.
 
@@ -619,11 +619,117 @@ PtRu organizational refactor.
 
 ### Status
 
-No PtRu selected/truncated dataset has been established.
+PtRu selected datasets are implemented; only Todd acidic Pt100 currently has exclusions.
 No PtRu model-data tables or Bayesian inference workflow exist yet.
 
 The next scientific stage is assessing data quality and defining
 selection rules before implementing PtRu mechanisms.
+
+## PtRu data selection and selected-observable products
+
+### Ownership
+
+`config/preprocessing/ptru_todd.yaml` defines the selection criteria.
+
+`src/mkm/preprocessing/ptru_selection.py` implements
+`select_ptru_analysis()`, returning:
+
+- Selected experimental observations.
+- Condition-specific truncation metadata.
+
+`scripts/process_ptru_todd.py` generates the full, selected,
+and truncation Parquets.
+
+`scripts/plot_ptru_todd.py` uses the full data and truncation
+metadata to generate rate figures with excluded regions visible.
+
+`scripts/process_ptru_observables.py` generates both full and
+selected kinetic observables.
+
+### Current selection rules
+
+Only Todd acidic Pt100 has low-potential truncation.
+
+| CO | Criterion |
+|---|---|
+| 0.1% | 0.70 V SHE at 0.10/0.50 M; 0.75 V SHE at 0.25/1.00 M |
+| 1% | First potential reaching 10% of maximum TOF |
+| 10% | First potential reaching 5% of maximum TOF |
+| 100% | First potential reaching 5% of maximum TOF |
+
+For relative-rate thresholds, the maximum is evaluated
+separately for each electrolyte concentration and CO pressure
+using the full condition-mean rate curve.
+
+Points at or above the cutoff are retained.
+
+All other Todd materials and media remain untruncated.
+Em data remain separate and untruncated.
+
+### Todd processed-data products
+
+For `<dataset>` equal to `PtRu_COOx_acidic` or
+`PtRu_COOx_basic`, the analysis directory contains:
+
+```text
+<dataset>_full.parquet
+<dataset>_selected.parquet
+<dataset>_truncation.parquet
+
+<dataset>_alpha_replicates.parquet
+<dataset>_alpha_summary.parquet
+<dataset>_alpha_replicates_selected.parquet
+<dataset>_alpha_summary_selected.parquet
+
+<dataset>_delta_CO.parquet
+<dataset>_delta_CO_selected.parquet
+```
+
+Acidic Todd additionally produces:
+
+```text
+<dataset>_delta_Hplus.parquet
+<dataset>_delta_Hplus_selected.parquet
+```
+
+Basic Todd instead produces:
+
+```text
+<dataset>_delta_OH.parquet
+<dataset>_delta_OH_selected.parquet
+```
+
+The full analysis dataset is preserved for provenance.
+
+### Observable calculation conventions
+
+Alpha is calculated by differentiating the full experimental
+curves and subsequently applying the selected-potential mask.
+
+CO reaction orders are independently recalculated from full
+and selected rate data.
+
+H+ and OH- orders are independently recalculated from full
+and selected rates, requiring common potential support across
+all four electrolyte concentrations.
+
+The original full-data observable Parquets remain available.
+
+### Figure conventions
+
+- Linear TOF: excluded data gray, selected data colored.
+- Logarithmic TOF: same.
+- Alpha: selected data only.
+- CO reaction orders: selected data only.
+- H+ and OH- reaction orders: selected data only.
+
+The existing figure filenames and directory hierarchy remain
+unchanged.
+
+### Verification status
+
+The selection workflow has been implemented but has not yet
+undergone numerical or graphical regression verification.
 
 ## AgPd data contract
 
@@ -872,3 +978,4 @@ LOCO holds out exactly one material/KOH/CO condition including all its replicate
 LOMO holds out every observation from one material.
 
 Both splits are made from the canonical selected replicate dataset before rebuilding the three model-data tables for training and held-out prediction.
+

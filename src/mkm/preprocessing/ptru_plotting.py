@@ -81,8 +81,8 @@ def _format_rate_ticks(ax, log_y):
 # ---------------------------------------------------------------------
 
 
-def plot_rate_grid(analysis, material, medium, log_y, config, source_label=None):
-    """Plot untruncated rates using individual interpolated trials and their summaries."""
+def plot_rate_grid(analysis, material, medium, log_y, config, source_label=None, cutoffs=None):
+    """Plot experimental rates with optional low-potential truncation previews."""
     concentrations = config["electrolyte_concentrations_M"]
     co_values = config["CO_mole_fractions"]
     electrolyte = "HClO4" if medium == "acidic" else "KOH"
@@ -158,6 +158,7 @@ def plot_rate_grid(analysis, material, medium, log_y, config, source_label=None)
         mean = summary["mean"].to_numpy(float)
         sd = summary["sd"].fillna(0).to_numpy(float)
         replicated = summary["n"].to_numpy() >= 2
+        cutoff = None if cutoffs is None else cutoffs.get((float(concentration), float(co)))
 
         if log_y:
             ax.set_yscale("log")
@@ -169,19 +170,44 @@ def plot_rate_grid(analysis, material, medium, log_y, config, source_label=None)
 
             ax.fill_between(
                 potential, lower, mean + sd,
-                where=replicated,
+                where=replicated if cutoff is None else replicated & (potential >= cutoff),
                 color=color,
                 alpha=style.SUMMARY_BAND_ALPHA,
                 linewidth=0,
                 zorder=2,
             )
 
-        ax.plot(
-            potential, mean,
-            color=color,
-            linewidth=style.SUMMARY_LINEWIDTH,
-            zorder=3,
-        )
+        if cutoff is None:
+            ax.plot(
+                potential, mean,
+                color=color,
+                linewidth=style.SUMMARY_LINEWIDTH,
+                zorder=3,
+            )
+        else:
+            ax.axvspan(
+                potential.min(), cutoff,
+                color=style.REFERENCE_COLOR,
+                alpha=style.TRUNCATED_REGION_ALPHA,
+                zorder=0,
+            )
+            ax.axvline(
+                cutoff, color=style.REFERENCE_COLOR,
+                linestyle="--", linewidth=1.0, alpha=0.75, zorder=2,
+            )
+            ax.plot(
+                potential, mean,
+                color=style.FULL_REPLICATE_COLOR,
+                linewidth=style.FULL_REPLICATE_LINEWIDTH,
+                zorder=1,
+            )
+            retained = potential >= cutoff
+            ax.plot(
+                potential[retained], mean[retained],
+                color=color,
+                linewidth=style.SUMMARY_LINEWIDTH,
+                zorder=3,
+            )
 
         style._style_axis(ax, potential_x=True, log_y=log_y)
         _format_rate_ticks(ax, log_y)
@@ -239,14 +265,14 @@ def plot_rate_grid(analysis, material, medium, log_y, config, source_label=None)
     return fig
 
 
-def save_rate_figures(analysis, material, medium, config, output_dir, source_label=None):
-    """Save linear and logarithmic rate figures as PNG and SVG."""
+def save_rate_figures(analysis, material, medium, config, output_dir, source_label=None, cutoffs=None):
+    """Save linear and logarithmic rate figures with optional truncation."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
     for figure_name, log_y in (("rate", False), ("rate_logscale", True)):
         fig = plot_rate_grid(
             analysis, material, medium, log_y, config,
-            source_label=source_label,
+            source_label=source_label, cutoffs=cutoffs,
         )
 
         output_path = output_dir / f"{material}_{figure_name}.png"
@@ -262,8 +288,8 @@ def save_rate_figures(analysis, material, medium, config, output_dir, source_lab
 # ---------------------------------------------------------------------
 
 
-def plot_alpha_grid(replicates, summary, material, medium, config, source_label=None):
-    """Plot experimental alpha using the same condition-grid presentation as PtRu rates."""
+def plot_alpha_grid(replicates, summary, material, medium, config, source_label=None, cutoffs=None):
+    """Plot experimental alpha with optional low-potential truncation previews."""
     concentrations = config["electrolyte_concentrations_M"]
     co_values = config["CO_mole_fractions"]
     electrolyte = "HClO4" if medium == "acidic" else "KOH"
@@ -330,23 +356,49 @@ def plot_alpha_grid(replicates, summary, material, medium, config, source_label=
         mean = summary_condition["alpha_mean"].to_numpy(float)
         sd = summary_condition["alpha_sd"].to_numpy(float)
         replicated = summary_condition["n_replicates"].to_numpy() >= 2
+        cutoff = None if cutoffs is None else cutoffs.get((float(concentration), float(co)))
 
         if replicated.any():
             ax.fill_between(
                 potential, mean - sd, mean + sd,
-                where=replicated,
+                where=replicated if cutoff is None else replicated & (potential >= cutoff),
                 color=color,
                 alpha=style.SUMMARY_BAND_ALPHA,
                 linewidth=0,
                 zorder=2,
             )
 
-        ax.plot(
-            potential, mean,
-            color=color,
-            linewidth=style.SUMMARY_LINEWIDTH,
-            zorder=3,
-        )
+        if cutoff is None:
+            ax.plot(
+                potential, mean,
+                color=color,
+                linewidth=style.SUMMARY_LINEWIDTH,
+                zorder=3,
+            )
+        else:
+            ax.axvspan(
+                potential.min(), cutoff,
+                color=style.REFERENCE_COLOR,
+                alpha=style.TRUNCATED_REGION_ALPHA,
+                zorder=0,
+            )
+            ax.axvline(
+                cutoff, color=style.REFERENCE_COLOR,
+                linestyle="--", linewidth=1.0, alpha=0.75, zorder=2,
+            )
+            ax.plot(
+                potential, mean,
+                color=style.FULL_REPLICATE_COLOR,
+                linewidth=style.FULL_REPLICATE_LINEWIDTH,
+                zorder=1,
+            )
+            retained = potential >= cutoff
+            ax.plot(
+                potential[retained], mean[retained],
+                color=color,
+                linewidth=style.SUMMARY_LINEWIDTH,
+                zorder=3,
+            )
 
         style._style_axis(ax, potential_x=True)
 
@@ -480,17 +532,24 @@ def plot_co_order_grid(orders, material, medium, source_label=None):
 
         pair_label = f"{100 * lower_co:g}% to {100 * upper_co:g}% CO"
         if is_em:
-            ax.set_title(pair_label, fontsize=style.FONT_SIZE_SUBPLOT_TITLE, fontweight=style.FONT_WEIGHT)
+            ax.set_title(
+                pair_label,
+                fontsize=style.FONT_SIZE_SUBPLOT_TITLE,
+                fontweight=style.FONT_WEIGHT,
+            )
         else:
             if row == 0:
                 ax.set_title(
                     f"{concentration:g} M {electrolyte}",
-                    fontsize=style.FONT_SIZE_SUBPLOT_TITLE, fontweight=style.FONT_WEIGHT,
+                    fontsize=style.FONT_SIZE_SUBPLOT_TITLE,
+                    fontweight=style.FONT_WEIGHT,
                 )
             if col == ncols - 1:
                 ax.text(
-                    1.0, 0.5, pair_label, transform=ax.transAxes,
-                    rotation=-90, va="center", fontsize=style.FONT_SIZE_SUBPLOT_TITLE,
+                    1.0, 0.5, pair_label,
+                    transform=ax.transAxes,
+                    rotation=-90, va="center",
+                    fontsize=style.FONT_SIZE_SUBPLOT_TITLE,
                     fontweight=style.FONT_WEIGHT,
                 )
 
@@ -507,12 +566,17 @@ def plot_co_order_grid(orders, material, medium, source_label=None):
         title += f" - {source_label}"
 
     style._finish_condition_grid(
-        fig, axes, title=title, ylabel="CO reaction order",
+        fig, axes,
+        title=title,
+        ylabel="CO reaction order",
         left=0.11 if is_em else 0.085,
         right=0.95 if is_em else 0.92,
-        bottom=0.065, top=0.925,
-        hspace=0.16 if is_em else 0.08, wspace=0.28,
+        bottom=0.065,
+        top=0.925,
+        hspace=0.16 if is_em else 0.08,
+        wspace=0.28,
     )
+
     return fig
 
 
@@ -522,7 +586,7 @@ def plot_co_order_grid(orders, material, medium, source_label=None):
 
 
 def plot_ion_order_grid(orders, material, medium):
-    """Use AgPd's four vertically stacked CO-condition panels."""
+    """Plot H+ or OH- orders in four vertically stacked CO-condition panels."""
     data = orders.loc[orders["material"] == material]
     co_values = sorted(data["CO_mole_fraction"].unique())
     order_name = "delta_Hplus" if medium == "acidic" else "delta_OH"
@@ -591,4 +655,5 @@ def plot_ion_order_grid(orders, material, medium):
         ylabel=f"{ion_label} reaction order",
         right=0.90, hspace=0.08, wspace=0.0,
     )
+
     return fig

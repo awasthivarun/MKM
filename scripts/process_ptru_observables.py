@@ -31,65 +31,94 @@ def save_figure(fig, output_path):
 
 
 def process_source(analysis_path, figure_dir, config, medium, source_label=None):
-    """Process one source without combining Todd and Em or distinct Em preparations."""
+    """Calculate full and selected observables, preserving full-curve alpha derivatives."""
     analysis = pd.read_parquet(analysis_path)
     prefix = analysis_path.name.removesuffix("_full.parquet")
     is_todd = source_label is None
 
-    # -----------------------------------------------------------------
-    # Apparent transfer coefficients
-    # -----------------------------------------------------------------
-    alpha_replicates, alpha_summary = calculate_alpha_products(
-        analysis, config["temperature_K"]
-    )
-
-    alpha_replicates_path = analysis_path.with_name(f"{prefix}_alpha_replicates.parquet")
-    alpha_summary_path = analysis_path.with_name(f"{prefix}_alpha_summary.parquet")
-
-    alpha_replicates.to_parquet(alpha_replicates_path, index=False)
-    alpha_summary.to_parquet(alpha_summary_path, index=False)
+    selected = analysis
+    if is_todd:
+        selected = pd.read_parquet(analysis_path.with_name(f"{prefix}_selected.parquet"))
 
     print(f"\n{prefix}")
-    print(f"  Alpha replicate observations: {len(alpha_replicates):,}")
-    print(f"  Alpha summary observations: {len(alpha_summary):,}")
-    print(f"  Saved: {alpha_replicates_path}")
-    print(f"  Saved: {alpha_summary_path}")
 
-    # -----------------------------------------------------------------
-    # Adjacent-pressure CO reaction orders
-    # -----------------------------------------------------------------
-    co_orders = calculate_co_orders(analysis)
-    co_orders_path = analysis_path.with_name(f"{prefix}_delta_CO.parquet")
-    co_orders.to_parquet(co_orders_path, index=False)
+    # Transfer coefficients: differentiate full curves before selection
+    alpha_replicates, alpha_summary = calculate_alpha_products(analysis, config["temperature_K"])
 
-    print(f"  CO-order observations: {len(co_orders):,}")
-    print(f"  CO-order points with SD: {co_orders['delta_CO_sd'].notna().sum():,}")
-    print(f"  Saved: {co_orders_path}")
+    alpha_replicates.to_parquet(
+        analysis_path.with_name(f"{prefix}_alpha_replicates.parquet"), index=False,
+    )
+    alpha_summary.to_parquet(
+        analysis_path.with_name(f"{prefix}_alpha_summary.parquet"), index=False,
+    )
 
-    # -----------------------------------------------------------------
-    # Full-range electrolyte reaction orders: Todd only
-    # -----------------------------------------------------------------
-    ion_orders = None
+    alpha_replicates_selected = alpha_replicates
+    alpha_summary_selected = alpha_summary
+
     if is_todd:
-        ion_orders = calculate_ion_orders(
-            analysis, config["electrolyte_concentrations_M"]
+        keys = ["medium", "material", "C_electrolyte_M", "CO_mole_fraction", "analysis_grid_index"]
+        selected_grid = selected[keys].drop_duplicates()
+
+        alpha_replicates_selected = alpha_replicates.merge(selected_grid, on=keys, how="inner")
+        alpha_summary_selected = alpha_summary.merge(selected_grid, on=keys, how="inner")
+
+        alpha_replicates_selected.to_parquet(
+            analysis_path.with_name(f"{prefix}_alpha_replicates_selected.parquet"), index=False,
         )
+        alpha_summary_selected.to_parquet(
+            analysis_path.with_name(f"{prefix}_alpha_summary_selected.parquet"), index=False,
+        )
+
+    print(f"  Full alpha observations: {len(alpha_replicates):,}")
+    print(f"  Selected alpha observations: {len(alpha_replicates_selected):,}")
+
+    # CO reaction orders: calculate from full and selected rates
+    co_orders_full = calculate_co_orders(analysis)
+    co_orders_full.to_parquet(
+        analysis_path.with_name(f"{prefix}_delta_CO.parquet"), index=False,
+    )
+
+    co_orders_selected = co_orders_full
+    if is_todd:
+        co_orders_selected = calculate_co_orders(selected)
+        co_orders_selected.to_parquet(
+            analysis_path.with_name(f"{prefix}_delta_CO_selected.parquet"), index=False,
+        )
+
+    print(f"  Full CO orders: {len(co_orders_full):,}")
+    print(f"  Selected CO orders: {len(co_orders_selected):,}")
+
+    # Electrolyte orders: Todd only
+    ion_orders_selected = None
+
+    if is_todd:
         ion_name = "delta_Hplus" if medium == "acidic" else "delta_OH"
-        ion_orders_path = analysis_path.with_name(f"{prefix}_{ion_name}.parquet")
-        ion_orders.to_parquet(ion_orders_path, index=False)
+        concentrations = config["electrolyte_concentrations_M"]
 
-        print(f"  {ion_name} observations: {len(ion_orders):,}")
-        print(f"  {ion_name} points with SD: {ion_orders[f'{ion_name}_sd'].notna().sum():,}")
-        print(f"  Saved: {ion_orders_path}")
+        ion_orders_full = calculate_ion_orders(analysis, concentrations)
+        ion_orders_full.to_parquet(
+            analysis_path.with_name(f"{prefix}_{ion_name}.parquet"), index=False,
+        )
 
-    # -----------------------------------------------------------------
-    # Figures: retain the existing Todd and Em directory structures
-    # -----------------------------------------------------------------
+        ion_orders_selected = calculate_ion_orders(selected, concentrations)
+        ion_orders_selected.to_parquet(
+            analysis_path.with_name(f"{prefix}_{ion_name}_selected.parquet"), index=False,
+        )
+
+        print(f"  Full {ion_name} orders: {len(ion_orders_full):,}")
+        print(f"  Selected {ion_name} orders: {len(ion_orders_selected):,}")
+
+    # Figures: selected observables only, without truncated regions
     for material in sorted(analysis["material"].unique()):
         output_dir = figure_dir / material if is_todd else figure_dir
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-        material_replicates = alpha_replicates.loc[alpha_replicates["material"] == material]
-        material_summary = alpha_summary.loc[alpha_summary["material"] == material]
+        material_replicates = alpha_replicates_selected.loc[
+            alpha_replicates_selected["material"] == material
+        ]
+        material_summary = alpha_summary_selected.loc[
+            alpha_summary_selected["material"] == material
+        ]
 
         plot_config = {
             **config,
@@ -104,12 +133,12 @@ def process_source(analysis_path, figure_dir, config, medium, source_label=None)
         save_figure(fig, output_dir / f"{material}_alpha.png")
 
         fig = plot_co_order_grid(
-            co_orders, material, medium, source_label=source_label,
+            co_orders_selected, material, medium, source_label=source_label,
         )
         save_figure(fig, output_dir / f"{material}_delta_CO.png")
 
-        if ion_orders is not None:
-            fig = plot_ion_order_grid(ion_orders, material, medium)
+        if ion_orders_selected is not None:
+            fig = plot_ion_order_grid(ion_orders_selected, material, medium)
             save_figure(fig, output_dir / f"{material}_{ion_name}.png")
 
 
