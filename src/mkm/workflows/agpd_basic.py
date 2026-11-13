@@ -1,28 +1,15 @@
 """Shared loading and assembly for AgPd basic-media workflows."""
 
-from pathlib import Path
-
 import pandas as pd
-import yaml
 
 from mkm.model_data import build_model_data
 from mkm.model_inputs import build_model_input_arrays
 from mkm.project_paths import ProjectPaths
-
-
-def load_yaml(path: str | Path):
-    with open(path, "r") as file:
-        return yaml.safe_load(file)
+from mkm.workflows.configuration import load_yaml, merge_config_sections
 
 
 def _merge_config_sections(*configs):
-    merged = {}
-    for config in configs:
-        overlap = set(merged) & set(config)
-        if overlap:
-            raise ValueError(f"AgPd config sections define duplicate top-level keys: {sorted(overlap)}.")
-        merged.update(config)
-    return merged
+    return merge_config_sections(*configs)
 
 
 def load_agpd_model_config(paths: ProjectPaths):

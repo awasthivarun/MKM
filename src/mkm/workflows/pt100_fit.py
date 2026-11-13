@@ -1,18 +1,36 @@
-
-"""Build acidic and basic Pt100 Bayesian fits using the shared MKM inference infrastructure."""
+"""Build acidic and basic Pt100 fits using shared MKM infrastructure."""
 
 from dataclasses import dataclass, fields
 from pathlib import Path
 
 import pandas as pd
-import yaml
 
 from mkm.inference.likelihoods import RATE_NORMAL
 from mkm.inference.model import build_pymc_model
-from mkm.mechanisms.pt100 import PT100_PARAMETER_CLASSES
 from mkm.model_data import build_model_data
 from mkm.model_inputs import build_model_input_arrays
+from mkm.models.ptru_registry import available_ptru_models, get_ptru_model_definition
 from mkm.models.pt100 import build_pt100_mechanism
+from mkm.workflows.configuration import load_yaml
+from mkm.workflows.likelihood_configuration import (
+    error_parameter_specs,
+    rate_normal_likelihood_kwargs,
+    validate_configured_error_structure,
+)
+
+
+@dataclass(frozen=True)
+class Pt100FitSpecification:
+    medium: str
+    model_name: str
+    fit_scope: str = "individual"
+    material: str = "Pt100"
+    parameterization: str | None = None
+    error_structure: str = "shared"
+
+    @property
+    def is_all_materials(self):
+        return self.fit_scope == "all_materials"
 
 
 @dataclass(frozen=True)
@@ -27,26 +45,61 @@ class Pt100BuiltFit:
     model_config_path: Path
     prior_config_path: Path
     output_dir: Path
+    specification: Pt100FitSpecification
+    model_data: object
 
 
 def load_pt100_config(paths):
-    """Load Pt100 model and prior configurations without modifying AgPd settings."""
-    model_path = paths.config_dir / "models" / "pt100.yaml"
-
-    with open(model_path, encoding="utf-8") as file:
-        config = yaml.safe_load(file)
-
+    """Load Pt100 model and prior configurations through the common YAML loader."""
+    config = load_yaml(paths.ptru_model_config_path)
     prior_path = paths.root / config["priors"]["path"]
-    with open(prior_path, encoding="utf-8") as file:
-        prior_config = yaml.safe_load(file)
-
+    prior_config = load_yaml(prior_path)
     return config, prior_config
 
 
+def resolve_pt100_fit_specification(
+    config,
+    medium,
+    model_name,
+    *,
+    fit_scope="individual",
+    material="Pt100",
+    error_structure="shared",
+):
+    if medium not in config["media"]:
+        raise ValueError(f"Unsupported Pt100 medium: {medium}")
+
+    if config["materials"] != ["Pt100"]:
+        raise ValueError("Pt100 fitting configuration must contain only Pt100.")
+
+    if material != "Pt100":
+        raise ValueError(f"Pt100 fitting does not support material '{material}'.")
+
+    if fit_scope != "individual":
+        raise ValueError("Pt100 currently supports only individual-material fitting.")
+
+    available = available_ptru_models(medium=medium, fit_scope=fit_scope)
+    if model_name not in config["mechanisms"] or model_name not in available:
+        raise ValueError(f"Unsupported Pt100 mechanism: {model_name}")
+
+    validate_configured_error_structure(config, error_structure)
+    if error_structure != "shared":
+        raise ValueError("Pt100 currently requires error_structure='shared'.")
+
+    return Pt100FitSpecification(
+        medium=medium,
+        model_name=model_name,
+        fit_scope=fit_scope,
+        material=material,
+        parameterization=None,
+        error_structure=error_structure,
+    )
+
+
 def resolve_pt100_parameter_specs(prior_config, medium, model_name):
-    """Select only parameters required by the requested Pt100 mechanism."""
-    parameter_class = PT100_PARAMETER_CLASSES[model_name]
-    required_names = [field.name for field in fields(parameter_class)]
+    """Select the physical parameters required by the registered mechanism."""
+    definition = get_ptru_model_definition(model_name)
+    required_names = tuple(field.name for field in fields(definition.parameter_class))
 
     profile = prior_config["prior_profiles"][medium]["parameters"]
     missing = [name for name in required_names if name not in profile]
@@ -57,41 +110,32 @@ def resolve_pt100_parameter_specs(prior_config, medium, model_name):
 
 
 def pt100_likelihood_kwargs(config):
-    """Resolve the existing linear-rate Normal likelihood configuration."""
-    likelihood = config["likelihood"]
-    expected_form = "sigma_abs + sigma_rel * model_rate"
+    validate_configured_error_structure(config, "shared")
+    return rate_normal_likelihood_kwargs(config)
 
-    if likelihood["name"] != RATE_NORMAL or likelihood["sigma_form"] != expected_form:
-        raise ValueError("Pt100 must use the shared linear-rate Normal likelihood.")
 
-    if "shared" not in likelihood["supported_error_structures"]:
-        raise ValueError("Pt100 fitting requires the shared error structure.")
-
-    keys = (
-        "sigma_abs_prior_median_s_inv",
-        "sigma_abs_prior_log_sd",
-        "sigma_rel_prior_median",
-        "sigma_rel_prior_log_sd",
-    )
-    return {name: likelihood[name] for name in keys}
+def pt100_parameter_specs(prior_config, specification, config):
+    return {
+        **resolve_pt100_parameter_specs(
+            prior_config, specification.medium, specification.model_name,
+        ),
+        **error_parameter_specs(config),
+    }
 
 
 def build_pt100_fit(paths, medium, model_name):
-    """Load selected Pt100 data and assemble its PyMC model and parameter specifications."""
+    """Assemble a Pt100 fit without changing the existing public function signature."""
     config, prior_config = load_pt100_config(paths)
+    specification = resolve_pt100_fit_specification(config, medium, model_name)
 
-    if medium not in config["media"]:
-        raise ValueError(f"Unsupported Pt100 medium: {medium}")
-    if model_name not in config["mechanisms"] or model_name not in PT100_PARAMETER_CLASSES:
-        raise ValueError(f"Unsupported Pt100 mechanism: {model_name}")
-    if config["materials"] != ["Pt100"]:
-        raise ValueError("Pt100 fitting configuration must contain only Pt100.")
-
-    medium_config = config["media"][medium]
+    medium_config = config["media"][specification.medium]
     data_path = paths.root / medium_config["selected_data"]
 
+    if data_path != paths.ptru_selected_path(specification.medium):
+        raise ValueError("Configured Pt100 selected-data path differs from the canonical PtRu path.")
+
     selected = pd.read_parquet(data_path)
-    selected = selected.loc[selected["material"] == "Pt100"].copy()
+    selected = selected.loc[selected["material"] == specification.material].copy()
 
     if selected.empty:
         raise ValueError(f"No selected Pt100 observations found for {medium}.")
@@ -104,12 +148,16 @@ def build_pt100_fit(paths, medium, model_name):
     )
     inputs = build_model_input_arrays(model_data)
 
-    physical_specs = resolve_pt100_parameter_specs(prior_config, medium, model_name)
+    physical_specs = resolve_pt100_parameter_specs(
+        prior_config,
+        specification.medium,
+        specification.model_name,
+    )
     likelihood_kwargs = pt100_likelihood_kwargs(config)
 
     mechanism = build_pt100_mechanism(
-        model_name=model_name,
-        medium=medium,
+        model_name=specification.model_name,
+        medium=specification.medium,
         temperature_K=config["temperature_K"],
         parameter_specs=physical_specs,
     )
@@ -118,39 +166,25 @@ def build_pt100_fit(paths, medium, model_name):
         inputs=inputs,
         mechanism=mechanism,
         likelihood_name=RATE_NORMAL,
-        error_structure="shared",
+        error_structure=specification.error_structure,
         likelihood_kwargs=likelihood_kwargs,
     )
 
-    # Include the likelihood parameters in posterior/prior summary specifications.
-    parameter_specs = {
-        **physical_specs,
-        "sigma_rate_abs": {
-            "distribution": "lognormal",
-            "median": likelihood_kwargs["sigma_abs_prior_median_s_inv"],
-            "log_sd": likelihood_kwargs["sigma_abs_prior_log_sd"],
-        },
-        "sigma_rate_rel": {
-            "distribution": "lognormal",
-            "median": likelihood_kwargs["sigma_rel_prior_median"],
-            "log_sd": likelihood_kwargs["sigma_rel_prior_log_sd"],
-        },
-    }
-
-    output_dir = (
-        paths.results_dir / medium_config["dataset_name"]
-        / "posterior" / "individual" / "Pt100" / model_name
-    )
-
     return Pt100BuiltFit(
-        medium=medium,
-        model_name=model_name,
+        medium=specification.medium,
+        model_name=specification.model_name,
         inputs=inputs,
         built_model=built_model,
-        parameter_specs=parameter_specs,
+        parameter_specs=pt100_parameter_specs(prior_config, specification, config),
         config=config,
         data_path=data_path,
-        model_config_path=paths.config_dir / "models" / "pt100.yaml",
+        model_config_path=paths.ptru_model_config_path,
         prior_config_path=paths.root / config["priors"]["path"],
-        output_dir=output_dir,
+        output_dir=paths.ptru_posterior_output_dir(
+            specification.medium,
+            specification.model_name,
+            specification.material,
+        ),
+        specification=specification,
+        model_data=model_data,
     )

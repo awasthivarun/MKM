@@ -120,6 +120,7 @@ def plot_observation_grid(
     y_scale="log",
     distribution="predictive",
     context_label=None,
+    electrolyte_label="KOH",
 ):
     if y_scale not in {"linear", "log"}:
         raise ValueError("y_scale must be 'linear' or 'log'.")
@@ -183,7 +184,7 @@ def plot_observation_grid(
             if not residual and y_scale == "log":
                 ax.set_yscale("log")
             if row == 0:
-                ax.set_title(f"{c_koh:g} M KOH", pad=TEXT_GAP_PT, fontweight="bold")
+                ax.set_title(f"{c_koh:g} M {electrolyte_label}", pad=TEXT_GAP_PT, fontweight="bold")
             if col == len(KOH_values) - 1:
                 ax.text(
                     1.035, 0.5, f"{100 * co_fraction:g}% CO", transform=ax.transAxes,
@@ -207,7 +208,11 @@ def plot_observation_grid(
     _save_presentation_figure(fig, output_path)
     plt.close(fig)
 
-def plot_pointwise_variable(summary, variable_name, output_path: str | Path, context_label=None):
+
+def plot_pointwise_variable(
+    summary, variable_name, output_path: str | Path,
+    context_label=None, electrolyte_label="KOH",
+):
     KOH_values = sorted(summary["electrolyte_concentration_M"].unique())
     CO_values = sorted(summary["CO_mole_fraction"].unique())
     fig, axes = plt.subplots(
@@ -228,7 +233,7 @@ def plot_pointwise_variable(summary, variable_name, output_path: str | Path, con
             ].sort_values("E_V_SHE")
             _plot_summary_curve(ax, condition, "E_V_SHE", color=POSTERIOR_COLOR, linewidth=1.9)
             if row == 0:
-                ax.set_title(f"{c_koh:g} M KOH", pad=TEXT_GAP_PT, fontweight="bold")
+                ax.set_title(f"{c_koh:g} M {electrolyte_label}", pad=TEXT_GAP_PT, fontweight="bold")
             if col == len(KOH_values) - 1:
                 ax.text(
                     1.035, 0.5, f"{100 * co_fraction:g}% CO", transform=ax.transAxes,
@@ -258,6 +263,7 @@ def plot_pointwise_variables(
     context_label=None,
     bounded=True,
     observed_rates=None,
+    electrolyte_label="KOH",
 ):
     variable_names = [variable for variable in variable_names if f"{variable}_median" in summary.columns]
     if not variable_names:
@@ -315,7 +321,7 @@ def plot_pointwise_variables(
             if bounded:
                 ax.set_ylim(-0.02, 1.02)
             if row == 0:
-                ax.set_title(f"{c_koh:g} M KOH", pad=TEXT_GAP_PT, fontweight="bold")
+                ax.set_title(f"{c_koh:g} M {electrolyte_label}", pad=TEXT_GAP_PT, fontweight="bold")
             if col == len(KOH_values) - 1:
                 ax.text(
                     1.035, 0.5, f"{100 * co_fraction:g}% CO", transform=ax.transAxes,

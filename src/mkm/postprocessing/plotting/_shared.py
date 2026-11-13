@@ -34,6 +34,8 @@ COVERAGE_COLORS = {
     "theta_empty_Pd": "#777777",
     "theta_OH_Ag": "#009E73",
     "theta_empty_Ag": "#777777",
+    "theta_OH": "#D55E00",
+    "theta_empty": "#777777",
 }
 
 POINTWISE_LABELS = {
@@ -49,6 +51,8 @@ POINTWISE_LABELS = {
     "net_pathway_fraction_BF": "BF",
     "net_pathway_fraction_ER": "ER",
     "net_pathway_fraction_LH": "LH",
+    "theta_OH": "OH",
+    "theta_empty": r"$[\ast]$",
 }
 
 # Material hue is the visual identity for experiment-vs-model plots. Chemistry-specific plots
@@ -60,6 +64,7 @@ MATERIAL_COLORS = {
     "Ag50Pd50": "#304FC7",
     "Ag75Pd25": "#1976D2",
     "Ag90Pd10": "#20A7D8",
+    "Pt100": "#303030",
 }
 MATERIAL_ORDER = ("Pd100", "Ag10Pd90", "Ag25Pd75", "Ag50Pd50", "Ag75Pd25", "Ag90Pd10")
 POSTERIOR_COLOR = "#0072B2"

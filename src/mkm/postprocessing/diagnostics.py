@@ -5,6 +5,7 @@ import xarray as xr
 from scipy.stats import lognorm, norm, truncnorm
 
 
+
 COVERAGE_VARIABLES = (
     "theta_CO",
     "theta_COOH",
@@ -13,7 +14,10 @@ COVERAGE_VARIABLES = (
     "theta_empty_Pd",
     "theta_OH_Ag",
     "theta_empty_Ag",
+    "theta_OH",
+    "theta_empty",
 )
+
 
 PATHWAY_FRACTION_VARIABLES = (
     "rate_fraction_BF",
@@ -319,65 +323,59 @@ def build_physical_summary(posterior):
     return pd.DataFrame(records)
 
 
+
 def build_balance_summary(posterior):
     records = []
-    if all(name in posterior for name in ("theta_CO", "theta_OH_Pd", "theta_empty_Pd")):
-        balance = (
-            flatten_posterior_samples(posterior["theta_CO"])
-            + flatten_posterior_samples(posterior["theta_OH_Pd"])
-            + flatten_posterior_samples(posterior["theta_empty_Pd"])
-        )
-        if "theta_COOH" in posterior:
-            balance = balance + flatten_posterior_samples(posterior["theta_COOH"])
+
+    balance_definitions = {
+        "Pd_site_balance": ("theta_CO", "theta_OH_Pd", "theta_empty_Pd"),
+        "Ag_site_balance": ("theta_OH_Ag", "theta_empty_Ag"),
+        "Pt_site_balance": ("theta_CO", "theta_OH", "theta_empty"),
+    }
+
+    for label, variables in balance_definitions.items():
+        if not all(name in posterior for name in variables):
+            continue
+
+        balance = sum(flatten_posterior_samples(posterior[name]) for name in variables)
+
+        if label == "Pd_site_balance" and "theta_COOH" in posterior:
+            balance += flatten_posterior_samples(posterior["theta_COOH"])
+
         error = balance - 1.0
-        records.append(
-            {
-                "check_type": "balance",
-                "variable": "Pd_site_balance",
-                "max_abs_error": float(np.max(np.abs(error))),
-                "q999_abs_error": float(np.quantile(np.abs(error), 0.999)),
-            }
-        )
-    if all(name in posterior for name in ("theta_OH_Ag", "theta_empty_Ag")):
-        balance = (
-            flatten_posterior_samples(posterior["theta_OH_Ag"])
-            + flatten_posterior_samples(posterior["theta_empty_Ag"])
-        )
-        error = balance - 1.0
-        records.append(
-            {
-                "check_type": "balance",
-                "variable": "Ag_site_balance",
-                "max_abs_error": float(np.max(np.abs(error))),
-                "q999_abs_error": float(np.quantile(np.abs(error), 0.999)),
-            }
-        )
+        records.append({
+            "check_type": "balance",
+            "variable": label,
+            "max_abs_error": float(np.max(np.abs(error))),
+            "q999_abs_error": float(np.quantile(np.abs(error), 0.999)),
+        })
+
     fraction_names = [name for name in PATHWAY_FRACTION_VARIABLES if name in posterior]
     fraction_label = "pathway_fraction_sum"
+
     if not fraction_names:
         fraction_names = [name for name in NET_PATHWAY_FRACTION_VARIABLES if name in posterior]
         fraction_label = "net_pathway_fraction_sum"
+
     if fraction_names:
         total = sum(flatten_posterior_samples(posterior[name]) for name in fraction_names)
         error = total - 1.0
-        records.append(
-            {
-                "check_type": "balance",
-                "variable": fraction_label,
-                "max_abs_error": float(np.max(np.abs(error))),
-                "q999_abs_error": float(np.quantile(np.abs(error), 0.999)),
-            }
-        )
+        records.append({
+            "check_type": "balance",
+            "variable": fraction_label,
+            "max_abs_error": float(np.max(np.abs(error))),
+            "q999_abs_error": float(np.quantile(np.abs(error), 0.999)),
+        })
+
     if "ssa_relative_residual_COOH" in posterior:
         residual = flatten_posterior_samples(posterior["ssa_relative_residual_COOH"])
-        records.append(
-            {
-                "check_type": "solver",
-                "variable": "ssa_relative_residual_COOH",
-                "max_abs_error": float(np.max(np.abs(residual))),
-                "q999_abs_error": float(np.quantile(np.abs(residual), 0.999)),
-            }
-        )
+        records.append({
+            "check_type": "solver",
+            "variable": "ssa_relative_residual_COOH",
+            "max_abs_error": float(np.max(np.abs(residual))),
+            "q999_abs_error": float(np.quantile(np.abs(residual), 0.999)),
+        })
+
     return pd.DataFrame(records)
 
 

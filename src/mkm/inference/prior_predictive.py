@@ -117,6 +117,8 @@ def summarize_prior_model_points(prior_predictive, model_points):
         "theta_empty_Pd",
         "theta_OH_Ag",
         "theta_empty_Ag",
+        "theta_OH",
+        "theta_empty",
         "rate_fraction_BF",
         "rate_fraction_ER",
         "rate_fraction_LH",

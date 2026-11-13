@@ -14,6 +14,27 @@ PT_COLORS = {
 }
 
 
+def _condition_panels(concentrations, row_values):
+    """Return the established Todd/Em condition-panel layout."""
+    is_em = len(concentrations) == 1
+    ncols = 2 if is_em else len(concentrations)
+    nrows = (len(row_values) + 1) // 2 if is_em else len(row_values)
+
+    panels = (
+        [
+            (index // 2, index % 2, value, concentrations[0])
+            for index, value in enumerate(row_values)
+        ]
+        if is_em else
+        [
+            (row, col, value, concentration)
+            for row, value in enumerate(row_values)
+            for col, concentration in enumerate(concentrations)
+        ]
+    )
+    return is_em, nrows, ncols, panels
+
+
 # ---------------------------------------------------------------------
 # Rate tick formatting
 # ---------------------------------------------------------------------
@@ -88,19 +109,7 @@ def plot_rate_grid(analysis, material, medium, log_y, config, source_label=None,
     electrolyte = "HClO4" if medium == "acidic" else "KOH"
     color = style._darken(PT_COLORS[material], 0.82)
 
-    is_em = len(concentrations) == 1
-    ncols = 2 if is_em else len(concentrations)
-    nrows = (len(co_values) + 1) // 2 if is_em else len(co_values)
-
-    panels = (
-        [(i // 2, i % 2, co, concentrations[0]) for i, co in enumerate(co_values)]
-        if is_em
-        else [
-            (row, col, co, concentration)
-            for row, co in enumerate(co_values)
-            for col, concentration in enumerate(concentrations)
-        ]
-    )
+    is_em, nrows, ncols, panels = _condition_panels(concentrations, co_values)
 
     fig, axes = plt.subplots(
         nrows=nrows,
@@ -163,51 +172,11 @@ def plot_rate_grid(analysis, material, medium, log_y, config, source_label=None,
         if log_y:
             ax.set_yscale("log")
 
-        if replicated.any():
-            lower = mean - sd
-            if log_y:
-                lower = np.where(lower > 0, lower, np.nan)
-
-            ax.fill_between(
-                potential, lower, mean + sd,
-                where=replicated if cutoff is None else replicated & (potential >= cutoff),
-                color=color,
-                alpha=style.SUMMARY_BAND_ALPHA,
-                linewidth=0,
-                zorder=2,
-            )
-
-        if cutoff is None:
-            ax.plot(
-                potential, mean,
-                color=color,
-                linewidth=style.SUMMARY_LINEWIDTH,
-                zorder=3,
-            )
-        else:
-            ax.axvspan(
-                potential.min(), cutoff,
-                color=style.REFERENCE_COLOR,
-                alpha=style.TRUNCATED_REGION_ALPHA,
-                zorder=0,
-            )
-            ax.axvline(
-                cutoff, color=style.REFERENCE_COLOR,
-                linestyle="--", linewidth=1.0, alpha=0.75, zorder=2,
-            )
-            ax.plot(
-                potential, mean,
-                color=style.FULL_REPLICATE_COLOR,
-                linewidth=style.FULL_REPLICATE_LINEWIDTH,
-                zorder=1,
-            )
-            retained = potential >= cutoff
-            ax.plot(
-                potential[retained], mean[retained],
-                color=color,
-                linewidth=style.SUMMARY_LINEWIDTH,
-                zorder=3,
-            )
+        
+        style._plot_summary_with_cutoff(
+            ax, potential, mean, sd, replicated,
+            color=color, cutoff=cutoff, log_y=log_y,
+        )
 
         style._style_axis(ax, potential_x=True, log_y=log_y)
         _format_rate_ticks(ax, log_y)
@@ -295,19 +264,7 @@ def plot_alpha_grid(replicates, summary, material, medium, config, source_label=
     electrolyte = "HClO4" if medium == "acidic" else "KOH"
     color = style._darken(PT_COLORS[material], 0.82)
 
-    is_em = len(concentrations) == 1
-    ncols = 2 if is_em else len(concentrations)
-    nrows = (len(co_values) + 1) // 2 if is_em else len(co_values)
-
-    panels = (
-        [(i // 2, i % 2, co, concentrations[0]) for i, co in enumerate(co_values)]
-        if is_em
-        else [
-            (row, col, co, concentration)
-            for row, co in enumerate(co_values)
-            for col, concentration in enumerate(concentrations)
-        ]
-    )
+    is_em, nrows, ncols, panels = _condition_panels(concentrations, co_values)
 
     fig, axes = plt.subplots(
         nrows=nrows,
@@ -358,47 +315,11 @@ def plot_alpha_grid(replicates, summary, material, medium, config, source_label=
         replicated = summary_condition["n_replicates"].to_numpy() >= 2
         cutoff = None if cutoffs is None else cutoffs.get((float(concentration), float(co)))
 
-        if replicated.any():
-            ax.fill_between(
-                potential, mean - sd, mean + sd,
-                where=replicated if cutoff is None else replicated & (potential >= cutoff),
-                color=color,
-                alpha=style.SUMMARY_BAND_ALPHA,
-                linewidth=0,
-                zorder=2,
-            )
-
-        if cutoff is None:
-            ax.plot(
-                potential, mean,
-                color=color,
-                linewidth=style.SUMMARY_LINEWIDTH,
-                zorder=3,
-            )
-        else:
-            ax.axvspan(
-                potential.min(), cutoff,
-                color=style.REFERENCE_COLOR,
-                alpha=style.TRUNCATED_REGION_ALPHA,
-                zorder=0,
-            )
-            ax.axvline(
-                cutoff, color=style.REFERENCE_COLOR,
-                linestyle="--", linewidth=1.0, alpha=0.75, zorder=2,
-            )
-            ax.plot(
-                potential, mean,
-                color=style.FULL_REPLICATE_COLOR,
-                linewidth=style.FULL_REPLICATE_LINEWIDTH,
-                zorder=1,
-            )
-            retained = potential >= cutoff
-            ax.plot(
-                potential[retained], mean[retained],
-                color=color,
-                linewidth=style.SUMMARY_LINEWIDTH,
-                zorder=3,
-            )
+        
+        style._plot_summary_with_cutoff(
+            ax, potential, mean, sd, replicated,
+            color=color, cutoff=cutoff,
+        )
 
         style._style_axis(ax, potential_x=True)
 
@@ -470,15 +391,7 @@ def plot_co_order_grid(orders, material, medium, source_label=None):
     )
     color = style._darken(PT_COLORS[material], 0.82)
     electrolyte = "HClO4" if medium == "acidic" else "KOH"
-    is_em = len(concentrations) == 1
-
-    ncols = 2 if is_em else len(concentrations)
-    nrows = (len(pairs) + 1) // 2 if is_em else len(pairs)
-    panels = (
-        [(i // 2, i % 2, pair, concentrations[0]) for i, pair in enumerate(pairs)]
-        if is_em
-        else [(i, j, pair, conc) for i, pair in enumerate(pairs) for j, conc in enumerate(concentrations)]
-    )
+    is_em, nrows, ncols, panels = _condition_panels(concentrations, pairs)
 
     fig, axes = plt.subplots(
         nrows, ncols,

@@ -284,3 +284,126 @@ class ProjectPaths:
             raise ValueError("LOCO paths require KOH and CO condition labels.")
 
         return base / f"KOH_{koh_M:g}_CO_{co_mole_fraction:g}"
+
+    @staticmethod
+    def _validate_ptru_medium(medium: str):
+        if medium not in ("acidic", "basic"):
+            raise ValueError(f"Unknown PtRu medium '{medium}'. Expected 'acidic' or 'basic'.")
+
+    @staticmethod
+    def ptru_dataset_name(medium: str) -> str:
+        ProjectPaths._validate_ptru_medium(medium)
+        return f"PtRu_COOx_{medium}"
+
+    def ptru_raw_dir(self, medium: str) -> Path:
+        return self.raw_data_dir / self.ptru_dataset_name(medium)
+
+    def ptru_processed_dir(self, medium: str) -> Path:
+        return self.processed_data_dir / self.ptru_dataset_name(medium)
+
+    def ptru_standardized_dir(self, medium: str) -> Path:
+        return self.ptru_processed_dir(medium) / "standardized"
+
+    def ptru_analysis_dir(self, medium: str) -> Path:
+        return self.ptru_processed_dir(medium) / "analysis"
+
+    def ptru_standardized_path(self, medium: str) -> Path:
+        dataset = self.ptru_dataset_name(medium)
+        return self.ptru_standardized_dir(medium) / f"{dataset}_replicates.parquet"
+
+    def ptru_full_path(self, medium: str) -> Path:
+        dataset = self.ptru_dataset_name(medium)
+        return self.ptru_analysis_dir(medium) / f"{dataset}_full.parquet"
+
+    def ptru_selected_path(self, medium: str) -> Path:
+        dataset = self.ptru_dataset_name(medium)
+        return self.ptru_analysis_dir(medium) / f"{dataset}_selected.parquet"
+
+    def ptru_truncation_path(self, medium: str) -> Path:
+        dataset = self.ptru_dataset_name(medium)
+        return self.ptru_analysis_dir(medium) / f"{dataset}_truncation.parquet"
+
+    def ptru_em_path(self, medium: str, sample_id: str, stage: str = "full") -> Path:
+        if sample_id not in ("PtC_20pct", "PtC_20pct_1mg"):
+            raise ValueError(f"Unknown PtRu Em sample: {sample_id}")
+        if stage not in ("full", "replicates"):
+            raise ValueError(f"Unknown PtRu Em stage: {stage}")
+        dataset = self.ptru_dataset_name(medium)
+        folder = self.ptru_standardized_dir(medium) if stage == "replicates" else self.ptru_analysis_dir(medium)
+        return folder / f"{dataset}_Em_{sample_id}_{stage}.parquet"
+
+    @property
+    def ptru_model_config_path(self) -> Path:
+        return self.config_dir / "models" / "pt100.yaml"
+
+    @property
+    def ptru_prior_config_path(self) -> Path:
+        return self.config_dir / "priors" / "pt100.yaml"
+
+    @property
+    def ptru_preprocessing_config_path(self) -> Path:
+        return self.config_dir / "preprocessing" / "ptru_todd.yaml"
+
+    def ptru_preprocessing_figure_dir(self, medium: str) -> Path:
+        return self.figures_dir / "preprocessing" / self.ptru_dataset_name(medium)
+
+    def ptru_results_root(self, medium: str) -> Path:
+        return self.results_dir / self.ptru_dataset_name(medium)
+
+    def ptru_posterior_root(self, medium: str) -> Path:
+        return self.ptru_results_root(medium) / "posterior"
+
+    def ptru_prior_predictive_root(self, medium: str) -> Path:
+        return self.ptru_results_root(medium) / "prior_predictive"
+
+    def ptru_posterior_output_dir(self, medium: str, model_name: str, material: str = "Pt100") -> Path:
+        if material != "Pt100":
+            raise ValueError("Only Pt100 Bayesian fits are currently implemented.")
+        if model_name not in ("CO_LH", "CO_ER", "CO_ER_LH"):
+            raise ValueError(f"Unknown Pt100 mechanism: {model_name}")
+        return self.ptru_posterior_root(medium) / "individual" / material / model_name
+
+    def ptru_posterior_dir(
+        self, medium: str, model_name: str, material: str = "Pt100", *, require_posterior=True,
+    ) -> Path:
+        directory = self.ptru_posterior_output_dir(medium, model_name, material)
+        posterior = directory / "posterior.nc"
+        if require_posterior and not posterior.exists():
+            raise FileNotFoundError(f"Posterior not found: {posterior}")
+        return directory
+
+    def ptru_prior_predictive_output_dir(self, medium: str, model_name: str) -> Path:
+        self.ptru_posterior_output_dir(medium, model_name)
+        return self.ptru_prior_predictive_root(medium) / "individual" / "Pt100" / model_name
+
+    def ptru_model_comparison_dir(self, medium: str, comparison_name: str) -> Path:
+        name = str(comparison_name).strip()
+        if not name or Path(name).name != name or name in (".", ".."):
+            raise ValueError("A model comparison requires a valid single-directory name.")
+        return self.ptru_posterior_root(medium) / "individual" / "Pt100" / "model_comparison" / name
+
+    def ptru_observable_path(
+        self, medium: str, product: str, *, selected: bool = False, sample_id: str | None = None,
+    ) -> Path:
+        valid_products = {
+            "alpha_replicates", "alpha_summary", "delta_CO", "delta_Hplus", "delta_OH",
+        }
+        if product not in valid_products:
+            raise ValueError(f"Unknown PtRu observable product: {product}")
+
+        if product in ("delta_Hplus", "delta_OH"):
+            expected = "delta_Hplus" if medium == "acidic" else "delta_OH"
+            if product != expected:
+                raise ValueError(f"{product} is not the electrolyte-ion observable for {medium}.")
+
+        if sample_id is not None:
+            if sample_id not in ("PtC_20pct", "PtC_20pct_1mg"):
+                raise ValueError(f"Unknown PtRu Em sample: {sample_id}")
+            if selected or product in ("delta_Hplus", "delta_OH"):
+                raise ValueError("Em observable products do not support selection or ion orders.")
+
+        dataset = self.ptru_dataset_name(medium)
+        source = "" if sample_id is None else f"_Em_{sample_id}"
+        suffix = "_selected" if selected else ""
+        filename = f"{dataset}{source}_{product}{suffix}.parquet"
+        return self.ptru_analysis_dir(medium) / filename

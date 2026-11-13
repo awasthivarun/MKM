@@ -188,3 +188,39 @@ def test_agpd_model_config_bundle_paths_are_explicit(tmp_path):
         tmp_path / "config" / "priors" / "agpd_basic.yaml",
         tmp_path / "config" / "models" / "experimental" / "agpd_caps.yaml",
     )
+
+
+@pytest.mark.parametrize("medium", ["acidic", "basic"])
+def test_ptru_paths_preserve_existing_layout(tmp_path, medium):
+    paths = ProjectPaths(root=tmp_path)
+    dataset = f"PtRu_COOx_{medium}"
+
+    assert paths.ptru_selected_path(medium) == (
+        tmp_path / "data" / "processed" / dataset / "analysis" / f"{dataset}_selected.parquet"
+    )
+    assert paths.ptru_standardized_path(medium) == (
+        tmp_path / "data" / "processed" / dataset / "standardized" / f"{dataset}_replicates.parquet"
+    )
+    assert paths.ptru_posterior_output_dir(medium, "CO_ER_LH") == (
+        tmp_path / "results" / dataset / "posterior" / "individual" / "Pt100" / "CO_ER_LH"
+    )
+    assert paths.ptru_model_config_path == tmp_path / "config" / "models" / "pt100.yaml"
+    assert paths.ptru_prior_config_path == tmp_path / "config" / "priors" / "pt100.yaml"
+
+    assert paths.ptru_em_path(medium, "PtC_20pct") == (
+        tmp_path / "data" / "processed" / dataset / "analysis"
+        / f"{dataset}_Em_PtC_20pct_full.parquet"
+    )
+
+
+def test_ptru_paths_reject_invalid_medium_and_unsupported_material(tmp_path):
+    paths = ProjectPaths(root=tmp_path)
+
+    with pytest.raises(ValueError, match="medium"):
+        paths.ptru_selected_path("neutral")
+
+    with pytest.raises(ValueError, match="Pt100"):
+        paths.ptru_posterior_output_dir("acidic", "CO_LH", material="Pt66Ru33")
+
+    with pytest.raises(ValueError, match="Unknown Pt100 mechanism"):
+        paths.ptru_posterior_output_dir("acidic", "CO_BF")

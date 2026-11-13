@@ -1,114 +1,88 @@
 
-"""Preview Todd acidic Pt100 truncation at the second prominent alpha maximum."""
-
-from pathlib import Path
+"""Preview the configured acidic Pt100 selection rules on full Todd curves."""
 
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
-import yaml
-from scipy.signal import find_peaks
 
 from mkm.preprocessing import plotting as style
 from mkm.preprocessing.ptru_plotting import plot_alpha_grid, plot_rate_grid
+from mkm.preprocessing.ptru_selection import select_ptru_analysis
+from mkm.project_paths import ProjectPaths
+from mkm.workflows.configuration import load_yaml
 
-ROOT = Path(__file__).resolve().parents[1]
-DATASET = "PtRu_COOx_acidic"
-ANALYSIS_DIR = ROOT / "data" / "processed" / DATASET / "analysis"
-FIGURE_DIR = ROOT / "figures" / "preprocessing" / DATASET / "Pt100"
-CONFIG_PATH = ROOT / "config" / "preprocessing" / "ptru_todd.yaml"
-
-# Diagnostic peak-identification settings, not finalized selection parameters.
-MIN_PROMINENCE = 0.20
-MIN_PEAK_DISTANCE_POINTS = 5
 
 def find_onset_cutoffs(analysis, config):
-    """Determine CO-dependent low-potential cutoffs for Todd acidic Pt100."""
-    thresholds = {0.01: 0.10, 0.10: 0.05, 1.00: 0.05}
-    cutoffs = {}
-    records = []
+    """Return the same cutoffs and threshold metadata used in production preprocessing."""
+    _, truncation = select_ptru_analysis(analysis, config)
 
-    for concentration in config["electrolyte_concentrations_M"]:
-        for co_fraction in config["CO_mole_fractions"]:
-            condition = analysis.loc[
-                np.isclose(analysis["C_electrolyte_M"], concentration)
-                & np.isclose(analysis["CO_mole_fraction"], co_fraction)
-            ]
+    cutoffs = {
+        (float(row.C_electrolyte_M), float(row.CO_mole_fraction)): float(row.E_cut_V_SHE)
+        for row in truncation.itertuples(index=False)
+        if row.low_potential_method != "none"
+    }
 
-            summary = (
-                condition.groupby("analysis_grid_index", as_index=False)
-                .agg(E_V_SHE=("E_V_SHE", "first"), rate_s_inv=("rate_s_inv", "mean"))
-                .sort_values("E_V_SHE")
-            )
+    table = truncation.rename(columns={
+        "C_electrolyte_M": "C_HClO4_M",
+        "low_potential_method": "criterion",
+        "n_points_retained": "n_retained",
+    }).copy()
+    table["criterion"] = table["criterion"].replace({
+        "fraction_of_max_rate": "relative_max_rate",
+    })
+    table = table[[
+        "C_HClO4_M",
+        "CO_mole_fraction",
+        "criterion",
+        "threshold_fraction",
+        "E_cut_V_SHE",
+        "rate_at_cut_fraction_of_max",
+        "n_retained",
+    ]]
+    return cutoffs, table
 
-            if summary.empty:
-                raise ValueError(f"Missing data: {concentration:g} M, {100 * co_fraction:g}% CO")
-
-            potential = summary["E_V_SHE"].to_numpy(float)
-            rate = summary["rate_s_inv"].to_numpy(float)
-            max_rate = rate.max()
-
-            if np.isclose(co_fraction, 0.001):
-                cutoff = 0.75 if np.isclose(concentration, [0.25, 1.00]).any() else 0.70
-                criterion = "fixed_potential"
-                fraction = np.nan
-            else:
-                fraction = thresholds[float(co_fraction)]
-                cutoff = float(potential[np.flatnonzero(rate >= fraction * max_rate)[0]])
-                criterion = "relative_max_rate"
-
-            cutoffs[(float(concentration), float(co_fraction))] = cutoff
-
-            rate_at_cutoff = np.interp(cutoff, potential, rate)
-            records.append({
-                "C_HClO4_M": concentration,
-                "CO_mole_fraction": co_fraction,
-                "criterion": criterion,
-                "threshold_fraction": fraction,
-                "E_cut_V_SHE": cutoff,
-                "rate_at_cut_fraction_of_max": rate_at_cutoff / max_rate,
-                "n_retained": int(np.count_nonzero(potential >= cutoff)),
-            })
-
-    return cutoffs, pd.DataFrame(records)
 
 def main():
-    with open(CONFIG_PATH, encoding="utf-8") as file:
-        config = yaml.safe_load(file)
+    paths = ProjectPaths.discover(__file__)
+    config = load_yaml(paths.ptru_preprocessing_config_path)
 
-    analysis = pd.read_parquet(ANALYSIS_DIR / f"{DATASET}_full.parquet")
-    alpha_replicates = pd.read_parquet(ANALYSIS_DIR / f"{DATASET}_alpha_replicates.parquet")
-    alpha_summary = pd.read_parquet(ANALYSIS_DIR / f"{DATASET}_alpha_summary.parquet")
+    medium = "acidic"
+    dataset = paths.ptru_dataset_name(medium)
+    analysis_dir = paths.ptru_analysis_dir(medium)
+    figure_dir = paths.ptru_preprocessing_figure_dir(medium) / "Pt100"
+
+    analysis = pd.read_parquet(paths.ptru_full_path(medium))
+    alpha_replicates = pd.read_parquet(analysis_dir / f"{dataset}_alpha_replicates.parquet")
+    alpha_summary = pd.read_parquet(analysis_dir / f"{dataset}_alpha_summary.parquet")
 
     analysis = analysis.loc[analysis["material"] == "Pt100"].copy()
     alpha_replicates = alpha_replicates.loc[alpha_replicates["material"] == "Pt100"].copy()
     alpha_summary = alpha_summary.loc[alpha_summary["material"] == "Pt100"].copy()
 
     cutoffs, table = find_onset_cutoffs(analysis, config)
-    FIGURE_DIR.mkdir(parents=True, exist_ok=True)
+    figure_dir.mkdir(parents=True, exist_ok=True)
 
-    table_path = FIGURE_DIR / "Pt100_second_alpha_peak_preview.csv"
+    table_path = figure_dir / "Pt100_second_alpha_peak_preview.csv"
     table.to_csv(table_path, index=False)
 
-    print("\nTodd acidic Pt100: second-alpha-peak truncation preview")
+    print("\nTodd acidic Pt100: configured truncation preview")
     print(table.to_string(index=False))
-    print(f"\nIdentified cutoffs: {len(cutoffs)} of {len(table)} conditions")
+    print(f"\nConfigured cutoffs: {len(cutoffs)} of {len(table)} conditions")
     print(f"Saved: {table_path}")
 
     figures = {
         "rate": plot_rate_grid(
-            analysis, "Pt100", "acidic", False, config, cutoffs=cutoffs,
+            analysis, "Pt100", medium, False, config, cutoffs=cutoffs or None,
         ),
         "rate_logscale": plot_rate_grid(
-            analysis, "Pt100", "acidic", True, config, cutoffs=cutoffs,
+            analysis, "Pt100", medium, True, config, cutoffs=cutoffs or None,
         ),
         "alpha": plot_alpha_grid(
-            alpha_replicates, alpha_summary, "Pt100", "acidic", config, cutoffs=cutoffs,
+            alpha_replicates, alpha_summary, "Pt100", medium, config, cutoffs=cutoffs or None,
         ),
     }
 
     for name, fig in figures.items():
-        output_path = FIGURE_DIR / f"Pt100_{name}_second_alpha_peak_preview.png"
+        output_path = figure_dir / f"Pt100_{name}_second_alpha_peak_preview.png"
         style.save_agpd_figure(fig, output_path)
         plt.close(fig)
         print(f"Saved: {output_path} (+ SVG)")

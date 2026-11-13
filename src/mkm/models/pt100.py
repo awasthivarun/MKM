@@ -1,20 +1,19 @@
-
-"""Pt100 mechanism assembly using shared AgPd/PtRu inference infrastructure."""
+"""Pt100 mechanism assembly using the PtRu registry and shared inference infrastructure."""
 
 from dataclasses import fields
 
 from mkm.inference.priors import build_named_priors
-from mkm.mechanisms.pt100 import PT100_PARAMETER_CLASSES, evaluate_pt100_co
+from mkm.models.ptru_registry import get_ptru_model_definition
 
 
 def build_pt100_mechanism(model_name, medium, temperature_K, parameter_specs):
     """Build a PyMC-compatible Pt100 mechanism with configurable parameter priors."""
-    if model_name not in PT100_PARAMETER_CLASSES:
-        raise ValueError(f"Unknown Pt100 model: {model_name}")
-    if medium not in ("acidic", "basic"):
+    definition = get_ptru_model_definition(model_name)
+
+    if medium not in definition.media:
         raise ValueError(f"Unknown Pt100 medium: {medium}")
 
-    parameter_class = PT100_PARAMETER_CLASSES[model_name]
+    parameter_class = definition.parameter_class
     expected = {field.name for field in fields(parameter_class)}
     configured = set(parameter_specs)
 
@@ -26,13 +25,13 @@ def build_pt100_mechanism(model_name, medium, temperature_K, parameter_specs):
         )
 
     def mechanism(point_inputs):
-        if tuple(point_inputs.materials) != ("Pt100",):
+        if tuple(point_inputs.materials) != (definition.material,):
             raise ValueError("Pt100 fitting requires exactly one material: Pt100.")
 
         prior_values = build_named_priors(parameter_specs)
         parameters = parameter_class(**prior_values)
 
-        return evaluate_pt100_co(
+        return definition.evaluator(
             state=point_inputs,
             parameters=parameters,
             temperature_K=temperature_K,

@@ -6,9 +6,9 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from scipy.interpolate import PchipInterpolator
 
-R, F = 8.314462618, 96485.33212
+from mkm.preprocessing.ptru_common import build_ptru_measurement_frame, standardize_ptru_measurements
+from mkm.preprocessing.interpolation import build_potential_grid, interpolate_log_values
 
 TODD_FILES = {
     "acidic": ("PtRu_acidic_current_densities_Todd.xlsx",),
@@ -87,20 +87,20 @@ def load_todd_workbook(path, medium, config):
                 if not np.all(np.isfinite(current) & (current > 0)):
                     raise ValueError(f"Nonpositive or nonfinite currents in {path.name}/{sheet_name}")
 
-                frames.append(pd.DataFrame({
-                    "medium": medium,
-                    "material": material,
-                    "C_electrolyte_M": C_M,
-                    "CO_mole_fraction": x_co,
-                    "replicate": replicate,
-                    "point_index": np.arange(len(potential)),
-                    "source_workbook": path.name,
-                    "source_sheet": sheet_name,
-                    "source_column": col + 1,
-                    "source_row": e.index[valid].to_numpy() + 1,
-                    "E_V_RHE": potential,
-                    "j_mA_cm2": current,
-                }))
+                frames.append(build_ptru_measurement_frame(
+                    medium=medium,
+                    material=material,
+                    concentration_M=C_M,
+                    co_fraction=x_co,
+                    replicate=replicate,
+                    source_workbook=path.name,
+                    source_sheet=sheet_name,
+                    source_column=col + 1,
+                    source_rows=e.index[valid].to_numpy() + 1,
+                    potential=potential,
+                    current=current,
+                ))
+
 
     return pd.concat(frames, ignore_index=True)
 
@@ -139,30 +139,7 @@ def load_todd_dataset(raw_root, medium, config):
             f"unexpected={observed - expected}"
         )
 
-    if (
-        config["temperature_K"] <= 0
-        or config["rate_normalization"]["electrons_per_CO_oxidation"] <= 0
-        or config["rate_normalization"]["site_charge_density_uC_cm2_Pt"] <= 0
-    ):
-        raise ValueError("Temperature and normalization constants must be positive")
-
-    # Ideal major-ion activities; revise when literature activity coefficients are introduced.
-    ln_major = np.log(data["C_electrolyte_M"].to_numpy(float))
-    ln_kw = -float(config["pKw"]) * np.log(10)
-    ln_a_h = ln_major if medium == "acidic" else ln_kw - ln_major
-    ln_a_oh = ln_kw - ln_a_h
-
-    data["ln_a_H"] = ln_a_h
-    data["ln_a_OH"] = ln_a_oh
-    data["E_V_SHE"] = data["E_V_RHE"] + R * config["temperature_K"] / F * ln_a_h
-
-    norm = config["rate_normalization"]
-    denominator = norm["electrons_per_CO_oxidation"] * norm["site_charge_density_uC_cm2_Pt"]
-
-    data["rate_s_inv"] = data["j_mA_cm2"] * 1000 / denominator
-    data["ln_rate"] = np.log(data["rate_s_inv"])
-
-    return data
+    return standardize_ptru_measurements(data, medium, config)
 
 
 def build_todd_analysis_grid(standardized, config):
@@ -176,25 +153,24 @@ def build_todd_analysis_grid(standardized, config):
 
     for _, curve in standardized.groupby(keys, sort=False):
         curve = curve.sort_values("E_V_SHE")
-        e = curve["E_V_SHE"].to_numpy()
+        potential = curve["E_V_SHE"].to_numpy(float)
 
-        lo = int(np.ceil((e[0] - origin - 1e-10) / spacing))
-        hi = int(np.floor((e[-1] - origin + 1e-10) / spacing))
-        if lo > hi:
-            raise ValueError(f"No analysis-grid points inside trace {curve.iloc[0][keys].to_dict()}")
+        try:
+            index, grid = build_potential_grid(potential[0], potential[-1], spacing, origin)
+        except ValueError as exc:
+            raise ValueError(
+                f"No analysis-grid points inside trace {curve.iloc[0][keys].to_dict()}"
+            ) from exc
 
-        index = np.arange(lo, hi + 1)
-        grid = origin + index * spacing
-        log_rate = PchipInterpolator(e, curve["ln_rate"].to_numpy(), extrapolate=False)(grid)
-
-        if not np.isfinite(log_rate).all():
-            raise ValueError("Interpolation produced nonfinite log rates")
+        log_rate = interpolate_log_values(
+            potential, curve["ln_rate"].to_numpy(float), grid,
+        )
 
         first = curve.iloc[0]
-        frame = pd.DataFrame({k: first[k] for k in keys}, index=np.arange(len(grid)))
+        frame = pd.DataFrame({key: first[key] for key in keys}, index=np.arange(len(grid)))
 
-        for k in ("source_workbook", "source_sheet", "source_column", "ln_a_H", "ln_a_OH"):
-            frame[k] = first[k]
+        for key in ("source_workbook", "source_sheet", "source_column", "ln_a_H", "ln_a_OH"):
+            frame[key] = first[key]
 
         frame["analysis_grid_index"] = index
         frame["E_V_SHE"] = grid
@@ -207,7 +183,7 @@ def build_todd_analysis_grid(standardized, config):
             * norm["electrons_per_CO_oxidation"]
             * norm["site_charge_density_uC_cm2_Pt"] / 1000
         )
-
         frames.append(frame)
 
     return pd.concat(frames, ignore_index=True)
+

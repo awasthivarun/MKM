@@ -532,6 +532,65 @@ def _plot_alpha_grid(selected_replicates, selected_summary, truncation, material
     return fig
 
 
+def _plot_summary_with_cutoff(
+    ax, potential, mean, sd, replicated, *,
+    color, cutoff=None, log_y=False,
+):
+    """Draw a mean curve, replicate uncertainty band, and optional excluded region."""
+    if replicated.any():
+        lower = mean - sd
+        if log_y:
+            lower = np.where(lower > 0, lower, np.nan)
+
+        ax.fill_between(
+            potential, lower, mean + sd,
+            where=replicated if cutoff is None else replicated & (potential >= cutoff),
+            color=color,
+            alpha=SUMMARY_BAND_ALPHA,
+            linewidth=0,
+            zorder=2,
+        )
+
+    if cutoff is None:
+        ax.plot(
+            potential, mean,
+            color=color,
+            linewidth=SUMMARY_LINEWIDTH,
+            zorder=3,
+        )
+        return
+
+    ax.axvspan(
+        potential.min(), cutoff,
+        color=REFERENCE_COLOR,
+        alpha=TRUNCATED_REGION_ALPHA,
+        zorder=0,
+    )
+    ax.axvline(
+        cutoff,
+        color=REFERENCE_COLOR,
+        linestyle="--",
+        linewidth=1.0,
+        alpha=0.75,
+        zorder=2,
+    )
+    ax.plot(
+        potential, mean,
+        color=FULL_REPLICATE_COLOR,
+        linewidth=FULL_REPLICATE_LINEWIDTH,
+        zorder=1,
+    )
+
+    retained = potential >= cutoff
+    ax.plot(
+        potential[retained], mean[retained],
+        color=color,
+        linewidth=SUMMARY_LINEWIDTH,
+        zorder=3,
+    )
+
+
+
 def plot_agpd_experimental_summary(
     full_replicates, selected_replicates, selected_summary, truncation, material, config
 ):

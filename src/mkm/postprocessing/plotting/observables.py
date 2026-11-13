@@ -1,5 +1,6 @@
 from ._shared import *
-def plot_alpha_comparison(comparison, output_path: str | Path, material):
+
+def plot_alpha_comparison(comparison, output_path: str | Path, material, electrolyte_label="KOH"):
     """Plot alpha for all KOH/CO conditions in one 4 x 3-style grid."""
     koh_values = sorted(comparison["C_KOH_M"].unique())
     co_values = sorted(comparison["CO_mole_fraction"].unique())
@@ -26,7 +27,7 @@ def plot_alpha_comparison(comparison, output_path: str | Path, material):
                     color=experiment_color, markersize=3.4, linewidth=0.9, capsize=1.7, zorder=2.5,
                 )
             if row == 0:
-                ax.set_title(f"{c_koh:g} M KOH", pad=TEXT_GAP_PT, fontweight="bold")
+                ax.set_title(f"{c_koh:g} M {electrolyte_label}", pad=TEXT_GAP_PT, fontweight="bold")
             if col == len(koh_values) - 1:
                 ax.text(
                     1.035, 0.5, f"{100 * co_fraction:g}% CO", transform=ax.transAxes,
@@ -42,37 +43,53 @@ def plot_alpha_comparison(comparison, output_path: str | Path, material):
     _save_presentation_figure(fig, output_path)
     plt.close(fig)
 
-def plot_delta_oh_comparison(comparison, output_path: str | Path, material):
-    """Plot OH reaction order as one vertical row per CO fraction."""
+
+def plot_delta_oh_comparison(
+    comparison, output_path: str | Path, material,
+    ion_name="delta_OH", ion_label="OH",
+):
+    """Plot the selected electrolyte-ion reaction order versus potential."""
     co_values = sorted(comparison["CO_mole_fraction"].unique())
     fig, axes = plt.subplots(
         len(co_values), 1,
         figsize=(OH_ORDER_FIGURE_WIDTH_IN, MATERIAL_PANEL_HEIGHT_IN * len(co_values) + OH_ORDER_EXTRA_HEIGHT_IN),
-        sharex=True, sharey=True, squeeze=False
+        sharex=True, sharey=True, squeeze=False,
     )
     posterior_color, experiment_color = _material_plot_colors(material)
+
     for row, co_fraction in enumerate(co_values):
         ax = axes[row, 0]
-        data = comparison.loc[comparison["CO_mole_fraction"] == co_fraction].sort_values("E_V_SHE")
-        _plot_summary_curve(ax, data, "E_V_SHE", color=posterior_color, linewidth=2.0)
-        ax.errorbar(
-            data["E_V_SHE"], data["delta_OH"], yerr=data["delta_OH_sd"], fmt="o",
-            color=experiment_color, markersize=3.4, linewidth=0.9, capsize=1.7, zorder=2.5,
-        )
+        data = comparison.loc[
+            comparison["CO_mole_fraction"] == co_fraction
+        ].sort_values("E_V_SHE")
+
+        if not data.empty:
+            _plot_summary_curve(ax, data, "E_V_SHE", color=posterior_color, linewidth=2.0)
+            ax.errorbar(
+                data["E_V_SHE"], data[ion_name], yerr=data[f"{ion_name}_sd"], fmt="o",
+                color=experiment_color, markersize=3.4, linewidth=0.9,
+                capsize=1.7, zorder=2.5,
+            )
+
         ax.text(
             1.02, 0.5, f"{100 * co_fraction:g}% CO", transform=ax.transAxes,
             rotation=-90, va="center", fontweight=FONT_WEIGHT,
         )
         _style_axis(ax, potential_x=True)
+
     _set_presentation_axes(axes)
     _finish_condition_grid(
-        fig, axes, title=f"{material}: OH reaction order", xlabel="Potential (V vs SHE)", ylabel="OH order",
+        fig, axes,
+        title=f"{material}: {ion_label} reaction order",
+        xlabel="Potential (V vs SHE)",
+        ylabel=f"{ion_label} order",
         legend=False, left=0.20, right=0.84, bottom=0.06, top=0.925, hspace=0.08,
     )
     _save_presentation_figure(fig, output_path)
     plt.close(fig)
 
-def plot_delta_co_comparison(comparison, output_path: str | Path, material):
+
+def plot_delta_co_comparison(comparison, output_path: str | Path, material, electrolyte_label="KOH"):
     """Plot adjacent CO reaction orders as CO-interval rows by KOH columns."""
     koh_values = sorted(comparison["C_KOH_M"].unique())
     intervals = (
@@ -106,7 +123,7 @@ def plot_delta_co_comparison(comparison, output_path: str | Path, material):
                     color=experiment_color, markersize=3.4, linewidth=0.9, capsize=1.7, zorder=2.5,
                 )
             if row == 0:
-                ax.set_title(f"{c_koh:g} M KOH", pad=TEXT_GAP_PT, fontweight="bold")
+                ax.set_title(f"{c_koh:g} M {electrolyte_label}", pad=TEXT_GAP_PT, fontweight="bold")
             if col == len(koh_values) - 1:
                 ax.text(
                     1.035, 0.5, f"{100 * lower_co:g}% → {100 * upper_co:g}% CO",
@@ -121,12 +138,16 @@ def plot_delta_co_comparison(comparison, output_path: str | Path, material):
     _save_presentation_figure(fig, output_path)
     plt.close(fig)
 
-def plot_second_order_difference(comparison, output_path: str | Path, material):
+
+def plot_second_order_difference(
+    comparison, output_path: str | Path, material,
+    electrolyte_column="C_KOH_M", electrolyte_label="KOH", ion_label="OH",
+):
     """Plot d(alpha)/dE - d(delta_OH)/dE using posterior draws and experimental point estimates."""
     data = comparison.loc[comparison["observable"] == "delta2"].copy()
     if data.empty:
         raise ValueError("No delta2 second-order points were provided.")
-    koh_values = sorted(data["C_KOH_M"].dropna().unique())
+    koh_values = sorted(data[electrolyte_column].dropna().unique())
     co_values = sorted(data["CO_mole_fraction"].dropna().unique())
     fig, axes = plt.subplots(
         len(co_values), len(koh_values),
@@ -142,7 +163,7 @@ def plot_second_order_difference(comparison, output_path: str | Path, material):
         for col, c_koh in enumerate(koh_values):
             ax = axes[row, col]
             condition = data[
-                (data["C_KOH_M"] == c_koh) & (data["CO_mole_fraction"] == co_fraction)
+                (data[electrolyte_column] == c_koh) & (data["CO_mole_fraction"] == co_fraction)
             ].sort_values("E_V_SHE")
             if not condition.empty:
                 _plot_summary_curve(ax, condition, "E_V_SHE", color=posterior_color, linewidth=2.0)
@@ -152,7 +173,7 @@ def plot_second_order_difference(comparison, output_path: str | Path, material):
                 )
             ax.axhline(0.0, color=REFERENCE_COLOR, linestyle="--", linewidth=0.9, alpha=0.65)
             if row == 0:
-                ax.set_title(f"{c_koh:g} M KOH", pad=TEXT_GAP_PT, fontweight="bold")
+                ax.set_title(f"{c_koh:g} M {electrolyte_label}", pad=TEXT_GAP_PT, fontweight="bold")
             if col == len(koh_values) - 1:
                 ax.text(
                     1.035, 0.5, f"{100 * co_fraction:g}% CO", transform=ax.transAxes,
@@ -162,7 +183,7 @@ def plot_second_order_difference(comparison, output_path: str | Path, material):
     _set_presentation_axes(axes)
     _finish_condition_grid(
         fig, axes, title=f"{material}: second-order kinetic difference", xlabel="Potential (V vs SHE)",
-        ylabel=r"$d\alpha/dE-d\delta_{\mathbf{OH}}/dE$ / V$^{-1}$", legend=False,
+        ylabel=rf"$d\alpha/dE-d\delta_{{\mathbf{{{ion_label}}}}}/dE$ / V$^{{-1}}$",
         left=0.08, right=0.915, bottom=0.065, top=0.925,
     )
     _save_presentation_figure(fig, output_path)

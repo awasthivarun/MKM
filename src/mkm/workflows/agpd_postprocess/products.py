@@ -7,7 +7,6 @@ import pandas as pd
 
 from mkm.observable_maps import build_adjacent_log_order_map, build_alpha_map, build_log_slope_order_map
 from mkm.postprocessing.calibration import compute_normal_loo_pit
-from mkm.postprocessing.diagnostics import flatten_posterior_samples, summarize_samples
 from mkm.postprocessing.loo import compute_loo_diagnostics
 from mkm.postprocessing.materials import summarize_pointwise_loo_by_material
 from mkm.postprocessing.observable_comparison import (
@@ -18,6 +17,7 @@ from mkm.postprocessing.observables import summarize_posterior_linear_observable
 from mkm.postprocessing.second_order import build_second_order_outputs
 from mkm.workflows.agpd_basic import load_agpd_preprocessing_config
 from .status import LOO_PIT_MAX_PARETO_K, status_row, warning_text
+from mkm.postprocessing.model_points import summarize_model_points
 
 POINTWISE_VARIABLES = (
     "theta_CO",
@@ -37,23 +37,11 @@ POINTWISE_VARIABLES = (
 
 
 def _summarize_model_points(run):
-    result = run.model_data.model_points.copy()
-    posterior = run.inference_data.posterior
-
-    ln_rate = flatten_posterior_samples(posterior["ln_rate_model"])
-    for prefix, values in (("ln_rate_model", ln_rate), ("rate_model", np.exp(ln_rate))):
-        summary = summarize_samples(values)
-        for statistic, statistic_values in summary.items():
-            result[f"{prefix}_{statistic}"] = statistic_values
-
-    for variable in POINTWISE_VARIABLES:
-        if variable not in posterior:
-            continue
-        summary = summarize_samples(flatten_posterior_samples(posterior[variable]))
-        for statistic, statistic_values in summary.items():
-            result[f"{variable}_{statistic}"] = statistic_values
-
-    return result
+    return summarize_model_points(
+        run.inference_data,
+        run.model_data.model_points,
+        pointwise_variables=POINTWISE_VARIABLES,
+    )
 
 
 def _merge_material_summaries(*frames):

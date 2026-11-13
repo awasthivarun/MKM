@@ -13,6 +13,7 @@ from mkm.mechanisms.agpd_basic.electrochem import (
     log_tst_rate_constant,
 )
 from mkm.mechanisms.base import MechanismResult
+from mkm.mechanisms.co_ssa import solve_co_ssa_qea_oh
 
 
 @dataclass(frozen=True)
@@ -63,21 +64,17 @@ def evaluate_pt100_co(state, parameters, temperature_K, medium, model_name):
     ln_a_CO = pt.as_tensor_variable(state.ln_CO_mole_fraction)
     zeros = pt.zeros_like(E)
 
-    # CO + * <-> CO*: finite adsorption/desorption, consistent with AgPd.
     log_K1 = log_equilibrium_constant(parameters.deltaG1_0, temperature_K)
     log_k1 = log_tst_rate_constant(parameters.Gact1_0, temperature_K)
     log_k_minus_1 = log_k1 - log_K1
     log_k1_a_CO = log_k1 + ln_a_CO
 
-    # Water-derived OH in acid (inverse H+ dependence); OH--derived OH in base.
     deltaG4 = electrochemical_free_energy(parameters.deltaG4_0, 1.0, E)
     log_K4 = log_equilibrium_constant(deltaG4, temperature_K)
     log_OH_activity = -ln_a_ion if medium == "acidic" else ln_a_ion
     term_OH = log_K4 + log_OH_activity
-    log_A = pt.logsumexp(pt.stack([zeros, term_OH]), axis=0)
 
     pathways = model_name.removeprefix("CO_").split("_")
-    log_k_cons_terms = [log_k_minus_1 + zeros]
     log_k_ER_app = None
     log_k_LH = None
 
@@ -87,53 +84,33 @@ def evaluate_pt100_co(state, parameters, temperature_K, medium, model_name):
         )
         log_k_ER = log_tst_rate_constant(Gact_ER, temperature_K)
         log_k_ER_app = log_k_ER + (zeros if medium == "acidic" else ln_a_ion)
-        log_k_cons_terms.append(log_k_ER_app)
 
     if "LH" in pathways:
         log_k_LH = log_tst_rate_constant(parameters.Gact2_LH_0, temperature_K)
 
-    log_k_cons = pt.logsumexp(pt.stack(log_k_cons_terms), axis=0)
-    log_rho = log_k1_a_CO - log_k_cons
+    other_consumption = () if log_k_ER_app is None else (log_k_ER_app,)
+    log_k_LH_app = None if log_k_LH is None else log_k_LH + term_OH
 
-    # Site balance: theta_* + theta_CO + theta_OH = 1.
-    # CO SSA: k1*a_CO*theta_* = (k-1 + kER_app + kLH*theta_OH)*theta_CO.
-    if log_k_LH is None:
-        log_den = pt.logsumexp(pt.stack([log_A, log_rho]), axis=0)
-        log_theta_empty = -log_den
-        log_theta_CO = log_rho - log_den
-    else:
-        log_lambda = log_k_LH + term_OH - log_k_cons
-        A = pt.exp(log_A)
-        rho = pt.exp(log_rho)
-        lam = pt.exp(log_lambda)
-
-        a = A * lam
-        b = rho + A - lam
-        sqrt_disc = pt.sqrt(b**2 + 4.0 * a)
-
-        # Stable positive root of a*theta_empty**2 + b*theta_empty - 1 = 0.
-        theta_empty = pt.where(
-            b >= 0,
-            2.0 / (b + sqrt_disc),
-            (sqrt_disc - b) / (2.0 * a),
-        )
-        log_theta_empty = pt.log(theta_empty)
-        log_theta_CO = log_rho + log_theta_empty - pt.log1p(lam * theta_empty)
-
-    log_theta_OH = term_OH + log_theta_empty
+    coverages = solve_co_ssa_qea_oh(
+        log_term_oh=term_OH,
+        log_k1_a_co=log_k1_a_CO,
+        log_k_minus_1=log_k_minus_1,
+        log_k_other=other_consumption,
+        log_k_lh_app=log_k_LH_app,
+    )
 
     log_rates = {}
     if log_k_ER_app is not None:
-        log_rates["ER"] = log_k_ER_app + log_theta_CO
+        log_rates["ER"] = log_k_ER_app + coverages.log_theta_CO
     if log_k_LH is not None:
-        log_rates["LH"] = log_k_LH + log_theta_CO + log_theta_OH
+        log_rates["LH"] = log_k_LH + coverages.log_theta_CO + coverages.log_theta_OH
 
     log_rate_total = pt.logsumexp(pt.stack(list(log_rates.values())), axis=0)
 
     pointwise = {
-        "theta_empty": pt.exp(log_theta_empty),
-        "theta_CO": pt.exp(log_theta_CO),
-        "theta_OH": pt.exp(log_theta_OH),
+        "theta_empty": pt.exp(coverages.log_theta_empty),
+        "theta_CO": pt.exp(coverages.log_theta_CO),
+        "theta_OH": pt.exp(coverages.log_theta_OH),
     }
     for pathway, log_rate in log_rates.items():
         pointwise[f"ln_rate_{pathway}"] = log_rate

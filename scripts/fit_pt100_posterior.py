@@ -1,23 +1,25 @@
-
-"""Fit acidic or basic Pt100 CO oxidation models using the shared PyMC posterior lifecycle."""
+"""Fit acidic or basic Pt100 CO oxidation models using the shared posterior lifecycle."""
 
 from argparse import ArgumentParser
 
 from mkm.inference.likelihoods import RATE_NORMAL
-from mkm.mechanisms.pt100 import PT100_PARAMETER_CLASSES
+from mkm.models.ptru_registry import available_ptru_models
 from mkm.project_paths import ProjectPaths
-from mkm.provenance import build_fit_metadata, sha256_file
 from mkm.workflows.posterior_lifecycle import (
     RUN_STATUS_COMPLETE,
     RUN_STATUS_SAMPLED,
     run_posterior_lifecycle,
 )
 from mkm.workflows.pt100_fit import build_pt100_fit
+from mkm.workflows.ptru_posterior import (
+    build_pt100_run_metadata,
+    validate_pt100_run_metadata,
+)
 
 
 def parse_args():
     parser = ArgumentParser(description=__doc__)
-    parser.add_argument("model", choices=tuple(PT100_PARAMETER_CLASSES))
+    parser.add_argument("model", choices=available_ptru_models())
     parser.add_argument("--medium", choices=("acidic", "basic"), required=True)
     parser.add_argument("--draws", type=int, default=1000)
     parser.add_argument("--tune", type=int, default=1000)
@@ -32,12 +34,8 @@ def parse_args():
     return parser.parse_args()
 
 
-def main():
-    args = parse_args()
-    paths = ProjectPaths.discover(__file__)
-    fit = build_pt100_fit(paths, args.medium, args.model)
-
-    sampler = {
+def _sampler_settings(args):
+    return {
         "nuts_sampler": args.nuts_sampler,
         "backend": args.backend,
         "draws": args.draws,
@@ -48,75 +46,29 @@ def main():
         "random_seed": args.random_seed,
     }
 
-    # Include uncommitted Pt100 code in the run identity.
-    source_files = (
-        "src/mkm/mechanisms/pt100.py",
-        "src/mkm/models/pt100.py",
-        "src/mkm/workflows/pt100_fit.py",
-        "src/mkm/mechanisms/agpd_basic/electrochem.py",
-        "src/mkm/inference/model.py",
-        "src/mkm/inference/likelihoods.py",
-        "src/mkm/inference/priors.py",
-    )
-    source_hashes = {
-        filename: sha256_file(paths.root / filename)
-        for filename in source_files
-    }
 
-    model_specification = {
-        "family": "Pt100",
-        "medium": args.medium,
-        "model_name": args.model,
-        "assumptions": fit.config["mechanism_assumptions"],
-        "source_sha256": source_hashes,
-    }
+def main():
+    args = parse_args()
+    paths = ProjectPaths.discover(__file__)
+    fit = build_pt100_fit(paths, args.medium, args.model)
+    sampler = _sampler_settings(args)
 
     def metadata_factory():
-        return build_fit_metadata(
-            root=paths.root,
-            fit_scope="individual",
-            materials=fit.inputs.materials,
-            model_name=args.model,
-            error_structure="shared",
-            data_path=fit.data_path,
-            model_config_path=fit.model_config_path,
-            model_config_paths=(fit.model_config_path, fit.prior_config_path),
-            sampler=sampler,
-            model_specification=model_specification,
-            prior_specification=fit.parameter_specs,
-        )
+        return build_pt100_run_metadata(paths, fit, sampler)
 
     def checkpoint_validator(metadata):
-        expected = metadata_factory()
-        keys = (
-            "fit_scope", "materials", "model", "likelihood",
-            "error_structure", "parameterization", "model_specification",
-            "prior_specification", "resolved_fit_sha256",
+        validate_pt100_run_metadata(
+            metadata,
+            paths,
+            fit,
+            allowed_statuses=(RUN_STATUS_SAMPLED, RUN_STATUS_COMPLETE),
         )
 
-        mismatches = [
-            key for key in keys
-            if metadata.get(key) != expected.get(key)
-        ]
-
-        for key in ("data_path", "data_sha256", "model_config_sha256"):
-            if metadata.get("inputs", {}).get(key) != expected["inputs"][key]:
-                mismatches.append(f"inputs.{key}")
-
-        if metadata.get("status") not in (RUN_STATUS_SAMPLED, RUN_STATUS_COMPLETE):
-            mismatches.append("status")
-
-        if mismatches:
-            raise ValueError(
-                "Posterior checkpoint does not match the current Pt100 fit: "
-                + ", ".join(mismatches)
-            )
-
-    print(f"\nPt100 posterior fit: {args.medium} / {args.model}")
+    print(f"\nPt100 posterior fit: {fit.medium} / {fit.model_name}")
     print(f"Observations: {len(fit.inputs.observation_rate):,}")
     print(f"Model points: {len(fit.inputs.model_point_E_V_SHE):,}")
     print(f"Likelihood: {RATE_NORMAL}")
-    print("Error structure: shared")
+    print(f"Error structure: {fit.specification.error_structure}")
     print("sigma = sigma_rate_abs + sigma_rate_rel * model_rate")
     print(f"Free parameters: {[rv.name for rv in fit.built_model.model.free_RVs]}")
     print(f"Output: {fit.output_dir}")

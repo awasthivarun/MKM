@@ -2,22 +2,21 @@
 """Quick Pt100 mechanism screening with the existing linear-rate Normal error structure."""
 
 from dataclasses import fields
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytensor
 import pytensor.tensor as pt
-import yaml
 from scipy.optimize import minimize
 import matplotlib.pyplot as plt
 
-from mkm.mechanisms.pt100 import PT100_PARAMETER_CLASSES, evaluate_pt100_co
+from mkm.mechanisms.pt100 import evaluate_pt100_co
+from mkm.models.ptru_registry import available_ptru_models, get_ptru_model_definition
+from mkm.project_paths import ProjectPaths
+from mkm.workflows.pt100_fit import load_pt100_config
 from mkm.model_data import build_model_data
 from mkm.model_inputs import build_model_input_arrays, build_model_point_inputs
 
-ROOT = Path(__file__).resolve().parents[1]
-CONFIG = ROOT / "config" / "preprocessing" / "ptru_todd.yaml"
 
 # Temporary fixed noise scales for screening, not estimated posterior parameters.
 SIGMA_ABS = 2.0e-4
@@ -50,7 +49,7 @@ def medium_value(mapping, name, medium):
 
 def fit_model(inputs, medium, model_name, temperature_K):
     """Fit Pt100 kinetics and diagnose rates, reaction orders, coverages, and pathways."""
-    parameter_class = PT100_PARAMETER_CLASSES[model_name]
+    parameter_class = get_ptru_model_definition(model_name).parameter_class
     names = [field.name for field in fields(parameter_class)]
     point_inputs = build_model_point_inputs(inputs)
 
@@ -236,7 +235,7 @@ def fit_model(inputs, medium, model_name, temperature_K):
             f"{np.mean(ion_orders[:, 1] < -1e-8):.1%} (n={len(ion_orders)})"
         )
 
-    output_dir = ROOT / "figures" / "quick_fit_pt100"
+    output_dir = ProjectPaths.discover(__file__).figures_dir / "quick_fit_pt100"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Experimental versus predicted rate figures.
@@ -338,19 +337,17 @@ def fit_model(inputs, medium, model_name, temperature_K):
 
 
 def main():
-    with open(CONFIG, encoding="utf-8") as file:
-        config = yaml.safe_load(file)
+    paths = ProjectPaths.discover(__file__)
+    config, _ = load_pt100_config(paths)
 
     for medium in ("acidic", "basic"):
-        dataset = f"PtRu_COOx_{medium}"
-        path = ROOT / "data" / "processed" / dataset / "analysis" / f"{dataset}_selected.parquet"
-        data = pd.read_parquet(path)
+        data = pd.read_parquet(paths.ptru_selected_path(medium))
         data = data.loc[data["material"] == "Pt100"].copy()
 
         tables = build_model_data(data, electrolyte_concentration_column="C_electrolyte_M")
         inputs = build_model_input_arrays(tables)
 
-        for model_name in PT100_PARAMETER_CLASSES:
+        for model_name in available_ptru_models(medium=medium):
             fit_model(inputs, medium, model_name, config["temperature_K"])
 
 

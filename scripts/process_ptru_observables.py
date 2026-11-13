@@ -19,8 +19,10 @@ from mkm.preprocessing.ptru_plotting import (
     plot_ion_order_grid,
 )
 
-ROOT = Path(__file__).resolve().parents[1]
-CONFIG_PATH = ROOT / "config" / "preprocessing" / "ptru_todd.yaml"
+from argparse import ArgumentParser
+
+from mkm.project_paths import ProjectPaths
+from mkm.workflows.configuration import load_yaml
 
 
 def save_figure(fig, output_path):
@@ -30,7 +32,10 @@ def save_figure(fig, output_path):
     print(f"  Saved: {output_path} (+ SVG)")
 
 
-def process_source(analysis_path, figure_dir, config, medium, source_label=None):
+
+def process_source(
+    analysis_path, figure_dir, config, medium, source_label=None, generate_figures=True,
+):
     """Calculate full and selected observables, preserving full-curve alpha derivatives."""
     analysis = pd.read_parquet(analysis_path)
     prefix = analysis_path.name.removesuffix("_full.parquet")
@@ -108,16 +113,66 @@ def process_source(analysis_path, figure_dir, config, medium, source_label=None)
         print(f"  Full {ion_name} orders: {len(ion_orders_full):,}")
         print(f"  Selected {ion_name} orders: {len(ion_orders_selected):,}")
 
-    # Figures: selected observables only, without truncated regions
-    for material in sorted(analysis["material"].unique()):
+    
+    if generate_figures:
+        plot_source(
+            analysis_path=analysis_path,
+            figure_dir=figure_dir,
+            config=config,
+            medium=medium,
+            source_label=source_label,
+            alpha_replicates=alpha_replicates_selected,
+            alpha_summary=alpha_summary_selected,
+            co_orders=co_orders_selected,
+            ion_orders=ion_orders_selected,
+        )
+
+
+def plot_source(
+    analysis_path,
+    figure_dir,
+    config,
+    medium,
+    source_label=None,
+    alpha_replicates=None,
+    alpha_summary=None,
+    co_orders=None,
+    ion_orders=None,
+):
+    """Render saved or in-memory observable products without recalculating them."""
+    prefix = analysis_path.name.removesuffix("_full.parquet")
+    is_todd = source_label is None
+    suffix = "_selected" if is_todd else ""
+
+    if alpha_replicates is None:
+        alpha_replicates = pd.read_parquet(
+            analysis_path.with_name(f"{prefix}_alpha_replicates{suffix}.parquet")
+        )
+    if alpha_summary is None:
+        alpha_summary = pd.read_parquet(
+            analysis_path.with_name(f"{prefix}_alpha_summary{suffix}.parquet")
+        )
+    if co_orders is None:
+        co_orders = pd.read_parquet(
+            analysis_path.with_name(f"{prefix}_delta_CO{suffix}.parquet")
+        )
+
+    ion_name = "delta_Hplus" if medium == "acidic" else "delta_OH"
+    if is_todd and ion_orders is None:
+        ion_orders = pd.read_parquet(
+            analysis_path.with_name(f"{prefix}_{ion_name}_selected.parquet")
+        )
+
+    # Use selected observables only; excluded regions remain absent.
+    for material in sorted(alpha_replicates["material"].unique()):
         output_dir = figure_dir / material if is_todd else figure_dir
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        material_replicates = alpha_replicates_selected.loc[
-            alpha_replicates_selected["material"] == material
+        material_replicates = alpha_replicates.loc[
+            alpha_replicates["material"] == material
         ]
-        material_summary = alpha_summary_selected.loc[
-            alpha_summary_selected["material"] == material
+        material_summary = alpha_summary.loc[
+            alpha_summary["material"] == material
         ]
 
         plot_config = {
@@ -133,33 +188,39 @@ def process_source(analysis_path, figure_dir, config, medium, source_label=None)
         save_figure(fig, output_dir / f"{material}_alpha.png")
 
         fig = plot_co_order_grid(
-            co_orders_selected, material, medium, source_label=source_label,
+            co_orders, material, medium, source_label=source_label,
         )
         save_figure(fig, output_dir / f"{material}_delta_CO.png")
 
-        if ion_orders_selected is not None:
-            fig = plot_ion_order_grid(ion_orders_selected, material, medium)
+        if is_todd and ion_orders is not None:
+            fig = plot_ion_order_grid(ion_orders, material, medium)
             save_figure(fig, output_dir / f"{material}_{ion_name}.png")
 
 
 def main():
-    with open(CONFIG_PATH, encoding="utf-8") as file:
-        config = yaml.safe_load(file)
+    parser = ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--skip-plots", action="store_true",
+        help="Generate observable tables only; plot them separately afterward.",
+    )
+    args = parser.parse_args()
+
+    paths = ProjectPaths.discover(__file__)
+    config = load_yaml(paths.ptru_preprocessing_config_path)
 
     for medium in ("acidic", "basic"):
-        dataset = f"PtRu_COOx_{medium}"
-        analysis_dir = ROOT / "data" / "processed" / dataset / "analysis"
-        figure_dir = ROOT / "figures" / "preprocessing" / dataset
+        dataset = paths.ptru_dataset_name(medium)
+        analysis_dir = paths.ptru_analysis_dir(medium)
+        figure_dir = paths.ptru_preprocessing_figure_dir(medium)
 
-        # Todd: Pt100, Pt66Ru33, Pt50Ru50.
         process_source(
-            analysis_path=analysis_dir / f"{dataset}_full.parquet",
+            analysis_path=paths.ptru_full_path(medium),
             figure_dir=figure_dir,
             config=config,
             medium=medium,
+            generate_figures=not args.skip_plots,
         )
 
-        # Em: Pt/C preparations remain separate from Todd and each other.
         for analysis_path in sorted(analysis_dir.glob(f"{dataset}_Em_*_full.parquet")):
             prefix = analysis_path.name.removesuffix("_full.parquet")
             sample_id = prefix.removeprefix(f"{dataset}_Em_")
@@ -170,7 +231,9 @@ def main():
                 config=config,
                 medium=medium,
                 source_label=f"Em - {sample_id}",
+                generate_figures=not args.skip_plots,
             )
+
 
 
 if __name__ == "__main__":

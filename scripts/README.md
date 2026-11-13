@@ -392,3 +392,83 @@ python scripts/fit_agpd_posterior.py CO_BF_ER_LH --all-materials --parameterizat
 
 The corresponding result stays in the usual all-material directory and uses a compact model-leaf suffix such as `CO_BF_ER_LH__no_Ag10Pd90_Ag90Pd10`. Pass the same `--exclude-materials` list when postprocessing. `postprocess_agpd_posterior.py` now runs the standard products, transition-state DRC products, and all-material composition-parameter products in one command by default. Use `--skip-drc` or `--skip-composition` only when needed.
 
+
+## Pt100 / PtRu workflows (acidic and basic electrolyte)
+
+Only **Pt100** is currently available for Bayesian fitting. Todd's PtRu-alloy data
+and Em's Pt/C preparations are preprocessed independently; they must not be
+silently included in a Pt100 fit. AgPd retains its own composition and
+all-material model paths.
+
+### Preprocessing and diagnostics
+
+```powershell
+python scripts/process_ptru_todd.py
+python scripts/process_ptru_em.py
+python scripts/process_ptru_observables.py --skip-plots
+python scripts/plot_ptru_todd.py
+python scripts/plot_ptru_observables.py
+```
+
+Todd's configured acidic Pt100 low-potential selection is applied before
+fitting. Em preparations are not merged or truncated. Check source files,
+concentration/activity conventions, and rate-normalization units before fitting.
+
+### Fitting and postprocessing
+
+```powershell
+python scripts/check_pt100_prior_predictive.py CO_ER_LH --medium acidic --draws 1000
+python scripts/fit_pt100_posterior.py CO_ER_LH --medium acidic
+python scripts/postprocess_pt100_posterior.py CO_ER_LH --medium acidic --plot-level full
+```
+
+The prior-predictive check should be reviewed **before** starting an expensive
+fit. The linear-rate Normal likelihood is shared with AgPd, but Pt100 presently
+uses only a shared error structure. Postprocessing uses the shared 80% and 95%
+HDI summaries, not the old Pt100 equal-tail quantile convention.
+
+### Posterior checkpoint provenance
+
+Post-P1 checkpoints include additional source hashes and registry metadata.
+A posterior produced with the earlier implementation will ordinarily fail
+strict validation with `model_specification` and `resolved_fit_sha256`
+mismatches. Inspect such a checkpoint without changing it:
+
+```powershell
+python scripts/inspect_pt100_checkpoint.py CO_ER_LH --medium acidic
+```
+
+The audit distinguishes changes to inputs, prior specification, model
+assumptions, source code, and derived fit hashes. A
+`source_change_unverified` result means **the old and current implementations
+have not been shown to be mathematically or numerically equivalent**. It is
+not permission to override checkpoint validation, relabel metadata, resume
+sampling, or interpret old posterior predictions under new code. Retain the
+original checkpoint until independent equivalence checks are available.
+
+### Comparison and validation
+
+```powershell
+python scripts/compare_pt100_models.py --medium acidic --comparison-name pathways --run LH,CO_LH --run ER,CO_ER --run ER_LH,CO_ER_LH
+python scripts/validate_pt100_posterior.py CO_ER_LH --medium acidic --electrolyte-M 0.1 --co-mole-fraction 0.01
+```
+
+Comparison requires completed, compatible checkpoints with identical ordered
+observations. Pointwise PSIS-LOO leaves out individual measured rates, **not**
+correlated potential curves or whole electrolyte/CO conditions. Check Pareto-k
+reliability, and do not interpret ELPD differences as mechanistic proof.
+Condition-level LOCO refits all remaining conditions and excludes every
+replicate and potential point from the held-out condition. Pt100 LOMO and
+composition-dependent Bayesian fits are not implemented.
+
+### Regression tests
+
+The repository includes synthetic tests of Pt100 mechanism behavior, the
+shared CO steady-state solver, Todd/Em preprocessing, postprocessing products,
+checkpoint provenance, and Pt100 condition holdouts. They require no MCMC
+sampling and should run alongside the full AgPd regression suite:
+
+```powershell
+pytest tests/test_shared_co_ssa.py tests/workflows/test_ptru_checkpoint_audit.py tests/workflows/test_ptru_postprocessing_smoke.py -q
+pytest tests -q
+```

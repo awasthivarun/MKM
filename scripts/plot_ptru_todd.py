@@ -1,31 +1,25 @@
 
-"""Generate Todd and Em Pt/PtRu rate figures using the shared preprocessing plotting module."""
-
-from pathlib import Path
+"""Generate Todd and Em Pt/PtRu rate plots from processed data."""
 
 import pandas as pd
-import yaml
 
 from mkm.preprocessing.ptru_plotting import save_rate_figures
-
-ROOT = Path(__file__).resolve().parents[1]
-CONFIG_PATH = ROOT / "config" / "preprocessing" / "ptru_todd.yaml"
-
+from mkm.project_paths import ProjectPaths
+from mkm.workflows.configuration import load_yaml
 
 
 def main():
-    with open(CONFIG_PATH, encoding="utf-8") as file:
-        config = yaml.safe_load(file)
+    paths = ProjectPaths.discover(__file__)
+    config = load_yaml(paths.ptru_preprocessing_config_path)
 
     for medium in ("acidic", "basic"):
-        dataset = f"PtRu_COOx_{medium}"
-        base = ROOT / "data" / "processed" / dataset
-        analysis_dir = base / "analysis"
-        figure_dir = ROOT / "figures" / "preprocessing" / dataset
+        dataset = paths.ptru_dataset_name(medium)
+        analysis_dir = paths.ptru_analysis_dir(medium)
+        figure_dir = paths.ptru_preprocessing_figure_dir(medium)
 
-        # Use full data for plotting so excluded regions remain visible.
-        analysis = pd.read_parquet(analysis_dir / f"{dataset}_full.parquet")
-        truncation = pd.read_parquet(analysis_dir / f"{dataset}_truncation.parquet")
+        # Use full Todd curves so excluded regions remain visible.
+        analysis = pd.read_parquet(paths.ptru_full_path(medium))
+        truncation = pd.read_parquet(paths.ptru_truncation_path(medium))
 
         for material in config["materials"]:
             material_analysis = analysis.loc[analysis["material"] == material]
@@ -36,7 +30,6 @@ def main():
                 (truncation["material"] == material)
                 & (truncation["low_potential_method"] != "none")
             ]
-
             cutoffs = {
                 (float(row.C_electrolyte_M), float(row.CO_mole_fraction)): float(row.E_cut_V_SHE)
                 for row in material_cutoffs.itertuples(index=False)
@@ -47,9 +40,8 @@ def main():
                 figure_dir / material, cutoffs=cutoffs or None,
             )
 
-        # Em remains untruncated and separate from Todd.
+        # Em preparations remain independent and untruncated.
         em_paths = sorted(analysis_dir.glob(f"{dataset}_Em_*_full.parquet"))
-
         if not em_paths:
             print(f"No processed Em data found for {medium}; skipping Em plots.")
 

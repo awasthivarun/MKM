@@ -13,6 +13,8 @@ from .electrochem import (
 from .state import AgPdPointState
 from .surface import calculate_ag_qea_coverages, log_surface_fraction, logsumexp_pathways
 
+from mkm.mechanisms.co_ssa import solve_co_ssa_qea_oh
+
 @dataclass(frozen=True)
 class PdCOSSACoverages:
     log_theta_empty_Pd: object
@@ -149,76 +151,22 @@ def solve_pd_co_ssa_qea_oh(
     if state is None:
         raise ValueError("Pd CO SSA requires an AgPd point state.")
 
-    log_K_OH_Pd = pt.as_tensor_variable(log_K_OH_Pd)
-    term_OH_Pd = log_K_OH_Pd + pt.as_tensor_variable(state.ln_a_OH)
-    point_template = pt.zeros_like(term_OH_Pd)
+    log_term_oh = pt.as_tensor_variable(log_K_OH_Pd) + pt.as_tensor_variable(state.ln_a_OH)
+    other_consumption = tuple(rate for rate in (log_k_BF_app, log_k_ER_app) if rate is not None)
 
-    log_k1_a_CO = pt.as_tensor_variable(log_k1_a_CO) + point_template
-    log_k_minus_1 = pt.as_tensor_variable(log_k_minus_1) + point_template
-    log_A_Pd = pt.logsumexp(pt.stack([point_template, term_OH_Pd]), axis=0)
+    solved = solve_co_ssa_qea_oh(
+        log_term_oh=log_term_oh,
+        log_k1_a_co=log_k1_a_CO,
+        log_k_minus_1=log_k_minus_1,
+        log_k_other=other_consumption,
+        log_k_lh_app=log_k_LH_app,
+        theta_co_max=theta_CO_max,
+    )
 
-    log_k_cons_terms = [log_k_minus_1]
-    if log_k_BF_app is not None:
-        log_k_cons_terms.append(pt.as_tensor_variable(log_k_BF_app) + point_template)
-    if log_k_ER_app is not None:
-        log_k_cons_terms.append(pt.as_tensor_variable(log_k_ER_app) + point_template)
-    log_k_cons = pt.logsumexp(pt.stack(log_k_cons_terms), axis=0)
-
-    log_rho = log_k1_a_CO - log_k_cons
-    A_Pd = pt.exp(log_A_Pd)
-    rho = pt.exp(log_rho)
-
-    if log_k_LH_app is None:
-        lambda_LH = pt.zeros_like(rho)
-    else:
-        log_k_LH_app = pt.as_tensor_variable(log_k_LH_app) + point_template
-        lambda_LH = pt.exp(log_k_LH_app - log_k_cons)
-
-    if theta_CO_max is None:
-        if log_k_LH_app is None:
-            # With no LH consumption, theta_CO = rho * theta_empty and
-            # theta_CO + A_Pd * theta_empty = 1.
-            log_denominator = pt.logsumexp(pt.stack([log_A_Pd, log_rho]), axis=0)
-            log_theta_empty_Pd = -log_denominator
-            log_theta_CO = log_rho - log_denominator
-        else:
-            quadratic_a = A_Pd * lambda_LH
-            quadratic_b = rho + A_Pd - lambda_LH
-            discriminant = quadratic_b**2 + 4.0 * quadratic_a
-            sqrt_discriminant = pt.sqrt(discriminant)
-
-            root_positive_b = 2.0 / (quadratic_b + sqrt_discriminant)
-            root_negative_b = (-quadratic_b + sqrt_discriminant) / (2.0 * quadratic_a)
-            theta_empty_Pd = pt.where(quadratic_b >= 0, root_positive_b, root_negative_b)
-            log_theta_empty_Pd = pt.log(theta_empty_Pd)
-            log_theta_CO = log_rho + log_theta_empty_Pd - pt.log1p(lambda_LH * theta_empty_Pd)
-    else:
-        theta_CO_max = pt.as_tensor_variable(theta_CO_max)
-        inv_theta_CO_max = 1.0 / theta_CO_max
-
-        # r_ads = k1 a_CO theta_empty_Pd (1 - theta_CO / theta_CO_max).
-        # With theta_CO + A_Pd theta_empty_Pd = 1, the CO SSA remains quadratic.
-        quadratic_a = rho * inv_theta_CO_max + lambda_LH
-        quadratic_b = rho * (1.0 + inv_theta_CO_max) + A_Pd + lambda_LH
-        discriminant = (
-            (A_Pd + lambda_LH) ** 2
-            + 2.0
-            * rho
-            * (A_Pd * (1.0 + inv_theta_CO_max) + lambda_LH * (inv_theta_CO_max - 1.0))
-            + rho**2 * (1.0 - inv_theta_CO_max) ** 2
-        )
-        sqrt_discriminant = pt.sqrt(discriminant)
-
-        # Stable smaller root of a theta_CO^2 - b theta_CO + rho = 0.
-        log_theta_CO = np.log(2.0) + log_rho - pt.log(quadratic_b + sqrt_discriminant)
-        theta_CO = pt.exp(log_theta_CO)
-        log_theta_empty_Pd = pt.log1p(-theta_CO) - log_A_Pd
-
-    log_theta_OH_Pd = term_OH_Pd + log_theta_empty_Pd
     return PdCOSSACoverages(
-        log_theta_empty_Pd=log_theta_empty_Pd,
-        log_theta_CO=log_theta_CO,
-        log_theta_OH_Pd=log_theta_OH_Pd,
+        log_theta_empty_Pd=solved.log_theta_empty,
+        log_theta_CO=solved.log_theta_CO,
+        log_theta_OH_Pd=solved.log_theta_OH,
     )
 
 

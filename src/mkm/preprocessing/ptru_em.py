@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .ptru_todd import F, R
+from mkm.preprocessing.ptru_common import build_ptru_measurement_frame, standardize_ptru_measurements
 
 EM_CO_FRACTIONS = (0.001, 0.003, 0.01, 0.03, 0.10, 0.30, 1.00)
 EM_WORKBOOKS = {
@@ -72,21 +72,21 @@ def load_em_ptc(path, medium, config):
                 if not np.all(np.isfinite(current) & (current > 0)):
                     raise ValueError(f"Invalid current density in {sheet_name}")
 
-                frames.append(pd.DataFrame({
-                    "medium": medium,
-                    "material": "Pt100",
-                    "sample_id": sample_id,
-                    "C_electrolyte_M": 0.10,
-                    "CO_mole_fraction": co_fraction,
-                    "replicate": replicate,
-                    "point_index": np.arange(len(potential)),
-                    "source_workbook": path.name,
-                    "source_sheet": sheet_name,
-                    "source_column": col + 1,
-                    "source_row": e.index[valid].to_numpy() + 1,
-                    "E_V_RHE": potential,
-                    "j_mA_cm2": current,
-                }))
+                frames.append(build_ptru_measurement_frame(
+                    medium=medium,
+                    material="Pt100",
+                    sample_id=sample_id,
+                    concentration_M=0.10,
+                    co_fraction=co_fraction,
+                    replicate=replicate,
+                    source_workbook=path.name,
+                    source_sheet=sheet_name,
+                    source_column=col + 1,
+                    source_rows=e.index[valid].to_numpy() + 1,
+                    potential=potential,
+                    current=current,
+                ))
+
                 observed_co.append(co_fraction)
 
             if len(observed_co) != len(EM_CO_FRACTIONS) or not np.allclose(
@@ -99,21 +99,5 @@ def load_em_ptc(path, medium, config):
 
     data = pd.concat(frames, ignore_index=True)
 
-    if config["activity_model"] != "ideal_molarity":
-        raise ValueError("Only ideal_molarity is currently implemented")
+    return standardize_ptru_measurements(data, medium, config)
 
-    ln_major = np.log(0.10)
-    ln_kw = -float(config["pKw"]) * np.log(10)
-    ln_a_h = ln_major if medium == "acidic" else ln_kw - ln_major
-
-    data["ln_a_H"] = ln_a_h
-    data["ln_a_OH"] = ln_kw - ln_a_h
-    data["E_V_SHE"] = data["E_V_RHE"] + R * config["temperature_K"] / F * ln_a_h
-
-    norm = config["rate_normalization"]
-    denominator = norm["electrons_per_CO_oxidation"] * norm["site_charge_density_uC_cm2_Pt"]
-
-    data["rate_s_inv"] = data["j_mA_cm2"] * 1000 / denominator
-    data["ln_rate"] = np.log(data["rate_s_inv"])
-
-    return data

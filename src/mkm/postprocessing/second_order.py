@@ -138,11 +138,14 @@ def _summary_row(observable, frame, potential_step_V):
     }
 
 
-def _alpha_derivative_metadata(derivative_map, conditions):
+def _alpha_derivative_metadata(derivative_map, conditions, concentration_column="C_KOH_M"):
     metadata = conditions[
         ["condition_id", "material", "electrolyte_concentration_M", "CO_mole_fraction"]
-    ].rename(columns={"electrolyte_concentration_M": "C_KOH_M"})
-    outputs = derivative_map.outputs.merge(metadata, on="condition_id", how="left", validate="many_to_one")
+    ].rename(columns={"electrolyte_concentration_M": concentration_column})
+
+    outputs = derivative_map.outputs.merge(
+        metadata, on="condition_id", how="left", validate="many_to_one",
+    )
     return LinearObservableMap(outputs=outputs, terms=derivative_map.terms)
 
 
@@ -166,20 +169,24 @@ def _align_delta2(dalpha_map, dalpha_draws, ddelta_oh_map, ddelta_oh_draws):
     return outputs, draws
 
 
-def _experimental_second_order(observable_points, potential_step_V):
+
+def _experimental_second_order(
+    observable_points, potential_step_V,
+    concentration_column="C_KOH_M", ion_name="delta_OH",
+):
     alpha = observable_points.loc[observable_points["observable"] == "alpha"].copy()
-    oh = observable_points.loc[observable_points["observable"] == "delta_OH"].copy()
+    ion = observable_points.loc[observable_points["observable"] == ion_name].copy()
     co = observable_points.loc[observable_points["observable"] == "delta_CO"].copy()
 
     dalpha = _central_potential_difference(
         alpha,
         value_column="alpha_mean",
-        group_columns=["material", "C_KOH_M", "CO_mole_fraction"],
+        group_columns=["material", concentration_column, "CO_mole_fraction"],
         potential_step_V=potential_step_V,
     )
-    ddelta_oh = _central_potential_difference(
-        oh,
-        value_column="delta_OH",
+    ddelta_ion = _central_potential_difference(
+        ion,
+        value_column=ion_name,
         group_columns=["material", "CO_mole_fraction"],
         potential_step_V=potential_step_V,
     )
@@ -187,25 +194,27 @@ def _experimental_second_order(observable_points, potential_step_V):
         co,
         value_column="delta_CO",
         group_columns=[
-            "material",
-            "C_KOH_M",
-            "CO_lower_mole_fraction",
-            "CO_upper_mole_fraction",
+            "material", concentration_column, "CO_lower_mole_fraction", "CO_upper_mole_fraction",
         ],
         potential_step_V=potential_step_V,
     )
 
-    delta2_keys = ["material", "CO_mole_fraction", "analysis_grid_index", "E_V_SHE", "potential_step_V"]
+    delta2_keys = [
+        "material", "CO_mole_fraction", "analysis_grid_index", "E_V_SHE", "potential_step_V",
+    ]
     delta2 = dalpha.merge(
-        ddelta_oh[[*delta2_keys, "experimental"]],
+        ddelta_ion[[*delta2_keys, "experimental"]],
         on=delta2_keys,
         how="inner",
-        suffixes=("_alpha", "_oh"),
+        suffixes=("_alpha", "_ion"),
         validate="many_to_one",
     )
-    delta2["experimental"] = delta2["experimental_alpha"] - delta2["experimental_oh"]
-    delta2 = delta2.drop(columns=["experimental_alpha", "experimental_oh"])
-    return dalpha, ddelta_oh, ddelta_co, delta2
+    delta2["experimental"] = delta2["experimental_alpha"] - delta2["experimental_ion"]
+    delta2 = delta2.drop(columns=["experimental_alpha", "experimental_ion"])
+
+    return dalpha, ddelta_ion, ddelta_co, delta2
+
+
 
 
 def build_second_order_outputs(
@@ -217,19 +226,17 @@ def build_second_order_outputs(
     koh_values,
     co_values,
     potential_step_V=0.05,
+    *,
+    concentration_column="C_KOH_M",
+    ion_name="delta_OH",
 ):
-    """Build posterior and experimental potential derivatives of the kinetic observables.
-
-    Experimental derivatives use symmetric finite differences of the already-computed first-order
-    observable point estimates. Their uncertainty is intentionally not propagated because adjacent
-    first-order estimates are correlated and the current processed products do not carry that covariance.
-    """
+    """Build second-order outputs for the configured electrolyte-ion observable."""
     potential_step_V = float(potential_step_V)
     if not np.isfinite(potential_step_V) or potential_step_V <= 0:
         raise ValueError("Potential derivative step must be finite and positive.")
 
     alpha_map = build_alpha_map(model_points, temperature_K)
-    oh_map = build_log_slope_order_map(
+    ion_map = build_log_slope_order_map(
         model_points=model_points,
         varying_column="electrolyte_concentration_M",
         varying_values=koh_values,
@@ -247,11 +254,10 @@ def build_second_order_outputs(
     dalpha_map = _alpha_derivative_metadata(
         build_potential_derivative_map(alpha_map, ["condition_id"], potential_step_V),
         conditions,
+        concentration_column=concentration_column,
     )
-    ddelta_oh_map = build_potential_derivative_map(
-        oh_map,
-        ["material", "CO_mole_fraction"],
-        potential_step_V,
+    ddelta_ion_map = build_potential_derivative_map(
+        ion_map, ["material", "CO_mole_fraction"], potential_step_V,
     )
     ddelta_co_map = build_potential_derivative_map(
         co_map,
@@ -262,64 +268,66 @@ def build_second_order_outputs(
     posterior = _get_posterior(inference_data)
     if "ln_rate_model" not in posterior:
         raise ValueError("Posterior does not contain 'ln_rate_model'.")
-    ln_rate = np.asarray(posterior["ln_rate_model"], dtype=float)
 
+    ln_rate = np.asarray(posterior["ln_rate_model"], dtype=float)
     dalpha_draws = evaluate_linear_observable_map_draws(ln_rate, dalpha_map)
-    ddelta_oh_draws = evaluate_linear_observable_map_draws(ln_rate, ddelta_oh_map)
+    ddelta_ion_draws = evaluate_linear_observable_map_draws(ln_rate, ddelta_ion_map)
     ddelta_co_draws = evaluate_linear_observable_map_draws(ln_rate, ddelta_co_map)
-    delta2_outputs, delta2_draws = _align_delta2(dalpha_map, dalpha_draws, ddelta_oh_map, ddelta_oh_draws)
+
+    delta2_outputs, delta2_draws = _align_delta2(
+        dalpha_map, dalpha_draws, ddelta_ion_map, ddelta_ion_draws,
+    )
 
     posterior_dalpha = _posterior_summary(dalpha_map.outputs, dalpha_draws)
-    posterior_oh = _posterior_summary(ddelta_oh_map.outputs, ddelta_oh_draws)
+    posterior_ion = _posterior_summary(ddelta_ion_map.outputs, ddelta_ion_draws)
     posterior_co = _posterior_summary(ddelta_co_map.outputs, ddelta_co_draws).rename(
         columns={
-            "electrolyte_concentration_M": "C_KOH_M",
+            "electrolyte_concentration_M": concentration_column,
             "lower_CO_mole_fraction": "CO_lower_mole_fraction",
             "upper_CO_mole_fraction": "CO_upper_mole_fraction",
         }
     )
     posterior_delta2 = _posterior_summary(delta2_outputs, delta2_draws)
 
-    experimental_dalpha, experimental_oh, experimental_co, experimental_delta2 = _experimental_second_order(
-        observable_points,
-        potential_step_V,
+    experimental_dalpha, experimental_ion, experimental_co, experimental_delta2 = (
+        _experimental_second_order(
+            observable_points,
+            potential_step_V,
+            concentration_column=concentration_column,
+            ion_name=ion_name,
+        )
     )
+
+    alpha_keys = [
+        "material", concentration_column, "CO_mole_fraction",
+        "analysis_grid_index", "E_V_SHE", "potential_step_V",
+    ]
+    ion_keys = [
+        "material", "CO_mole_fraction", "analysis_grid_index", "E_V_SHE", "potential_step_V",
+    ]
+    co_keys = [
+        "material", concentration_column, "CO_lower_mole_fraction", "CO_upper_mole_fraction",
+        "analysis_grid_index", "E_V_SHE", "potential_step_V",
+    ]
 
     frames = {
         "dalpha_dE": _compare_second_order(
-            posterior_dalpha,
-            experimental_dalpha,
-            ["material", "C_KOH_M", "CO_mole_fraction", "analysis_grid_index", "E_V_SHE", "potential_step_V"],
-            "dalpha_dE",
+            posterior_dalpha, experimental_dalpha, alpha_keys, "dalpha_dE",
         ),
-        "ddelta_OH_dE": _compare_second_order(
-            posterior_oh,
-            experimental_oh,
-            ["material", "CO_mole_fraction", "analysis_grid_index", "E_V_SHE", "potential_step_V"],
-            "ddelta_OH_dE",
+        f"d{ion_name}_dE": _compare_second_order(
+            posterior_ion, experimental_ion, ion_keys, f"d{ion_name}_dE",
         ),
         "ddelta_CO_dE": _compare_second_order(
-            posterior_co,
-            experimental_co,
-            [
-                "material",
-                "C_KOH_M",
-                "CO_lower_mole_fraction",
-                "CO_upper_mole_fraction",
-                "analysis_grid_index",
-                "E_V_SHE",
-                "potential_step_V",
-            ],
-            "ddelta_CO_dE",
+            posterior_co, experimental_co, co_keys, "ddelta_CO_dE",
         ),
         "delta2": _compare_second_order(
-            posterior_delta2,
-            experimental_delta2,
-            ["material", "C_KOH_M", "CO_mole_fraction", "analysis_grid_index", "E_V_SHE", "potential_step_V"],
-            "delta2",
+            posterior_delta2, experimental_delta2, alpha_keys, "delta2",
         ),
     }
 
     points = pd.concat(frames.values(), ignore_index=True, sort=False)
-    summary = pd.DataFrame([_summary_row(name, frame, potential_step_V) for name, frame in frames.items()])
+    summary = pd.DataFrame([
+        _summary_row(name, frame, potential_step_V) for name, frame in frames.items()
+    ])
     return SecondOrderOutputs(points=points, summary=summary)
+

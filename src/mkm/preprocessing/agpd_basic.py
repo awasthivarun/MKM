@@ -2,7 +2,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from scipy.interpolate import PchipInterpolator
 
 from .validation import (
     DataValidationError,
@@ -14,6 +13,7 @@ from .validation import (
     validate_standardized_dataframe,
 )
 from .observables import add_transfer_coefficients, calculate_log_slope_order, calculate_paired_adjacent_log_orders
+from mkm.preprocessing.interpolation import build_potential_grid, interpolate_log_values
 
 
 def _parse_co_mole_fraction(sheet_name, expected_values):
@@ -232,37 +232,32 @@ def _build_analysis_grid(overlap_min, overlap_max, spacing, origin):
     if overlap_max <= overlap_min:
         raise DataValidationError("Replicate potential ranges do not have a usable overlap.")
 
-    tolerance = 1e-10
-
-    first_index = int(np.ceil((overlap_min - origin - tolerance) / spacing))
-    last_index = int(np.floor((overlap_max - origin + tolerance) / spacing))
-
-    if last_index < first_index:
-        raise DataValidationError("Replicate potential overlap contains no points on the configured analysis grid.")
-
-    analysis_grid_index = np.arange(first_index, last_index + 1, dtype=int)
-    potential = origin + analysis_grid_index * spacing
-
-    return analysis_grid_index, potential
+    try:
+        return build_potential_grid(overlap_min, overlap_max, spacing, origin)
+    except ValueError as exc:
+        raise DataValidationError(
+            "Replicate potential overlap contains no points on the configured analysis grid."
+        ) from exc
 
 
 def _interpolate_log_current(potential, ln_current, analysis_potential, condition, replicate):
-    potential, ln_current = _as_increasing_curve(potential, ln_current, label=f"{condition}, replicate {replicate}")
+    potential, ln_current = _as_increasing_curve(
+        potential, ln_current, label=f"{condition}, replicate {replicate}",
+    )
 
     tolerance = 1e-10
-
     if analysis_potential[0] < potential[0] - tolerance or analysis_potential[-1] > potential[-1] + tolerance:
         raise DataValidationError(
             f"Analysis grid for {condition} extends outside the measured potential range of replicate '{replicate}'."
         )
 
-    interpolator = PchipInterpolator(potential, ln_current, extrapolate=False)
-    interpolated = interpolator(analysis_potential)
+    try:
+        return interpolate_log_values(potential, ln_current, analysis_potential)
+    except ValueError as exc:
+        raise DataValidationError(
+            f"Interpolation produced non-finite values for {condition}, replicate '{replicate}'."
+        ) from exc
 
-    if not np.all(np.isfinite(interpolated)):
-        raise DataValidationError(f"Interpolation produced non-finite values for {condition}, replicate '{replicate}'.")
-
-    return interpolated
 
 
 def build_agpd_analysis_grid(standardized, config):
