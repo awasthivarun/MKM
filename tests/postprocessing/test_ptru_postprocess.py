@@ -250,3 +250,67 @@ def test_ptru_full_observable_plots_accept_electrolyte_column(tmp_path, monkeypa
         image = figures / "Pt100" / filename
         assert image.exists()
         assert image.stat().st_size > 0
+
+
+@pytest.mark.parametrize("medium", ["acidic", "basic"])
+def test_ptru_plot_levels_remove_stale_figures_but_none_preserves_them(tmp_path, monkeypatch, medium):
+    from pathlib import Path
+
+    from mkm.workflows import ptru_postprocess as workflow
+    from mkm.workflows.postprocessing_common import status_row
+
+    def save_placeholder(status_rows, name, function, *args, **kwargs):
+        output = next(value for value in args if isinstance(value, Path) and value.suffix == ".png")
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(b"figure")
+        status_rows.append(status_row(f"plot:{name}", "complete"))
+        return True
+
+    monkeypatch.setattr(workflow, "safe_plot", save_placeholder)
+    run = SimpleNamespace(
+        specification=SimpleNamespace(medium=medium),
+        inference_data=SimpleNamespace(posterior=None),
+        parameter_specs={}, free_parameter_names=(),
+    )
+    figures = tmp_path / "figures"
+    observations = pd.DataFrame()
+    points = pd.DataFrame({"rate_fraction_ER_median": [0.5]})
+
+    full_status = []
+    workflow.plot_ptru_products(run, observations, points, figures, "full", full_status)
+    assert (figures / "Pt100" / "coverages.png").is_file()
+    assert (figures / "sampling_trace.png").is_file()
+    assert full_status[-1]["status"] == "complete"
+
+    core_status = []
+    workflow.plot_ptru_products(run, observations, points, figures, "core", core_status)
+    assert (figures / "Pt100" / "rates_model.png").is_file()
+    assert not (figures / "Pt100" / "coverages.png").exists()
+    assert not (figures / "sampling_trace.png").exists()
+    assert core_status[-1]["status"] == "complete"
+
+    untouched = figures / "Pt100" / "rates_model.png"
+    untouched.write_bytes(b"preserved")
+    none_status = []
+    workflow.plot_ptru_products(run, observations, points, figures, "none", none_status)
+    assert untouched.read_bytes() == b"preserved"
+    assert none_status[-1]["status"] == "skipped_user"
+
+
+def test_ptru_plot_directory_cleanup_failure_is_reported(tmp_path, monkeypatch):
+    from mkm.workflows import ptru_postprocess as workflow
+
+    figures = tmp_path / "figures"
+    figures.mkdir()
+    (figures / "existing.png").write_bytes(b"existing")
+
+    def blocked(_):
+        raise PermissionError("directory in use")
+
+    monkeypatch.setattr(workflow.shutil, "rmtree", blocked)
+    status = []
+    workflow.plot_ptru_products(None, None, None, figures, "core", status)
+
+    assert status[-1]["status"] == "error"
+    assert "PermissionError" in status[-1]["message"]
+    assert (figures / "existing.png").read_bytes() == b"existing"

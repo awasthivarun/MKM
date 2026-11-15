@@ -1,6 +1,8 @@
 
 """Posterior postprocessing for Pt100 in acidic and basic electrolyte."""
 
+import shutil
+
 import numpy as np
 import pandas as pd
 
@@ -47,13 +49,11 @@ from mkm.postprocessing.residuals import (
     summarize_shared_replicate_residuals,
 )
 from mkm.postprocessing.second_order import build_second_order_outputs
-from mkm.workflows.agpd_postprocess.products import (
-    _compute_loo_pit_stage,
-    _compute_loo_stage,
-    _merge_material_summaries,
-    _overall_postprocessing_status,
-)
-from mkm.workflows.agpd_postprocess.status import (
+from mkm.workflows.postprocessing_common import (
+    compute_loo_pit_stage,
+    compute_loo_stage,
+    merge_material_summaries,
+    overall_postprocessing_status,
     safe_plot,
     status_row,
     write_postprocessing_status,
@@ -214,7 +214,16 @@ def plot_ptru_products(
         status_rows.append(status_row("plots", "skipped_user", "Plot level is none."))
         return
 
-    figures_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        if figures_dir.exists():
+            shutil.rmtree(figures_dir)
+        figures_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as error:
+        status_rows.append(status_row(
+            "plots", "error", f"Could not prepare figures directory: {type(error).__name__}: {error}",
+        ))
+        return
+
     attempts = 0
     failures = 0
 
@@ -456,11 +465,11 @@ def postprocess_ptru_run(
         status_rows.append(status_row("loo", "skipped_user", "LOO disabled by caller."))
         status_rows.append(status_row("loo_pit", "skipped_user", "LOO disabled by caller."))
     else:
-        loo, loo_material = _compute_loo_stage(run, tables_dir, status_rows)
+        loo, loo_material = compute_loo_stage(run, tables_dir, status_rows)
         write_postprocessing_status(tables_dir, status_rows)
-        calibration = _compute_loo_pit_stage(run, loo, tables_dir, status_rows)
+        calibration = compute_loo_pit_stage(run, loo, tables_dir, status_rows)
 
-    material_summary = _merge_material_summaries(
+    material_summary = merge_material_summaries(
         material_observations, material_residuals, loo_material,
     )
     material_summary.to_csv(tables_dir / "material_summary.csv", index=False)
@@ -525,7 +534,7 @@ def postprocess_ptru_run(
         second_order_points=second_order_points,
     )
 
-    overall = _overall_postprocessing_status(status_rows)
+    overall = overall_postprocessing_status(status_rows)
     status_rows.append(status_row("overall", overall))
     write_postprocessing_status(tables_dir, status_rows)
     return overall

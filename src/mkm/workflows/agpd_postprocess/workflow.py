@@ -11,13 +11,16 @@ from .plots import _make_plots
 from .products import (
     _build_observables_stage,
     _build_second_order_stage,
-    _compute_loo_pit_stage,
-    _compute_loo_stage,
-    _merge_material_summaries,
-    _overall_postprocessing_status,
     _summarize_model_points,
 )
-from .status import status_row, write_postprocessing_status
+from mkm.workflows.postprocessing_common import (
+    compute_loo_pit_stage,
+    compute_loo_stage,
+    merge_material_summaries,
+    overall_postprocessing_status,
+    status_row,
+    write_postprocessing_status,
+)
 def postprocess_agpd_run(
     run,
     config,
@@ -73,12 +76,12 @@ def postprocess_agpd_run(
         status_rows.append(status_row("loo", "skipped_user", "LOO was disabled by the caller."))
         status_rows.append(status_row("loo_pit", "skipped_user", "LOO was disabled by the caller."))
     else:
-        loo, loo_material = _compute_loo_stage(run, tables_dir, status_rows)
+        loo, loo_material = compute_loo_stage(run, tables_dir, status_rows)
         write_postprocessing_status(tables_dir, status_rows)
-        calibration = _compute_loo_pit_stage(run, loo, tables_dir, status_rows)
+        calibration = compute_loo_pit_stage(run, loo, tables_dir, status_rows)
     write_postprocessing_status(tables_dir, status_rows)
 
-    material_summary = _merge_material_summaries(material_observation, material_residual, loo_material)
+    material_summary = merge_material_summaries(material_observation, material_residual, loo_material)
     material_summary.to_csv(tables_dir / "material_summary.csv", index=False)
 
     observable_points = None
@@ -113,7 +116,7 @@ def postprocess_agpd_run(
         second_order_points=second_order_points,
     )
 
-    overall = _overall_postprocessing_status(status_rows)
+    overall = overall_postprocessing_status(status_rows)
     status_rows.append(status_row("overall", overall))
     write_postprocessing_status(tables_dir, status_rows)
     return overall
