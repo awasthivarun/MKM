@@ -57,8 +57,19 @@ def test_pt100_postprocess_cli_contract(monkeypatch, medium, model):
 
     assert args.model == model
     assert args.medium == medium
-    assert args.draws_per_chain == 125
+    assert not hasattr(args, "draws_per_chain")
     assert args.random_seed == 1
+
+
+def test_pt100_postprocess_rejects_removed_draw_thinning_option(monkeypatch):
+    script = load_script("postprocess_pt100_posterior")
+    monkeypatch.setattr(sys, "argv", [
+        "postprocess_pt100_posterior.py", "CO_ER_LH", "--medium", "acidic",
+        "--draws-per-chain", "125",
+    ])
+
+    with pytest.raises(SystemExit, match="2"):
+        script.parse_args()
 
 
 def test_pt100_fit_requires_medium(monkeypatch):

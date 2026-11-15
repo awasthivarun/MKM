@@ -1,7 +1,6 @@
 """PtRu posterior provenance, checkpoint validation, and loading."""
 
 from dataclasses import dataclass
-import numpy as np
 
 from mkm.inference.likelihoods import RATE_NORMAL
 from mkm.inference.posterior import (
@@ -149,7 +148,6 @@ def load_pt100_posterior_run(
     *,
     reconstruct_model_rate=False,
     reconstruct_pointwise=False,
-    draws_per_chain=None,
     progressbar=True,
 ):
     fit = build_pt100_fit(paths, medium, model_name)
@@ -172,30 +170,6 @@ def load_pt100_posterior_run(
     ]
     if missing_free:
         raise ValueError(f"Posterior is missing fitted variables: {missing_free}")
-
-    if draws_per_chain is not None:
-        draws_per_chain = int(draws_per_chain)
-        if draws_per_chain < 1:
-            raise ValueError("draws_per_chain must be positive.")
-
-        n_draws = int(inference_data.posterior.sizes["draw"])
-        stride = max(1, int(np.ceil(n_draws / draws_per_chain)))
-
-        inference_data = inference_data.copy()
-
-        for group_name in ("posterior", "sample_stats", "log_likelihood"):
-            if not hasattr(inference_data, group_name):
-                continue
-
-            group = getattr(inference_data, group_name)
-            if hasattr(group, "to_dataset"):
-                group = group.to_dataset()
-            if "draw" not in group.sizes:
-                continue
-
-            group = group.isel(draw=slice(None, None, stride))
-            group = group.assign_coords(draw=np.arange(group.sizes["draw"]))
-            setattr(inference_data, group_name, group)
 
     deterministic_names = []
     if reconstruct_model_rate or reconstruct_pointwise:
@@ -233,6 +207,18 @@ def load_pt100_posterior_run(
             "Posterior log likelihood does not contain 'rate_observed'. "
             "Resume the fit before postprocessing."
         )
+
+    # ArviZ divergence overlays and observation diagnostics require matched MCMC draws.
+    for group_name in ("sample_stats", "log_likelihood"):
+        group = getattr(inference_data, group_name, None)
+        if group is None:
+            continue
+        for dim in ("chain", "draw"):
+            if group.sizes.get(dim) != inference_data.posterior.sizes.get(dim):
+                raise ValueError(
+                    f"Posterior and {group_name} have different {dim} dimensions; "
+                    "cannot safely compute diagnostics or plot divergences."
+                )
 
     return Pt100PosteriorRun(
         specification=fit.specification,

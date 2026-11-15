@@ -302,6 +302,7 @@ def plot_ptru_products(
                     "Pt100/alpha", plot_alpha_comparison,
                     alpha, material_dir / "alpha.png", "Pt100",
                     electrolyte_label=electrolyte_label,
+                    electrolyte_column="C_electrolyte_M",
                 )
             if not ion.empty:
                 plot(
@@ -314,6 +315,7 @@ def plot_ptru_products(
                     "Pt100/delta_CO", plot_delta_co_comparison,
                     co, material_dir / "delta_CO.png", "Pt100",
                     electrolyte_label=electrolyte_label,
+                    electrolyte_column="C_electrolyte_M",
                 )
 
         if second_order_points is not None and not second_order_points.empty:

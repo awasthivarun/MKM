@@ -8,7 +8,7 @@ from mkm.inference.model import build_pymc_model
 from mkm.model_data import build_model_data
 from mkm.model_inputs import build_model_input_arrays
 from mkm.models.pt100 import build_pt100_mechanism
-from mkm.provenance import sha256_file
+from mkm.provenance import sha256_file, sha256_mapping
 from mkm.workflows.pt100_fit import (
     Pt100BuiltFit,
     load_pt100_config,
@@ -93,32 +93,41 @@ def build_ptru_loco_fit(paths, medium, model_name, selected_training, output_dir
     )
 
 
-def ptru_loco_metadata(paths, fit, sampler, electrolyte_M, co_mole_fraction, n_heldout):
-    """Extend P1 provenance with the exact LOCO split and validation code identity."""
-    metadata = build_pt100_run_metadata(paths, fit, sampler)
-    metadata.update({
+def _model_data_observation_sha256(model_data):
+    """Fingerprint the canonical observation ordering and model-point assignments."""
+    observations = model_data.observations
+    return sha256_mapping({
+        "columns": list(observations.columns),
+        "rows": observations.to_dict(orient="records"),
+    })
+
+
+def _ptru_loco_identity(paths, fit, electrolyte_M, co_mole_fraction, heldout_data):
+    """Identify both subsets, independently of the full selected-data file hash."""
+    return {
         "validation_scheme": "loco",
         "holdout_electrolyte_M": float(electrolyte_M),
         "holdout_co_mole_fraction": float(co_mole_fraction),
         "n_training_observations": len(fit.model_data.observations),
-        "n_heldout_observations": int(n_heldout),
+        "n_heldout_observations": len(heldout_data.observations),
+        "training_observations_sha256": _model_data_observation_sha256(fit.model_data),
+        "heldout_observations_sha256": _model_data_observation_sha256(heldout_data),
         "validation_source_sha256": sha256_file(paths.root / "src/mkm/workflows/ptru_validation.py"),
-    })
+    }
+
+
+def ptru_loco_metadata(paths, fit, sampler, electrolyte_M, co_mole_fraction, heldout_data):
+    """Record source-file provenance and exact canonical LOCO training/holdout subsets."""
+    metadata = build_pt100_run_metadata(paths, fit, sampler)
+    metadata.update(_ptru_loco_identity(paths, fit, electrolyte_M, co_mole_fraction, heldout_data))
     return metadata
 
 
 def validate_ptru_loco_metadata(
-    metadata, paths, fit, electrolyte_M, co_mole_fraction, n_heldout, *, allowed_statuses,
+    metadata, paths, fit, electrolyte_M, co_mole_fraction, heldout_data, *, allowed_statuses,
 ):
     validate_pt100_run_metadata(metadata, paths, fit, allowed_statuses=allowed_statuses)
-    expected = {
-        "validation_scheme": "loco",
-        "holdout_electrolyte_M": float(electrolyte_M),
-        "holdout_co_mole_fraction": float(co_mole_fraction),
-        "n_training_observations": len(fit.model_data.observations),
-        "n_heldout_observations": int(n_heldout),
-        "validation_source_sha256": sha256_file(paths.root / "src/mkm/workflows/ptru_validation.py"),
-    }
+    expected = _ptru_loco_identity(paths, fit, electrolyte_M, co_mole_fraction, heldout_data)
     mismatches = [key for key, value in expected.items() if metadata.get(key) != value]
     if mismatches:
         raise ValueError(f"Pt100 LOCO checkpoint split/provenance mismatch: {', '.join(mismatches)}.")

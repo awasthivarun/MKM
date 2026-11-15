@@ -14,7 +14,6 @@ def parse_args():
     parser = ArgumentParser(description=__doc__)
     parser.add_argument("model", choices=available_ptru_models())
     parser.add_argument("--medium", choices=("acidic", "basic"), required=True)
-    parser.add_argument("--draws-per-chain", type=int, default=125)
     parser.add_argument("--random-seed", type=int, default=1)
     parser.add_argument("--skip-loo", action="store_true")
     parser.add_argument("--skip-observables", action="store_true")
@@ -25,9 +24,6 @@ def parse_args():
 
 def main():
     args = parse_args()
-    if args.draws_per_chain < 1:
-        raise ValueError("--draws-per-chain must be positive.")
-
     paths = ProjectPaths.discover(__file__)
     config, _ = load_pt100_config(paths)
 
@@ -36,7 +32,6 @@ def main():
         args.medium,
         args.model,
         reconstruct_pointwise=True,
-        draws_per_chain=args.draws_per_chain,
         progressbar=True,
     )
 

@@ -1,8 +1,11 @@
 from ._shared import *
 
-def plot_alpha_comparison(comparison, output_path: str | Path, material, electrolyte_label="KOH"):
-    """Plot alpha for all KOH/CO conditions in one 4 x 3-style grid."""
-    koh_values = sorted(comparison["C_KOH_M"].unique())
+def plot_alpha_comparison(
+    comparison, output_path: str | Path, material, electrolyte_label="KOH",
+    electrolyte_column="C_KOH_M",
+):
+    """Plot alpha across electrolyte concentration and CO conditions."""
+    koh_values = sorted(comparison[electrolyte_column].unique())
     co_values = sorted(comparison["CO_mole_fraction"].unique())
     fig, axes = plt.subplots(
         len(co_values), len(koh_values),
@@ -18,7 +21,7 @@ def plot_alpha_comparison(comparison, output_path: str | Path, material, electro
         for col, c_koh in enumerate(koh_values):
             ax = axes[row, col]
             data = comparison[
-                (comparison["C_KOH_M"] == c_koh) & (comparison["CO_mole_fraction"] == co_fraction)
+                (comparison[electrolyte_column] == c_koh) & (comparison["CO_mole_fraction"] == co_fraction)
             ].sort_values("E_V_SHE")
             if not data.empty:
                 _plot_summary_curve(ax, data, "E_V_SHE", color=posterior_color, linewidth=2.0)
@@ -89,9 +92,12 @@ def plot_delta_oh_comparison(
     plt.close(fig)
 
 
-def plot_delta_co_comparison(comparison, output_path: str | Path, material, electrolyte_label="KOH"):
-    """Plot adjacent CO reaction orders as CO-interval rows by KOH columns."""
-    koh_values = sorted(comparison["C_KOH_M"].unique())
+def plot_delta_co_comparison(
+    comparison, output_path: str | Path, material, electrolyte_label="KOH",
+    electrolyte_column="C_KOH_M",
+):
+    """Plot adjacent CO reaction orders by electrolyte concentration."""
+    koh_values = sorted(comparison[electrolyte_column].unique())
     intervals = (
         comparison[["CO_lower_mole_fraction", "CO_upper_mole_fraction"]]
         .drop_duplicates()
@@ -112,7 +118,7 @@ def plot_delta_co_comparison(comparison, output_path: str | Path, material, elec
         for col, c_koh in enumerate(koh_values):
             ax = axes[row, col]
             data = comparison[
-                (comparison["C_KOH_M"] == c_koh)
+                (comparison[electrolyte_column] == c_koh)
                 & (comparison["CO_lower_mole_fraction"] == lower_co)
                 & (comparison["CO_upper_mole_fraction"] == upper_co)
             ].sort_values("E_V_SHE")

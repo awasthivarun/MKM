@@ -94,3 +94,55 @@ def test_prior_model_point_summary_contains_pt100_coverages():
     assert {"theta_OH_q50", "theta_empty_q50", "rate_model_q50"} <= set(summary.columns)
     np.testing.assert_allclose(summary["theta_OH_q50"], 0.2)
     np.testing.assert_allclose(summary["theta_empty_q50"], 0.5)
+
+
+def test_ptru_loco_checkpoint_tracks_training_and_heldout_content(monkeypatch):
+    from mkm.model_data import build_model_data
+    from mkm.workflows import ptru_validation as workflow
+
+    paths = ProjectPaths.discover(__file__)
+    training, heldout = split_ptru_loco(synthetic_selected(), 0.1, 0.01)
+    training_data = build_model_data(training, electrolyte_concentration_column="C_electrolyte_M")
+    heldout_data = build_model_data(heldout, electrolyte_concentration_column="C_electrolyte_M")
+    fit = SimpleNamespace(model_data=training_data)
+
+    # Test the LOCO-specific fingerprint contract separately from full-fit provenance.
+    monkeypatch.setattr(workflow, "build_pt100_run_metadata", lambda *args: {})
+    monkeypatch.setattr(workflow, "validate_pt100_run_metadata", lambda *args, **kwargs: None)
+
+    metadata = workflow.ptru_loco_metadata(paths, fit, {}, 0.1, 0.01, heldout_data)
+    assert len(metadata["training_observations_sha256"]) == 64
+    assert len(metadata["heldout_observations_sha256"]) == 64
+    workflow.validate_ptru_loco_metadata(
+        metadata, paths, fit, 0.1, 0.01, heldout_data, allowed_statuses=("complete",),
+    )
+
+    # Canonical model-data ordering makes the fingerprints independent of raw row order.
+    shuffled = training.sample(frac=1, random_state=7)
+    shuffled_data = build_model_data(shuffled, electrolyte_concentration_column="C_electrolyte_M")
+    assert workflow._model_data_observation_sha256(shuffled_data) == metadata["training_observations_sha256"]
+
+    modified_training = training.copy()
+    modified_training.loc[modified_training.index[0], "rate_s_inv"] *= 1.01
+    modified_training["ln_rate"] = np.log(modified_training["rate_s_inv"])
+    modified_data = build_model_data(modified_training, electrolyte_concentration_column="C_electrolyte_M")
+    changed_fit = SimpleNamespace(model_data=modified_data)
+    with pytest.raises(ValueError, match="training_observations_sha256"):
+        workflow.validate_ptru_loco_metadata(
+            metadata, paths, changed_fit, 0.1, 0.01, heldout_data, allowed_statuses=("complete",),
+        )
+
+    modified_heldout = heldout.copy()
+    modified_heldout.loc[modified_heldout.index[0], "rate_s_inv"] *= 1.01
+    modified_heldout["ln_rate"] = np.log(modified_heldout["rate_s_inv"])
+    changed_heldout = build_model_data(modified_heldout, electrolyte_concentration_column="C_electrolyte_M")
+    with pytest.raises(ValueError, match="heldout_observations_sha256"):
+        workflow.validate_ptru_loco_metadata(
+            metadata, paths, fit, 0.1, 0.01, changed_heldout, allowed_statuses=("complete",),
+        )
+
+    with pytest.raises(ValueError, match="training_observations_sha256"):
+        workflow.validate_ptru_loco_metadata(
+            {key: value for key, value in metadata.items() if key != "training_observations_sha256"},
+            paths, fit, 0.1, 0.01, heldout_data, allowed_statuses=("complete",),
+        )

@@ -94,13 +94,13 @@ def main():
     def metadata_factory():
         return ptru_loco_metadata(
             paths, fit, sampler, args.electrolyte_M, args.co_mole_fraction,
-            len(heldout_data.observations),
+            heldout_data,
         )
 
     def checkpoint_validator(metadata):
         validate_ptru_loco_metadata(
             metadata, paths, fit, args.electrolyte_M, args.co_mole_fraction,
-            len(heldout_data.observations),
+            heldout_data,
             allowed_statuses=(RUN_STATUS_SAMPLED, RUN_STATUS_COMPLETE),
         )
 

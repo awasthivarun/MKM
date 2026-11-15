@@ -219,3 +219,34 @@ def test_ptru_second_order_uses_correct_ion_name(tmp_path, medium):
     delta2 = result.points.loc[result.points["observable"] == "delta2"]
     assert not delta2.empty
     np.testing.assert_allclose(delta2["median"], 0, atol=1e-9)
+
+
+@pytest.mark.parametrize("medium", ["acidic", "basic"])
+def test_ptru_full_observable_plots_accept_electrolyte_column(tmp_path, monkeypatch, medium):
+    from mkm.workflows import ptru_postprocess as workflow
+
+    paths = ProjectPaths(root=tmp_path)
+    run = synthetic_ptru_run(medium)
+    write_synthetic_observables(paths, run)
+    comparisons, _ = build_ptru_observable_comparisons(run, paths, 293.15)
+
+    # Exercise the actual PtRu call sites and render both figures; skip unrelated plots.
+    def render_observables(status_rows, name, function, *args, **kwargs):
+        if name in {"Pt100/alpha", "Pt100/delta_CO"}:
+            function(*args, **kwargs)
+        return True
+
+    monkeypatch.setattr(workflow, "safe_plot", render_observables)
+    run.parameter_specs = {}
+    run.free_parameter_names = ()
+    figures = tmp_path / "figures"
+    status = []
+    workflow.plot_ptru_products(
+        run, pd.DataFrame(), pd.DataFrame(), figures, "full", status,
+        observable_points=comparisons,
+    )
+
+    for filename in ("alpha.png", "delta_CO.png"):
+        image = figures / "Pt100" / filename
+        assert image.exists()
+        assert image.stat().st_size > 0

@@ -534,3 +534,40 @@ def test_pointwise_loo_plot_accepts_one_material_without_cross_material_stitchin
     output_path = tmp_path / "loo_pointwise.png"
     plot_pointwise_loo(frame, "CO_BF_ER_LH", output_path, context_label="Ag50Pd50")
     assert output_path.exists()
+
+
+def test_sampling_plots_handle_divergent_draws(tmp_path):
+    rng = np.random.default_rng(42)
+    n_chains, n_draws = 2, 125
+    x = rng.normal(size=(n_chains, n_draws))
+    y = 0.3 * x + rng.normal(size=(n_chains, n_draws))
+    diverging = np.zeros((n_chains, n_draws), dtype=bool)
+    diverging[0, 8] = True
+    diverging[1, 120] = True
+
+    coords = {"chain": np.arange(n_chains), "draw": np.arange(n_draws)}
+    inference_data = xr.DataTree.from_dict({
+        "/posterior": xr.Dataset({
+            "x": (("chain", "draw"), x),
+            "y": (("chain", "draw"), y),
+        }, coords=coords),
+        "/sample_stats": xr.Dataset({
+            "diverging": (("chain", "draw"), diverging),
+            "energy": (("chain", "draw"), rng.normal(size=(n_chains, n_draws))),
+        }, coords=coords),
+    })
+
+    from mkm.postprocessing.plotting import plot_sampling_trace
+    from mkm.postprocessing.sampling import build_sampling_datatree
+
+    sampling = build_sampling_datatree(inference_data, ("x", "y"))
+    assert sampling.posterior.sizes["draw"] == sampling.sample_stats.sizes["draw"] == n_draws
+    assert np.asarray(sampling.sample_stats["diverging"], dtype=bool).sum() == 2
+
+    trace_path = tmp_path / "sampling_trace.png"
+    pairs_path = tmp_path / "sampling_pairs.png"
+    plot_sampling_trace(inference_data, ("x", "y"), trace_path)
+    plot_sampling_pairs(inference_data, ("x", "y"), pairs_path)
+
+    assert trace_path.is_file() and trace_path.stat().st_size > 0
+    assert pairs_path.is_file() and pairs_path.stat().st_size > 0
