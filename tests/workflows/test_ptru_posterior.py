@@ -35,6 +35,7 @@ def test_ptru_source_identity_tracks_shared_model_code():
     tracked = set(ptru_posterior.PT100_SOURCE_FILES)
 
     assert "src/mkm/mechanisms/co_ssa.py" in tracked
+    assert "src/mkm/mechanisms/electrochem.py" in tracked
     assert "src/mkm/models/ptru_registry.py" in tracked
     assert "src/mkm/workflows/likelihood_configuration.py" in tracked
     assert "src/mkm/inference/model.py" in tracked

@@ -1,4 +1,40 @@
-from ._shared import *
+from ._shared import (
+    FONT_SIZE_LEGEND,
+    FONT_SIZE_SUBPLOT_TITLE,
+    FONT_WEIGHT,
+    Line2D,
+    MATERIAL_EXTRA_HEIGHT_IN,
+    MATERIAL_EXTRA_WIDTH_IN,
+    MATERIAL_PANEL_HEIGHT_IN,
+    MATERIAL_PANEL_WIDTH_IN,
+    OH_ORDER_EXTRA_HEIGHT_IN,
+    OH_ORDER_FIGURE_WIDTH_IN,
+    OVERLAY_EXTRA_HEIGHT_IN,
+    OVERLAY_EXTRA_WIDTH_IN,
+    OVERLAY_PANEL_HEIGHT_IN,
+    OVERLAY_PANEL_WIDTH_IN,
+    OVERLAY_SINGLE_ROW_HEIGHT_IN,
+    Path,
+    REFERENCE_COLOR,
+    TEXT_GAP_PT,
+    _add_fixed_gap_global_labels,
+    _add_fixed_gap_global_title,
+    _condition_colors,
+    _finish_condition_grid,
+    _grid_figsize,
+    _material_plot_colors,
+    _mix_with_white,
+    _ordered_materials,
+    _plot_summary_curve,
+    _position_legend_above_column_titles,
+    _position_row_labels,
+    _save_presentation_figure,
+    _set_presentation_axes,
+    _style_axis,
+    _style_legend,
+    np,
+    plt,
+)
 
 def plot_alpha_comparison(
     comparison, output_path: str | Path, material, electrolyte_label="KOH",
@@ -272,10 +308,21 @@ def _finish_overlay_grid(fig, axes, *, title, ylabel, condition_labels, row_labe
     _position_legend_above_column_titles(fig, legend, axes)
     _add_fixed_gap_global_title(fig, axes, title, legend=legend)
 
-def plot_alpha_overlay_pco(comparison, output_path: str | Path):
+
+def _overlay_condition_rows(frame, groups, key, *, sort_potential=True):
+    """Select indexed condition rows without rescanning the entire table for each panel."""
+    positions = groups.get(key)
+    rows = frame.iloc[positions] if positions is not None else frame.iloc[0:0]
+    return rows.sort_values("E_V_SHE") if sort_potential else rows
+
+
+def plot_alpha_overlay_pco(
+    comparison, output_path: str | Path, *, electrolyte_column="C_KOH_M", electrolyte_label="KOH",
+):
     materials = _ordered_materials(comparison["material"].unique())
-    koh_values = sorted(comparison["C_KOH_M"].unique())
+    koh_values = sorted(comparison[electrolyte_column].unique())
     co_values = sorted(comparison["CO_mole_fraction"].unique())
+    groups = comparison.groupby(["material", electrolyte_column, "CO_mole_fraction"], sort=False).indices
     fig, axes = plt.subplots(
         len(koh_values), len(materials),
         figsize=_grid_figsize(
@@ -290,26 +337,28 @@ def plot_alpha_overlay_pco(comparison, output_path: str | Path):
         axes[0, col].set_title(material, pad=TEXT_GAP_PT, fontweight="bold")
         for row, c_koh in enumerate(koh_values):
             for color, co_fraction in zip(colors, co_values, strict=True):
-                data = comparison[
-                    (comparison["material"] == material) & (comparison["C_KOH_M"] == c_koh)
-                    & (comparison["CO_mole_fraction"] == co_fraction)
-                ].sort_values("E_V_SHE")
+                data = _overlay_condition_rows(
+                    comparison, groups, (material, c_koh, co_fraction),
+                )
                 _plot_overlay_panel(
                     axes[row, col], data, color=color, observed_column="alpha_mean", observed_sd_column="alpha_sd"
                 )
     _finish_overlay_grid(
         fig, axes, title=_overlay_title("Transfer coefficient", materials), ylabel="Transfer coefficient",
         condition_labels=[f"{100 * value:g}% CO" for value in co_values],
-        row_labels=[f"{value:g} M KOH" for value in koh_values],
+        row_labels=[f"{value:g} M {electrolyte_label}" for value in koh_values],
     )
     _save_presentation_figure(fig, output_path)
     plt.close(fig)
 
 
-def plot_alpha_overlay_koh(comparison, output_path: str | Path):
+def plot_alpha_overlay_koh(
+    comparison, output_path: str | Path, *, electrolyte_column="C_KOH_M", electrolyte_label="KOH",
+):
     materials = _ordered_materials(comparison["material"].unique())
-    koh_values = sorted(comparison["C_KOH_M"].unique())
+    koh_values = sorted(comparison[electrolyte_column].unique())
     co_values = sorted(comparison["CO_mole_fraction"].unique())
+    groups = comparison.groupby(["material", electrolyte_column, "CO_mole_fraction"], sort=False).indices
     fig, axes = plt.subplots(
         len(co_values), len(materials),
         figsize=_grid_figsize(
@@ -324,29 +373,34 @@ def plot_alpha_overlay_koh(comparison, output_path: str | Path):
         axes[0, col].set_title(material, pad=TEXT_GAP_PT, fontweight="bold")
         for row, co_fraction in enumerate(co_values):
             for color, c_koh in zip(colors, koh_values, strict=True):
-                data = comparison[
-                    (comparison["material"] == material) & (comparison["CO_mole_fraction"] == co_fraction)
-                    & (comparison["C_KOH_M"] == c_koh)
-                ].sort_values("E_V_SHE")
+                data = _overlay_condition_rows(
+                    comparison, groups, (material, c_koh, co_fraction),
+                )
                 _plot_overlay_panel(
                     axes[row, col], data, color=color, observed_column="alpha_mean", observed_sd_column="alpha_sd"
                 )
     _finish_overlay_grid(
         fig, axes, title=_overlay_title("Transfer coefficient", materials), ylabel="Transfer coefficient",
-        condition_labels=[f"{value:g} M KOH" for value in koh_values],
+        condition_labels=[f"{value:g} M {electrolyte_label}" for value in koh_values],
         row_labels=[f"{100 * value:g}% CO" for value in co_values],
     )
     _save_presentation_figure(fig, output_path)
     plt.close(fig)
 
 
-def plot_delta_co_overlay_pco(comparison, output_path: str | Path):
+def plot_delta_co_overlay_pco(
+    comparison, output_path: str | Path, *, electrolyte_column="C_KOH_M", electrolyte_label="KOH",
+):
     materials = _ordered_materials(comparison["material"].unique())
-    koh_values = sorted(comparison["C_KOH_M"].unique())
+    koh_values = sorted(comparison[electrolyte_column].unique())
     intervals = list(
         comparison[["CO_lower_mole_fraction", "CO_upper_mole_fraction"]].drop_duplicates()
         .sort_values(["CO_lower_mole_fraction", "CO_upper_mole_fraction"]).itertuples(index=False, name=None)
     )
+    groups = comparison.groupby(
+        ["material", electrolyte_column, "CO_lower_mole_fraction", "CO_upper_mole_fraction"],
+        sort=False,
+    ).indices
     fig, axes = plt.subplots(
         len(koh_values), len(materials),
         figsize=_grid_figsize(
@@ -361,30 +415,34 @@ def plot_delta_co_overlay_pco(comparison, output_path: str | Path):
         axes[0, col].set_title(material, pad=TEXT_GAP_PT, fontweight="bold")
         for row, c_koh in enumerate(koh_values):
             for color, (lower_co, upper_co) in zip(colors, intervals, strict=True):
-                data = comparison[
-                    (comparison["material"] == material) & (comparison["C_KOH_M"] == c_koh)
-                    & (comparison["CO_lower_mole_fraction"] == lower_co)
-                    & (comparison["CO_upper_mole_fraction"] == upper_co)
-                ].sort_values("E_V_SHE")
+                data = _overlay_condition_rows(
+                    comparison, groups, (material, c_koh, lower_co, upper_co),
+                )
                 _plot_overlay_panel(
                     axes[row, col], data, color=color, observed_column="delta_CO", observed_sd_column="delta_CO_sd"
                 )
     _finish_overlay_grid(
         fig, axes, title=_overlay_title("Adjacent CO reaction order", materials), ylabel="CO order",
         condition_labels=[f"{100 * lo:g}–{100 * hi:g}% CO" for lo, hi in intervals],
-        row_labels=[f"{value:g} M KOH" for value in koh_values],
+        row_labels=[f"{value:g} M {electrolyte_label}" for value in koh_values],
     )
     _save_presentation_figure(fig, output_path)
     plt.close(fig)
 
 
-def plot_delta_co_overlay_koh(comparison, output_path: str | Path):
+def plot_delta_co_overlay_koh(
+    comparison, output_path: str | Path, *, electrolyte_column="C_KOH_M", electrolyte_label="KOH",
+):
     materials = _ordered_materials(comparison["material"].unique())
-    koh_values = sorted(comparison["C_KOH_M"].unique())
+    koh_values = sorted(comparison[electrolyte_column].unique())
     intervals = list(
         comparison[["CO_lower_mole_fraction", "CO_upper_mole_fraction"]].drop_duplicates()
         .sort_values(["CO_lower_mole_fraction", "CO_upper_mole_fraction"]).itertuples(index=False, name=None)
     )
+    groups = comparison.groupby(
+        ["material", electrolyte_column, "CO_lower_mole_fraction", "CO_upper_mole_fraction"],
+        sort=False,
+    ).indices
     fig, axes = plt.subplots(
         len(intervals), len(materials),
         figsize=_grid_figsize(
@@ -399,24 +457,22 @@ def plot_delta_co_overlay_koh(comparison, output_path: str | Path):
         axes[0, col].set_title(material, pad=TEXT_GAP_PT, fontweight="bold")
         for row, (lower_co, upper_co) in enumerate(intervals):
             for color, c_koh in zip(colors, koh_values, strict=True):
-                data = comparison[
-                    (comparison["material"] == material) & (comparison["C_KOH_M"] == c_koh)
-                    & (comparison["CO_lower_mole_fraction"] == lower_co)
-                    & (comparison["CO_upper_mole_fraction"] == upper_co)
-                ].sort_values("E_V_SHE")
+                data = _overlay_condition_rows(
+                    comparison, groups, (material, c_koh, lower_co, upper_co),
+                )
                 _plot_overlay_panel(
                     axes[row, col], data, color=color, observed_column="delta_CO", observed_sd_column="delta_CO_sd"
                 )
     _finish_overlay_grid(
         fig, axes, title=_overlay_title("Adjacent CO reaction order", materials), ylabel="CO order",
-        condition_labels=[f"{value:g} M KOH" for value in koh_values],
+        condition_labels=[f"{value:g} M {electrolyte_label}" for value in koh_values],
         row_labels=[f"{100 * lo:g}–{100 * hi:g}% CO" for lo, hi in intervals],
     )
     _save_presentation_figure(fig, output_path)
     plt.close(fig)
 
 
-def plot_delta_oh_overlay_pco(comparison, output_path: str | Path):
+def plot_delta_oh_overlay_pco(comparison, output_path: str | Path, *, ion_name="delta_OH", ion_label="OH"):
     materials = _ordered_materials(comparison["material"].unique())
     co_values = sorted(comparison["CO_mole_fraction"].unique())
     fig, axes = plt.subplots(
@@ -432,20 +488,23 @@ def plot_delta_oh_overlay_pco(comparison, output_path: str | Path):
                 (comparison["material"] == material) & (comparison["CO_mole_fraction"] == co_fraction)
             ].sort_values("E_V_SHE")
             _plot_overlay_panel(
-                axes[0, col], data, color=color, observed_column="delta_OH", observed_sd_column="delta_OH_sd"
+                axes[0, col], data, color=color, observed_column=ion_name, observed_sd_column=f"{ion_name}_sd"
             )
     _finish_overlay_grid(
-        fig, axes, title=_overlay_title("OH reaction order", materials), ylabel="OH order",
+        fig, axes, title=_overlay_title(f"{ion_label} reaction order", materials), ylabel=f"{ion_label} order",
         condition_labels=[f"{100 * value:g}% CO" for value in co_values],
     )
     _save_presentation_figure(fig, output_path)
     plt.close(fig)
 
 
-def plot_rate_overlay_pco(observations, output_path: str | Path):
+def plot_rate_overlay_pco(
+    observations, output_path: str | Path, *, electrolyte_column="electrolyte_concentration_M", electrolyte_label="KOH",
+):
     materials = _ordered_materials(observations["material"].unique())
-    koh_values = sorted(observations["electrolyte_concentration_M"].unique())
+    koh_values = sorted(observations[electrolyte_column].unique())
     co_values = sorted(observations["CO_mole_fraction"].unique())
+    groups = observations.groupby(["material", electrolyte_column, "CO_mole_fraction"], sort=False).indices
     fig, axes = plt.subplots(
         len(koh_values), len(materials),
         figsize=_grid_figsize(
@@ -460,25 +519,26 @@ def plot_rate_overlay_pco(observations, output_path: str | Path):
         axes[0, col].set_title(material, pad=TEXT_GAP_PT, fontweight=FONT_WEIGHT)
         for row, c_koh in enumerate(koh_values):
             for color, co_fraction in zip(colors, co_values, strict=True):
-                data = observations[
-                    (observations["material"] == material)
-                    & (observations["electrolyte_concentration_M"] == c_koh)
-                    & (observations["CO_mole_fraction"] == co_fraction)
-                ]
+                data = _overlay_condition_rows(
+                    observations, groups, (material, c_koh, co_fraction), sort_potential=False,
+                )
                 _plot_rate_overlay_panel(axes[row, col], data, color=color)
     _finish_overlay_grid(
         fig, axes, title=_overlay_title("Model rate", materials), ylabel=r"rate / s$^{-1}$",
         condition_labels=[f"{100 * value:g}% CO" for value in co_values],
-        row_labels=[f"{value:g} M KOH" for value in koh_values], wspace=0.24,
+        row_labels=[f"{value:g} M {electrolyte_label}" for value in koh_values], wspace=0.24,
     )
     _save_presentation_figure(fig, output_path)
     plt.close(fig)
 
 
-def plot_rate_overlay_koh(observations, output_path: str | Path):
+def plot_rate_overlay_koh(
+    observations, output_path: str | Path, *, electrolyte_column="electrolyte_concentration_M", electrolyte_label="KOH",
+):
     materials = _ordered_materials(observations["material"].unique())
-    koh_values = sorted(observations["electrolyte_concentration_M"].unique())
+    koh_values = sorted(observations[electrolyte_column].unique())
     co_values = sorted(observations["CO_mole_fraction"].unique())
+    groups = observations.groupby(["material", electrolyte_column, "CO_mole_fraction"], sort=False).indices
     fig, axes = plt.subplots(
         len(co_values), len(materials),
         figsize=_grid_figsize(
@@ -493,15 +553,13 @@ def plot_rate_overlay_koh(observations, output_path: str | Path):
         axes[0, col].set_title(material, pad=TEXT_GAP_PT, fontweight=FONT_WEIGHT)
         for row, co_fraction in enumerate(co_values):
             for color, c_koh in zip(colors, koh_values, strict=True):
-                data = observations[
-                    (observations["material"] == material)
-                    & (observations["CO_mole_fraction"] == co_fraction)
-                    & (observations["electrolyte_concentration_M"] == c_koh)
-                ]
+                data = _overlay_condition_rows(
+                    observations, groups, (material, c_koh, co_fraction), sort_potential=False,
+                )
                 _plot_rate_overlay_panel(axes[row, col], data, color=color)
     _finish_overlay_grid(
         fig, axes, title=_overlay_title("Model rate", materials), ylabel=r"rate / s$^{-1}$",
-        condition_labels=[f"{value:g} M KOH" for value in koh_values],
+        condition_labels=[f"{value:g} M {electrolyte_label}" for value in koh_values],
         row_labels=[f"{100 * value:g}% CO" for value in co_values], wspace=0.24,
     )
     _save_presentation_figure(fig, output_path)

@@ -9,9 +9,10 @@ The CLI scripts are deliberately thin. Reusable scientific/inference logic belon
 PtRu preprocessing covers Pt100, Pt66Ru33, and Pt50Ru50 in acidic
 and basic media. Todd and Em measurements are processed separately.
 
-The current PtRu pipeline produces experimental rates, apparent
-transfer coefficients, CO reaction orders, and H+/OH- reaction orders.
-PtRu microkinetic modeling and inference are not yet implemented.
+The PtRu experimental pipeline produces rates, apparent transfer
+coefficients, CO reaction orders, and H+/OH- reaction orders.
+Pt100-only acidic/basic microkinetic inference is implemented as described
+below; inference for the PtRu alloys remains unimplemented.
 
 ### 1. Process Todd measurements
 
@@ -28,8 +29,8 @@ data/processed/PtRu_COOx_acidic/
 data/processed/PtRu_COOx_basic/
 ```
 
-Each dataset contains standardized replicate observations and
-full interpolated analysis observations.
+Each dataset contains standardized replicate observations, full interpolated
+analysis observations, selected observations, and truncation metadata.
 
 ### 2. Process Em measurements
 
@@ -113,8 +114,11 @@ python scripts/process_ptru_observables.py
 The first two commands produce standardized and interpolated
 rate data. The last two generate figures and derived observables.
 
-The PtRu analysis currently uses full, untruncated measurements.
-Data-selection and truncation rules have not yet been finalized.
+Todd preprocessing preserves full observations and produces a separate
+selected dataset. Configured low-potential exclusions currently affect only
+Todd acidic Pt100; other Todd materials and Em data remain untruncated.
+Experimental observable products are generated for both full and selected
+Todd data. The selection thresholds remain scientific assumptions.
 
 ### PtRu implementation ownership
 
@@ -372,7 +376,7 @@ Ag10 with BF disabled:
 python scripts/fit_agpd_posterior.py CO_BF_ER_LH_Ag10_no_BF --all-materials --parameterization linear_xAg --error-structure material
 ```
 
-Coverage-cap variants are registered but are currently intended for exploratory sensitivity analysis rather than the main model path. See `MODEL_REGISTRY.md` and the comments in `config/models/experimental/agpd_caps.yaml`.
+Coverage-cap variants are registered but are currently intended for exploratory sensitivity analysis rather than the main model path. See `src/mkm/models/agpd_registry.py` and `config/models/experimental/agpd_caps.yaml`.
 
 ## PowerShell chaining
 

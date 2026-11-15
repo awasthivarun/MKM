@@ -14,14 +14,14 @@ from mkm.provenance import (
     sha256_file,
     sha256_mapping,
 )
-from mkm.workflows.posterior_lifecycle import RUN_STATUS_COMPLETE, RUN_STATUS_SAMPLED
+from mkm.workflows.posterior_lifecycle import RUN_STATUS_COMPLETE
 from mkm.workflows.pt100_fit import build_pt100_fit
 
 
 PT100_SOURCE_FILES = (
     "src/mkm/mechanisms/pt100.py",
     "src/mkm/mechanisms/co_ssa.py",
-    "src/mkm/mechanisms/agpd_basic/electrochem.py",
+    "src/mkm/mechanisms/electrochem.py",
     "src/mkm/models/pt100.py",
     "src/mkm/models/ptru_registry.py",
     "src/mkm/workflows/pt100_fit.py",

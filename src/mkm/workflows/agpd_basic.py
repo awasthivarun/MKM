@@ -8,12 +8,8 @@ from mkm.project_paths import ProjectPaths
 from mkm.workflows.configuration import load_yaml, merge_config_sections
 
 
-def _merge_config_sections(*configs):
-    return merge_config_sections(*configs)
-
-
 def load_agpd_model_config(paths: ProjectPaths):
-    return _merge_config_sections(*(load_yaml(path) for path in paths.agpd_model_config_paths))
+    return merge_config_sections(*(load_yaml(path) for path in paths.agpd_model_config_paths))
 
 
 def load_agpd_preprocessing_config(paths: ProjectPaths):

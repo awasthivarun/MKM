@@ -2,7 +2,6 @@
 """Experimental kinetic observables for Pt/PtRu CO oxidation in acidic and basic media."""
 
 import numpy as np
-import pandas as pd
 
 from mkm.preprocessing.observables import (
     add_transfer_coefficients,

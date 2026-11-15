@@ -146,3 +146,22 @@ def test_ptru_loco_checkpoint_tracks_training_and_heldout_content(monkeypatch):
             {key: value for key, value in metadata.items() if key != "training_observations_sha256"},
             paths, fit, 0.1, 0.01, heldout_data, allowed_statuses=("complete",),
         )
+
+
+def test_ptru_loco_and_full_fit_share_the_model_building_pipeline(monkeypatch, tmp_path):
+    from mkm.workflows import pt100_fit
+
+    paths = ProjectPaths.discover(__file__)
+    selected = synthetic_selected()
+    monkeypatch.setattr(pt100_fit.pd, "read_parquet", lambda _: selected)
+
+    full = pt100_fit.build_pt100_fit(paths, "acidic", "CO_LH")
+    validation = build_ptru_loco_fit(paths, "acidic", "CO_LH", selected, tmp_path / "loco")
+
+    assert validation.output_dir == tmp_path / "loco"
+    assert validation.data_path == full.data_path
+    assert validation.specification == full.specification
+    assert validation.parameter_specs == full.parameter_specs
+    assert set(validation.built_model.model.named_vars) == set(full.built_model.model.named_vars)
+    np.testing.assert_allclose(validation.inputs.observation_rate, full.inputs.observation_rate)
+    np.testing.assert_allclose(validation.inputs.model_point_E_V_SHE, full.inputs.model_point_E_V_SHE)

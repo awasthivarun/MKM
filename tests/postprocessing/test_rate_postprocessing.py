@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
+import pytest
 import xarray as xr
 
 from mkm.model_data import build_model_data
@@ -137,6 +138,53 @@ def test_residual_and_material_summaries_use_consolidated_columns():
     assert set(residual_by_material["material"]) == {"M1", "M2"}
 
 
+
+def test_residual_curve_summary_preserves_lag1_and_other_statistics():
+    rows = []
+    for replicate, residuals, standardized in (
+        ("A", [1.0, 2.0, 3.0, 2.5], [-1.0, 0.5, 1.0, -2.0]),
+        ("B", [1.0, 1.0, 1.0, 1.0], [0.5, 0.5, 0.5, 0.5]),
+    ):
+        for potential, residual, scaled in zip((0.0, 0.1, 0.2, 0.3), residuals, standardized):
+            rows.append({
+                "material": "M1", "electrolyte_concentration_M": 0.5,
+                "CO_mole_fraction": 0.1, "replicate": replicate, "E_V_SHE": potential,
+                "residual": residual, "standardized_residual": scaled,
+            })
+
+    frame = pd.DataFrame(rows).sample(frac=1.0, random_state=3)
+    actual = summarize_residual_curves(frame).set_index("replicate")
+    for replicate, (residual, standardized) in {
+        "A": (np.array([1.0, 2.0, 3.0, 2.5]), np.array([-1.0, 0.5, 1.0, -2.0])),
+        "B": (np.ones(4), np.full(4, 0.5)),
+    }.items():
+        row = actual.loc[replicate]
+        expected_lag1 = np.corrcoef(residual[:-1], residual[1:])[0, 1] if replicate == "A" else np.nan
+        expected_standardized_lag1 = (
+            np.corrcoef(standardized[:-1], standardized[1:])[0, 1] if replicate == "A" else np.nan
+        )
+        np.testing.assert_allclose(row["lag1_residual_correlation"], expected_lag1)
+        np.testing.assert_allclose(row["standardized_lag1_residual_correlation"], expected_standardized_lag1)
+        np.testing.assert_allclose(row["residual_slope_per_V"], np.polyfit([0.0, 0.1, 0.2, 0.3], residual, 1)[0])
+        np.testing.assert_allclose(row["mean_residual"], residual.mean())
+        np.testing.assert_allclose(row["rms_residual"], np.sqrt(np.mean(residual**2)))
+
+
+def test_residual_curve_summary_without_standardized_or_sufficient_points():
+    rows = []
+    for replicate, residuals in (("A", [1.0]), ("B", [1.0, 2.0])):
+        for potential, residual in zip((0.0, 0.1), residuals):
+            rows.append({
+                "material": "M1", "electrolyte_concentration_M": 0.5,
+                "CO_mole_fraction": 0.1, "replicate": replicate,
+                "E_V_SHE": potential, "residual": residual,
+            })
+    actual = summarize_residual_curves(pd.DataFrame(rows)).set_index("replicate")
+    assert actual["standardized_lag1_residual_correlation"].isna().all()
+    assert actual["lag1_residual_correlation"].isna().all()
+    assert np.isnan(actual.loc["A", "residual_slope_per_V"])
+    np.testing.assert_allclose(actual.loc["B", "residual_slope_per_V"], 10.0)
+
 def test_normal_loo_pit_is_computed_in_linear_rate_space():
     model_data, inputs = _model_data_and_inputs()
     inference_data = _inference_data(model_data)
@@ -155,3 +203,65 @@ def test_normal_loo_pit_is_computed_in_linear_rate_space():
 
     assert result.pointwise["loo_pit"].between(0.0, 1.0).all()
     assert result.summary.loc[0, "n_points"] == len(model_data.observations)
+
+
+def test_residual_material_summary_preserves_order_and_missing_material_products():
+    curves = pd.DataFrame(
+        {
+            "material": ["M2", "M1", "M2", "M4"],
+            "lag1_residual_correlation": [0.4, -0.1, 0.8, np.nan],
+            "residual_slope_per_V": [-2.0, 3.0, 4.0, 5.0],
+        }
+    )
+    shared = pd.DataFrame(
+        {
+            "material": ["M3", "M1", "M3"],
+            "shared_fraction_squared_residual": [0.1, 0.6, 0.3],
+        }
+    )
+    result = summarize_residual_structure_by_material(curves, shared)
+    assert result["material"].tolist() == ["M2", "M1", "M4", "M3"]
+    np.testing.assert_allclose(result["median_lag1_residual_correlation"].iloc[:3], [0.6, -0.1, np.nan])
+    np.testing.assert_allclose(result["median_abs_residual_slope_per_V"].iloc[:3], [3.0, 3.0, 5.0])
+    np.testing.assert_allclose(
+        result["median_shared_squared_residual_fraction"], [np.nan, 0.6, np.nan, 0.2]
+    )
+
+
+def test_residual_material_summary_handles_empty_and_missing_values():
+    curves = pd.DataFrame(
+        {
+            "material": ["M1", "M1", np.nan],
+            "lag1_residual_correlation": [np.nan, 0.5, 0.2],
+            "residual_slope_per_V": [1.0, -3.0, 10.0],
+        }
+    )
+    empty_shared = pd.DataFrame(columns=["material", "shared_fraction_squared_residual"])
+    actual = summarize_residual_structure_by_material(curves, empty_shared)
+    assert actual["material"].iloc[0] == "M1"
+    assert pd.isna(actual["material"].iloc[1])
+    np.testing.assert_allclose(actual["median_lag1_residual_correlation"], [0.5, np.nan])
+    np.testing.assert_allclose(actual["median_abs_residual_slope_per_V"], [2.0, np.nan])
+    assert "median_shared_squared_residual_fraction" not in actual
+    assert summarize_residual_structure_by_material(pd.DataFrame(), pd.DataFrame()).empty
+
+
+def test_residual_material_summary_uses_shared_only_when_curves_missing():
+    shared = pd.DataFrame(
+        {
+            "material": ["M1", "M2", "M1"],
+            "shared_fraction_squared_residual": [0.25, 0.75, 0.55],
+        }
+    )
+    actual = summarize_residual_structure_by_material(pd.DataFrame(columns=["material"]), shared)
+    assert actual["material"].tolist() == ["M1", "M2"]
+    np.testing.assert_allclose(actual["median_shared_squared_residual_fraction"], [0.4, 0.75])
+    assert "median_lag1_residual_correlation" not in actual
+
+
+def test_residual_material_summary_preserves_missing_material_column_error():
+    shared = pd.DataFrame(
+        {"material": ["M1"], "shared_fraction_squared_residual": [0.4]}
+    )
+    with pytest.raises(KeyError, match="material"):
+        summarize_residual_structure_by_material(pd.DataFrame(), shared)

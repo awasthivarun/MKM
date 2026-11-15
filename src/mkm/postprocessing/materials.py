@@ -45,12 +45,26 @@ def summarize_residual_structure_by_material(curve_residuals, shared_residuals):
     if not shared_residuals.empty and "material" in shared_residuals:
         materials.extend(shared_residuals["material"].drop_duplicates().tolist())
 
+    # Retain the existing error when one table lacks a material column but the other has rows.
+    if materials and ("material" not in curve_residuals or "material" not in shared_residuals):
+        raise KeyError("material")
+
+    # Group once instead of filtering both full tables for every material.
+    curve_groups = (
+        {material: frame for material, frame in curve_residuals.groupby("material", sort=False)}
+        if not curve_residuals.empty else {}
+    )
+    shared_groups = (
+        {material: frame for material, frame in shared_residuals.groupby("material", sort=False)}
+        if not shared_residuals.empty else {}
+    )
+
     records = []
     for material in dict.fromkeys(materials):
         record = {"material": material}
 
-        curve = curve_residuals.loc[curve_residuals["material"] == material]
-        if not curve.empty:
+        curve = curve_groups.get(material)
+        if curve is not None and not curve.empty:
             record["median_lag1_residual_correlation"] = float(
                 curve["lag1_residual_correlation"].median()
             )
@@ -58,8 +72,8 @@ def summarize_residual_structure_by_material(curve_residuals, shared_residuals):
                 curve["residual_slope_per_V"].abs().median()
             )
 
-        shared = shared_residuals.loc[shared_residuals["material"] == material]
-        if not shared.empty:
+        shared = shared_groups.get(material)
+        if shared is not None and not shared.empty:
             record["median_shared_squared_residual_fraction"] = float(
                 shared["shared_fraction_squared_residual"].median()
             )

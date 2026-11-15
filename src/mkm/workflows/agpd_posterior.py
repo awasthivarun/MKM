@@ -19,10 +19,7 @@ from mkm.workflows.agpd_fit import (
     resolved_parameterization_metadata,
     resolved_prior_metadata,
 )
-from mkm.workflows.posterior_lifecycle import (
-    RUN_STATUS_COMPLETE,
-    RUN_STATUS_SAMPLED,
-)
+from mkm.workflows.posterior_lifecycle import RUN_STATUS_COMPLETE
 
 
 @dataclass(frozen=True)

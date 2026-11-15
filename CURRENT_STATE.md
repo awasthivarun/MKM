@@ -1,6 +1,6 @@
 ﻿# CURRENT_STATE
 
-Source-code baseline: `819c12b` on `rebuild/from-scratch`. PtRu organization updated after this checkpoint.
+Implementation status describes the Python and YAML in this working tree; confirm the active Git revision locally before relying on a source-code checkpoint.
 
 This file records the **software/scientific workflow state**, not a frozen list of posterior results. Numerical conclusions should be taken from the current `results/` products rather than copied here unless they have become durable project knowledge.
 
@@ -42,7 +42,7 @@ raw workbooks
 
 AgPd model identity is now declarative. `src/mkm/models/agpd_registry.py` owns pathway membership, fit scope, fixed parameters, prior variants, coverage-cap mode, and material-specific pathway modifiers. `src/mkm/models/agpd_basic.py` resolves priors/parameterizations and builds PyMC mechanisms from that specification. Negative-`beta_2_BF` models therefore reuse the same kinetic equations and differ through the named `negative_beta_BF` prior variant.
 
-The AgPd mechanism implementation is split into `state.py`, `electrochem.py`, `surface.py`, `finite_co.py`, and `legacy_qea.py` under `src/mkm/mechanisms/agpd_basic/`. The public import path `mkm.mechanisms.agpd_basic` is preserved. The finite-rate BF/ER/LH family now uses one common evaluator; pathway masks and optional CO caps are modifiers rather than duplicated kinetic implementations.
+The AgPd mechanism implementation includes `state.py`, `surface.py`, `finite_co.py`, and `legacy_qea.py` under `src/mkm/mechanisms/agpd_basic/`. Generic electrochemical free-energy and rate-constant primitives now live in `src/mkm/mechanisms/electrochem.py` and are imported by both AgPd and Pt100. `agpd_basic/electrochem.py` remains as an import-compatibility re-export; the public `mkm.mechanisms.agpd_basic` path is preserved. The finite-rate BF/ER/LH family uses one common evaluator; pathway masks and optional CO caps are modifiers rather than duplicated kinetic implementations.
 
 Run metadata stores the resolved model specification, resolved prior specification, and a resolved-fit hash in addition to the full configuration-bundle hash. This separates fit-defining provenance from unrelated edits elsewhere in configuration files.
 
@@ -67,13 +67,11 @@ Additional Em Pt/C measurements are processed separately at 0.10 M
 electrolyte, with seven CO mole fractions from 0.001 to 1.00.
 Pt/ATO measurements are deferred.
 
-**Implemented:** Raw-data ingestion, standardization, common-potential
-interpolation, rate plots, and experimental kinetic observables.
+**Implemented for experimental Pt/PtRu data:** Raw-data ingestion, standardization, common-potential interpolation, rate plots, and experimental kinetic observables. The Todd pipeline retains full data and creates selected datasets; only Todd acidic Pt100 currently has configured low-potential exclusions. Full and selected kinetic-observable products are kept separate.
 
-**Not implemented:** PtRu microkinetic mechanisms, Bayesian inference,
-posterior postprocessing, and data-selection/truncation rules.
+**Implemented for Pt100 only:** Independent acidic/basic Bayesian fits of `CO_LH`, `CO_ER`, and `CO_ER_LH`, posterior diagnostics, PSIS-LOO/LOO-PIT, model comparison, and condition-level LOCO refitting. These use selected Todd Pt100 observations, not PtRu-alloy or Em data.
 
-All current PtRu kinetic-observable products use full, untruncated data.
+**Not implemented:** Microkinetic fitting for PtRu alloys, Pt100 all-material/LOMO fitting, or Pt100 DRC calculations.
 
 ### Experimental replicates
 
@@ -239,12 +237,15 @@ Shared AgPd/PtRu functionality remains in:
 - `src/mkm/preprocessing/observables.py`
 - `src/mkm/preprocessing/plotting.py`
 
-The current PtRu entry points are:
+The experimental PtRu entry points are:
 
 - `scripts/process_ptru_todd.py`
 - `scripts/process_ptru_em.py`
 - `scripts/plot_ptru_todd.py`
 - `scripts/process_ptru_observables.py`
+- `scripts/plot_ptru_observables.py`
+
+Pt100 Bayesian fitting and reporting are implemented by `src/mkm/mechanisms/pt100.py`, `src/mkm/models/pt100.py`, `src/mkm/models/ptru_registry.py`, and `src/mkm/workflows/pt100_fit.py` / `ptru_posterior.py` / `ptru_postprocess.py` / `ptru_validation.py`. The corresponding CLIs are `fit_pt100_posterior.py`, `postprocess_pt100_posterior.py`, `compare_pt100_models.py`, and `validate_pt100_posterior.py`. Generic electrochemical primitives are shared through `src/mkm/mechanisms/electrochem.py`. Pt100 condition-overlay and LOO figures reuse the common postprocessing plotting implementations.
 
 The consolidated observable entry point replaces the earlier
 separate alpha, CO-order, and electrolyte-order scripts.
@@ -260,9 +261,9 @@ Output equivalence must be checked against the pre-refactor baseline.
    Contributions unrelated to steady-state CO oxidation are
    possible but have not been established.
 
-2. PtRu fitting windows and truncation criteria have not
-   been established. No suspicious regions are automatically
-   excluded by the current pipeline.
+2. Selection rules currently exclude configured low-potential
+   regions of Todd acidic Pt100 only. The thresholds are working
+   experimental choices and require scientific validation.
 
 3. The electrolyte activity model is ideal. Potential effects
    of activity coefficients and changes in ionic strength
@@ -273,13 +274,14 @@ Output equivalence must be checked against the pre-refactor baseline.
 5. The current reaction-order calculations characterize
    apparent kinetic dependencies, not unique mechanisms.
 
-6. No PtRu likelihood, model parameters, or mechanistic
-   conclusions should be inferred from the existing AgPd
-   inference implementation.
+6. Pt100 has implemented models, priors, and the shared linear-rate
+   Normal likelihood. Their successful fit cannot establish the
+   operative mechanism on PtRu alloys, for which fitting remains
+   unimplemented.
 
-The next scientific milestone is to assess data quality and
-define a reproducible PtRu selection/truncation procedure
-before constructing PtRu microkinetic models.
+The next alloy-specific scientific milestone is to assess data
+quality and selection criteria before constructing and testing
+PtRu-alloy microkinetic models.
 ## AgPd active likelihood
 
 The only active likelihood is Normal in linear rate space:
@@ -1024,6 +1026,9 @@ analysis.
 
 #### Validation status
 
-The selection and observable-workflow changes have been implemented,
-but numerical and figure-output verification remains pending.
+The repository's complete automated regression suite passed in the user's
+working environment (540 tests, as reported). This does not constitute a
+comparison of regenerated experimental Parquets, figure files, or fitted
+posteriors against pre-refactor reference products; those real-data
+comparisons remain unverified.
 

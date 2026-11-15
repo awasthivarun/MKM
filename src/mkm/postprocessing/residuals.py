@@ -16,14 +16,15 @@ SHARED_RESIDUAL_GROUP_COLUMNS = (
 )
 
 
+def _lag1_correlation(residual):
+    if len(residual) >= 3 and np.std(residual[:-1]) > 0 and np.std(residual[1:]) > 0:
+        return np.corrcoef(residual[:-1], residual[1:])[0, 1]
+    return np.nan
+
+
 def _curve_statistics(potential, residual):
     residual = np.asarray(residual, dtype=float)
-
-    if len(residual) >= 3 and np.std(residual[:-1]) > 0 and np.std(residual[1:]) > 0:
-        lag1 = np.corrcoef(residual[:-1], residual[1:])[0, 1]
-    else:
-        lag1 = np.nan
-
+    lag1 = _lag1_correlation(residual)
     potential_slope = np.polyfit(potential, residual, 1)[0] if len(residual) >= 2 else np.nan
     return {
         "mean": float(np.mean(residual)),
@@ -56,10 +57,9 @@ def summarize_residual_curves(observation_diagnostics):
         )
         standardized_lag1 = np.nan
         if has_standardized:
-            standardized_lag1 = _curve_statistics(
-                potential,
-                curve["standardized_residual"].to_numpy(dtype=float),
-            )["lag1"]
+            standardized_lag1 = _lag1_correlation(
+                curve["standardized_residual"].to_numpy(dtype=float)
+            )
 
         records.append(
             {

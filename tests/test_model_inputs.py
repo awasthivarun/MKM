@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -106,3 +108,33 @@ def test_nonpositive_observed_rate_is_rejected():
             selected_replicates=selected,
             electrolyte_concentration_column="C_KOH_M",
         )
+
+
+@pytest.mark.parametrize("table,column", [
+    ("conditions", "condition_id"),
+    ("model_points", "model_point_id"),
+    ("observations", "observation_id"),
+])
+def test_model_inputs_reject_noncontiguous_row_identity(table, column):
+    model_data, _ = _model_data_and_inputs()
+    modified = getattr(model_data, table).copy()
+    modified.loc[0, column] = 1000
+    with pytest.raises(ValueError, match=f"'{column}' must be contiguous"):
+        build_model_input_arrays(replace(model_data, **{table: modified}))
+
+
+@pytest.mark.parametrize("table,column,value,message", [
+    ("conditions", "electrolyte_concentration_M", 0.0, "Electrolyte concentrations must be positive"),
+    ("conditions", "CO_mole_fraction", -0.1, "CO mole fractions must be positive"),
+    ("model_points", "E_V_SHE", np.inf, "Model-point potentials contain non-finite"),
+    ("model_points", "condition_id", -1, "invalid condition indices"),
+    ("observations", "model_point_id", 1000, "invalid model-point indices"),
+    ("observations", "rate_s_inv", np.nan, "Observed rates contain non-finite"),
+    ("observations", "rate_s_inv", 0.0, "Observed rates must be positive"),
+])
+def test_model_inputs_reject_invalid_numeric_or_reference_data(table, column, value, message):
+    model_data, _ = _model_data_and_inputs()
+    modified = getattr(model_data, table).copy()
+    modified.loc[0, column] = value
+    with pytest.raises(ValueError, match=message):
+        build_model_input_arrays(replace(model_data, **{table: modified}))

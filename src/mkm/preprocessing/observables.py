@@ -98,12 +98,12 @@ def _get_common_grid_indices(condition_frames, grid_column):
 
 
 def _get_value_at_grid_index(frame, grid_index, grid_column, value_column):
-    rows = frame[frame[grid_column] == grid_index]
+    rows = frame.loc[[grid_index], value_column]
 
     if len(rows) != 1:
         raise ValueError(f"Expected exactly one row at {grid_column}={grid_index}; found {len(rows)}.")
 
-    return rows.iloc[0][value_column]
+    return rows.iloc[0]
 
 
 def calculate_log_slope_order(
@@ -154,7 +154,7 @@ def calculate_log_slope_order(
         for value in varying_values:
             condition = group_data[
                 np.isclose(group_data[varying_column].to_numpy(), value, rtol=0, atol=1e-12)
-            ].sort_values(grid_column)
+            ].sort_values(grid_column).set_index(grid_column, drop=False)
 
             if condition.empty:
                 raise ValueError(f"Missing {varying_column}={value} for group {group_values}.")
@@ -259,11 +259,11 @@ def calculate_adjacent_log_orders(
 
             lower_data = group_data[
                 np.isclose(group_data[varying_column].to_numpy(), lower_value, rtol=0, atol=1e-12)
-            ].sort_values(grid_column)
+            ].sort_values(grid_column).set_index(grid_column, drop=False)
 
             upper_data = group_data[
                 np.isclose(group_data[varying_column].to_numpy(), upper_value, rtol=0, atol=1e-12)
-            ].sort_values(grid_column)
+            ].sort_values(grid_column).set_index(grid_column, drop=False)
 
             if lower_data.empty:
                 raise ValueError(f"Missing {varying_column}={lower_value} for group {group_values}.")
@@ -354,11 +354,11 @@ def calculate_paired_adjacent_log_orders(
 
             lower_data = group_data[
                 np.isclose(group_data[varying_column].to_numpy(), lower_value, rtol=0, atol=1e-12)
-            ].sort_values(grid_column)
+            ].sort_values(grid_column).set_index(grid_column, drop=False)
 
             upper_data = group_data[
                 np.isclose(group_data[varying_column].to_numpy(), upper_value, rtol=0, atol=1e-12)
-            ].sort_values(grid_column)
+            ].sort_values(grid_column).set_index(grid_column, drop=False)
 
             if lower_data.empty:
                 raise ValueError(f"Missing {varying_column}={lower_value} for group {group_values}.")

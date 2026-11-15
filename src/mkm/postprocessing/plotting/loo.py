@@ -1,4 +1,41 @@
-from ._shared import *
+from ._shared import (
+    DEFAULT_COLORS,
+    DEFAULT_COLOR_CYCLE,
+    FONT_SIZE_LEGEND,
+    FONT_SIZE_SUBPLOT_TITLE,
+    FONT_SIZE_TICK,
+    FONT_WEIGHT,
+    LOO_DIAGNOSTICS_SIZE_IN,
+    LOO_EXTRA_HEIGHT_IN,
+    LOO_PANEL_HEIGHT_IN,
+    LOO_PANEL_WIDTH_IN,
+    LOO_PIT_SUMMARY_SIZE_IN,
+    LOO_POINTWISE_EXTRA_HEIGHT_IN,
+    LOO_POINTWISE_EXTRA_WIDTH_IN,
+    LOO_POINTWISE_PANEL_HEIGHT_IN,
+    LOO_POINTWISE_PANEL_WIDTH_IN,
+    Line2D,
+    Path,
+    REFERENCE_COLOR,
+    TEXT_GAP_PT,
+    _add_fixed_gap_global_labels,
+    _add_fixed_gap_global_title,
+    _add_fixed_gap_right_ylabel,
+    _bold_axis_text,
+    _finish_condition_grid,
+    _grid_figsize,
+    _nice_linear_ticks,
+    _position_row_labels,
+    _save_presentation_figure,
+    _style_axis,
+    _style_legend,
+    azp,
+    np,
+    plt,
+    xr,
+)
+
+
 def plot_loo_comparison(compare_table, output_path: str | Path):
     frame = compare_table.set_index("model")
 
@@ -79,7 +116,7 @@ def plot_pointwise_elpd_difference(frame, numerator_model, denominator_model, ou
     plt.close(fig)
 
 
-def plot_pointwise_loo(pointwise, model_name, output_path: str | Path, context_label=None):
+def plot_pointwise_loo(pointwise, model_name, output_path: str | Path, context_label=None, *, electrolyte_label="KOH"):
     """Plot observation-level PSIS-LOO contributions for one material."""
     koh_values = sorted(pointwise["electrolyte_concentration_M"].unique())
     co_values = sorted(pointwise["CO_mole_fraction"].unique())
@@ -105,7 +142,7 @@ def plot_pointwise_loo(pointwise, model_name, output_path: str | Path, context_l
                     linewidth=1.0, alpha=0.8, label=replicate,
                 )
             if row == 0:
-                ax.set_title(f"{c_koh:g} M KOH", pad=TEXT_GAP_PT, fontweight="bold")
+                ax.set_title(f"{c_koh:g} M {electrolyte_label}", pad=TEXT_GAP_PT, fontweight="bold")
             if col == len(koh_values) - 1:
                 ax.text(
                     1.035, 0.5, f"{100 * co_fraction:g}% CO", transform=ax.transAxes,
@@ -125,7 +162,9 @@ def plot_pointwise_loo(pointwise, model_name, output_path: str | Path, context_l
     plt.close(fig)
 
 
-def plot_pointwise_loo_pit(pointwise_loo, pointwise_pit, output_path: str | Path, context_label=None):
+def plot_pointwise_loo_pit(
+    pointwise_loo, pointwise_pit, output_path: str | Path, context_label=None, *, electrolyte_label="KOH",
+):
     """Plot pointwise PSIS-LOO ELPD and LOO-PIT together, pairing replicates by color."""
     required_loo = {"electrolyte_concentration_M", "CO_mole_fraction", "replicate", "E_V_SHE", "elpd_loo"}
     required_pit = {"electrolyte_concentration_M", "CO_mole_fraction", "replicate", "E_V_SHE", "loo_pit"}
@@ -191,7 +230,7 @@ def plot_pointwise_loo_pit(pointwise_loo, pointwise_pit, output_path: str | Path
                         label.set_fontweight(FONT_WEIGHT)
                         label.set_fontsize(FONT_SIZE_TICK)
                 if row == 0:
-                    ax.set_title(f"{c_koh:g} M KOH", pad=TEXT_GAP_PT, fontweight="bold")
+                    ax.set_title(f"{c_koh:g} M {electrolyte_label}", pad=TEXT_GAP_PT, fontweight="bold")
                 if col == len(koh_values) - 1:
                     ax.text(
                         1.17, 0.5, f"{100 * co_fraction:g}% CO", transform=ax.transAxes,
@@ -375,7 +414,9 @@ def plot_loo_diagnostics(loo_result, loo_pit, model_name, output_path: str | Pat
     _save_presentation_figure(fig, output_path)
     plt.close(fig)
 
-def plot_loo_pit_conditions(pointwise, model_name, output_path: str | Path, context_label=None):
+def plot_loo_pit_conditions(
+    pointwise, model_name, output_path: str | Path, context_label=None, *, electrolyte_label="KOH",
+):
     """Plot potential-resolved raw LOO-PIT values for one material."""
     koh_values = sorted(pointwise["electrolyte_concentration_M"].unique())
     co_values = sorted(pointwise["CO_mole_fraction"].unique())
@@ -405,7 +446,7 @@ def plot_loo_pit_conditions(pointwise, model_name, output_path: str | Path, cont
             ax.axhline(0.95, linestyle=":", linewidth=0.8, alpha=0.40, color=REFERENCE_COLOR)
             ax.set_ylim(-0.03, 1.03)
             if row == 0:
-                ax.set_title(f"{c_koh:g} M KOH", pad=TEXT_GAP_PT, fontweight="bold")
+                ax.set_title(f"{c_koh:g} M {electrolyte_label}", pad=TEXT_GAP_PT, fontweight="bold")
             if col == len(koh_values) - 1:
                 ax.text(
                     1.035, 0.5, f"{100 * co_fraction:g}% CO", transform=ax.transAxes,

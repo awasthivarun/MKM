@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from mkm.preprocessing.observables import (
     F_C_mol,
@@ -7,6 +8,7 @@ from mkm.preprocessing.observables import (
     add_transfer_coefficients,
     calculate_adjacent_log_orders,
     calculate_log_slope_order,
+    calculate_paired_adjacent_log_orders,
     calculate_transfer_coefficient,
     summarize_transfer_coefficients,
 )
@@ -324,3 +326,60 @@ def test_adjacent_log_order_uncertainty():
     expected_sd = np.sqrt(lower_sd**2 + upper_sd**2) / np.log(upper / lower)
 
     np.testing.assert_allclose(result.loc[0, "delta_CO_sd"], expected_sd)
+
+def _order_lookup_case(*, duplicate=False, inconsistent_potential=False, duplicate_noncommon=False):
+    rows = []
+    for concentration in [0.25, 0.50]:
+        for grid_index in [0, 1]:
+            potential = 0.01 * grid_index
+            if inconsistent_potential and concentration == 0.50 and grid_index == 0:
+                potential += 0.02
+            rows.append({
+                "material": "test", "replicate": "A", "C_KOH_M": concentration,
+                "analysis_grid_index": grid_index, "E_V_SHE": potential,
+                "ln_rate_mean": 1.0 + np.log(concentration), "ln_rate_sd": 0.1,
+                "ln_rate": 1.0 + np.log(concentration),
+            })
+    if duplicate:
+        rows.append(dict(rows[0]))
+    if duplicate_noncommon:
+        row = dict(rows[0], analysis_grid_index=2, E_V_SHE=0.02)
+        rows.extend([row, dict(row)])
+    return pd.DataFrame(rows)
+
+
+@pytest.mark.parametrize("kind", ["slope", "adjacent", "paired"])
+def test_orders_reject_duplicate_common_grid_rows(kind):
+    data = _order_lookup_case(duplicate=True)
+    with pytest.raises(ValueError, match="Expected exactly one row at analysis_grid_index=0; found 2"):
+        _run_grid_order_case(kind, data)
+
+
+@pytest.mark.parametrize("kind", ["slope", "adjacent", "paired"])
+def test_orders_reject_inconsistent_potentials(kind):
+    data = _order_lookup_case(inconsistent_potential=True)
+    with pytest.raises(ValueError, match="maps to inconsistent potentials"):
+        _run_grid_order_case(kind, data)
+
+
+@pytest.mark.parametrize("kind", ["slope", "adjacent", "paired"])
+def test_orders_ignore_duplicate_grid_rows_outside_common_grid(kind):
+    data = _order_lookup_case(duplicate_noncommon=True)
+    result = _run_grid_order_case(kind, data)
+    np.testing.assert_array_equal(result["analysis_grid_index"].to_numpy(), [0, 1])
+
+
+def _run_grid_order_case(kind, data):
+    kwargs = dict(
+        data=data, varying_column="C_KOH_M", varying_values=[0.25, 0.50],
+        group_columns=["material"], output_column="delta",
+    )
+    if kind == "slope":
+        return calculate_log_slope_order(**kwargs, output_sd_column="delta_sd")
+    if kind == "adjacent":
+        return calculate_adjacent_log_orders(
+            **kwargs, output_sd_column="delta_sd", lower_value_column="lower", upper_value_column="upper",
+        )
+    return calculate_paired_adjacent_log_orders(
+        **kwargs, replicate_column="replicate", lower_value_column="lower", upper_value_column="upper",
+    )

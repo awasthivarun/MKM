@@ -6,7 +6,7 @@ Bayesian microkinetic modeling of electrochemical CO oxidation.
 The project investigates CO oxidation on two catalyst families:
 
 - **AgPd in basic media:** Microkinetic modeling, Bayesian inference, and mechanistic discrimination.
-- **Pt and PtRu in acidic and basic media:** Experimental preprocessing and kinetic analysis, followed by microkinetic modeling.
+- **Pt and PtRu in acidic and basic media:** Experimental preprocessing and kinetic analysis; Pt100-only microkinetic fitting and validation.
 
 The project also develops generalizable methods for kinetic parameter estimation, uncertainty quantification, model comparison, and mechanistic discrimination.
 
@@ -76,7 +76,7 @@ The primary experimental datasets are Todd's Pt/PtRu measurements in HClO4 and K
 
 Additional Pt/C measurements from Em are processed separately. Pt/ATO is not yet included in the active preprocessing workflow.
 
-**Current status:** Experimental preprocessing, rate visualization, and kinetic-observable calculations are implemented. PtRu microkinetic mechanisms and Bayesian fitting workflows have not yet been implemented.
+**Current status:** Experimental preprocessing and kinetic-observable calculations cover Pt and PtRu materials. Bayesian fitting currently covers **Pt100 only**, independently in acidic and basic media, using `CO_LH`, `CO_ER`, or `CO_ER_LH` with finite-rate CO adsorption, quasi-equilibrated OH adsorption, and the shared linear-rate Normal likelihood. The PtRu alloys and Em preparations are not fitted. Pt100 posterior diagnostics, pointwise PSIS-LOO/LOO-PIT, model comparison, and condition-level LOCO refitting are implemented; Pt100 LOMO, all-material fitting, and DRC analysis are not.
 
 #### Experimental conditions
 
@@ -112,7 +112,7 @@ The current implementation treats CO-stripping ECSA as predominantly Pt-accessib
 
 The assumed area basis for Em's Pt/C current densities should be verified before quantitative comparisons with Todd's data.
 
-For subsequent kinetic modeling, the intended CO activity convention matches AgPd: ideal gas behavior with a 1 bar standard pressure and nominal total pressure of 1 bar.
+The Pt100 fitting configuration uses the same ideal-gas CO activity convention as AgPd: a 1 bar standard pressure and nominal total pressure of 1 bar.
 
 #### Experimental kinetic observables
 
@@ -158,12 +158,12 @@ Experimental observables are diagnostic quantities derived from measured rates, 
 
 #### Current limitations
 
-- PtRu data selection and truncation have not been finalized.
-- Current observable calculations use the full, untruncated analysis datasets.
+- Configured selection currently removes low-potential regions only from Todd acidic Pt100. Full datasets are retained, and selected-data observables are produced separately. Other Todd materials and Em measurements remain untruncated.
+- These selection thresholds are working criteria rather than proof that excluded currents are not due to CO oxidation.
 - Acidic Pt100 contains sharp transitions whose interpretation remains unresolved; possible non-CO-oxidation contributions require investigation.
 - Ideal electrolyte activities are used rather than literature activity-coefficient corrections.
 - Replicate availability differs substantially between datasets.
-- PtRu mechanisms, priors, likelihood integration, and inference workflows are not yet implemented.
+- Mechanistic fitting for PtRu alloys remains unimplemented. The existing Pt100 fits cannot establish alloy mechanisms.
 
 ## Environment
 
@@ -242,9 +242,22 @@ Calculate and plot all experimental kinetic observables:
 python scripts/process_ptru_observables.py
 ```
 
-The consolidated observable entry point replaces the earlier separate alpha, CO-order, and electrolyte-order scripts. The old scripts may be retained temporarily for regression verification.
+The consolidated observable entry point replaces the earlier separate alpha, CO-order, and electrolyte-order scripts. Those older scripts are not present in this repository snapshot.
 
-PtRu figures are exported as both PNG and SVG.
+PtRu experimental-preprocessing figures are exported as both PNG and SVG.
+
+### Pt100 Bayesian inference and validation
+
+The current Pt100 models use Todd's **selected** Pt100 observations for the requested medium; they do not pool alloy or Em measurements. See `scripts/README.md` for all options and checkpoint inspection.
+
+```powershell
+python scripts/check_pt100_prior_predictive.py CO_ER_LH --medium acidic --draws 1000
+python scripts/fit_pt100_posterior.py CO_ER_LH --medium acidic
+python scripts/postprocess_pt100_posterior.py CO_ER_LH --medium acidic --plot-level full
+python scripts/validate_pt100_posterior.py CO_ER_LH --medium acidic --electrolyte-M 0.1 --co-mole-fraction 0.01
+```
+
+Pt100 checkpoints validate source-code and configuration hashes strictly. Refactors that relocate or edit hashed model-building files can invalidate older checkpoints without changing the scientific equations; no automatic metadata migration is performed.
 
 ## Repository structure
 
@@ -288,7 +301,7 @@ The PtRu pipeline uses:
 - `ptru_observables.py`: PtRu-specific observable calculations and grouping conventions.
 - `ptru_plotting.py`: Rate and observable figures using shared AgPd styling utilities.
 
-The scientific calculations and plotting implementations reside in `src/mkm/preprocessing/`. The scripts provide command-line orchestration.
+Experimental data calculations and plotting implementations reside in `src/mkm/preprocessing/`. Pt100 mechanism and inference implementations reside in `src/mkm/mechanisms/pt100.py`, `src/mkm/models/pt100.py`, and the relevant workflow modules; generic electrochemical functions are in `src/mkm/mechanisms/electrochem.py`. Scripts provide command-line orchestration.
 
 ## Interpretation boundary
 

@@ -7,7 +7,7 @@ import pytensor
 import pytensor.tensor as pt
 
 from mkm.mechanisms.base import MechanismResult
-from .electrochem import (
+from mkm.mechanisms.electrochem import (
     electrochemical_activation_energy,
     electrochemical_free_energy,
     log_equilibrium_constant,

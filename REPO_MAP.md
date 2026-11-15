@@ -62,10 +62,11 @@ completed all-material posterior
 
 The old split between individual fitting and separate composition-fitting scripts no longer exists. `fit_agpd_posterior.py`, `postprocess_agpd_posterior.py`, and `postprocess_agpd_drc.py` each handle both scopes through `--all-materials`.
 
-## PtRu experimental preprocessing flow
+## PtRu preprocessing and Pt100 inference flow
 
-PtRu currently has an experimental preprocessing and observable-analysis
-pipeline. It does not yet have a microkinetic model or inference workflow.
+PtRu experimental preprocessing covers Pt100, Pt66Ru33, and Pt50Ru50 in
+acidic/basic electrolyte, with Todd and Em data handled separately.
+Microkinetic inference currently applies only to Pt100 on selected Todd data.
 
 ```text
 Todd / Em raw Excel workbooks
@@ -100,6 +101,23 @@ ptru_plotting.py        ptru_observables.py
              kinetic-observable Parquets
 ```
 
+Only selected **Todd Pt100** observations enter the following independent
+acidic/basic inference path (Em and alloy observations are excluded):
+
+```text
+Todd Pt100 selected observations
+             |
+             v
+pt100_fit.py / models/pt100.py
+             |
+             v
+scripts/fit_pt100_posterior.py --> posterior.nc
+             |
+             +--> scripts/postprocess_pt100_posterior.py
+             +--> scripts/compare_pt100_models.py (compatible fitted models)
+             +--> scripts/validate_pt100_posterior.py (LOCO training refit)
+```
+
 ### Configuration
 
 `config/preprocessing/ptru_todd.yaml` owns the experimental
@@ -115,7 +133,10 @@ preprocessing conventions for both Todd and Em:
 Em's additional CO concentrations and sample preparations are
 identified from the source-specific data.
 
-PtRu does not currently have a mechanism or prior configuration.
+Pt100 mechanism and prior settings are defined in `config/models/pt100.yaml`
+and `config/priors/pt100.yaml`. The Pt100 model registry supports `CO_LH`,
+`CO_ER`, and `CO_ER_LH` in either medium, in individual-material fits only.
+PtRu alloy fitting is not configured.
 
 ### Module ownership
 
@@ -172,7 +193,7 @@ scripts/process_ptru_co_orders.py
 scripts/process_ptru_ion_orders.py
 ```
 
-The old entry points can be removed after output-equivalence verification.
+The replaced entry points are not present in this repository snapshot.
 
 ### Scientific boundaries
 
@@ -246,7 +267,7 @@ Owns the chemical mathematics:
 
 - activities and surface-composition state;
 - equilibrium constants and TST rate constants;
-- electrochemical free-energy/barrier conventions;
+- electrochemical free-energy/barrier conventions through shared `mkm.mechanisms.electrochem`;
 - Pd-OH and Ag-OH QEA coverages;
 - reversible finite-rate CO adsorption/desorption;
 - analytic CO steady-state solver;
@@ -256,7 +277,21 @@ Owns the chemical mathematics:
 - Ag10 BF-activity masking;
 - mechanism parameter/result dataclasses.
 
-This file should contain chemistry, not PyMC prior choices or filesystem behavior.
+This package contains AgPd-specific chemistry, not PyMC prior choices or filesystem behavior.
+
+### `src/mkm/mechanisms/electrochem.py`
+
+Neutral shared PyTensor-compatible electrochemical free-energy, equilibrium,
+transition-state-rate, and temperature primitives used by both AgPd and Pt100.
+`src/mkm/mechanisms/agpd_basic/electrochem.py` re-exports these functions to
+preserve older imports; it no longer owns their implementations.
+
+### `src/mkm/mechanisms/pt100.py` and `src/mkm/models/pt100.py`
+
+Implement the Pt100 finite-rate CO adsorption, OH QEA, and ER/LH pathways
+in acidic/basic media and assemble the fit-ready mechanism. The
+`src/mkm/models/ptru_registry.py` registry currently permits individual
+Pt100 fits only; it does not enable PtRu-alloy fitting.
 
 ### `src/mkm/mechanisms/pd_basic.py`
 
@@ -338,13 +373,30 @@ Owns checkpoint/sample/finalize behavior, including `--resume`, `--overwrite`, m
 
 ### `src/mkm/workflows/agpd_validation.py`
 
-Owns LOCO/LOMO split logic and held-out prediction:
+Owns AgPd LOCO/LOMO split logic and held-out prediction:
 
 - split selected data;
 - enforce error-structure support;
 - construct prediction-only mechanism graphs;
 - compute held-out log predictive density and PIT;
 - summarize held-out model/predictive distributions.
+
+### `src/mkm/workflows/pt100_fit.py` / `ptru_posterior.py` / `ptru_validation.py`
+
+The Pt100 fit builder is shared by ordinary fits and Pt100 LOCO training fits;
+LOCO keeps condition selection and validation identity/provenance separate.
+`ptru_posterior.py` performs strict checkpoint validation and posterior loading.
+Changes to model-source hashes, including the shared electrochemical module
+relocation and fit-builder consolidation, may invalidate older Pt100/LOCO
+checkpoints without implying a numerical change. No automatic metadata
+migration or relaxed validation is provided.
+
+### `src/mkm/workflows/ptru_postprocess.py`
+
+Pt100 uses common diagnostics, experimental-observable comparisons, condition
+and rate overlays, and available pointwise LOO/LOO-PIT figures. Existing
+reliability checks and `full`/`core`/`none` plot-level semantics are preserved.
+Acidic/basic runs retain separate results directories.
 
 ## Postprocessing
 
@@ -400,9 +452,12 @@ Material-level aggregation of residual/LOO/observation diagnostics.
 
 Validation posterior-shift summaries and held-out validation plots.
 
-### `plotting.py`
+### `plotting/`
 
-Shared plotting implementation used by posterior, DRC, and validation scripts, including common presentation styling and material/composition overlay figures.
+Shared plotting package for posterior, DRC, and validation products, including
+`observables.py` (electrolyte-configurable overlays) and `loo.py` (common LOO
+figures). The AgPd wrappers retain their existing output conventions; Pt100
+reuses the shared functions with HClO4/H+ or KOH/OH- labels.
 
 ## Canonical AgPd scripts
 
@@ -620,10 +675,10 @@ PtRu organizational refactor.
 ### Status
 
 PtRu selected datasets are implemented; only Todd acidic Pt100 currently has exclusions.
-No PtRu model-data tables or Bayesian inference workflow exist yet.
-
-The next scientific stage is assessing data quality and defining
-selection rules before implementing PtRu mechanisms.
+Selected Todd Pt100 observations can be converted to canonical model tables
+for individual acidic/basic Bayesian fits; PtRu-alloy and Em fitting are not
+implemented. The next alloy-specific scientific stage is assessing data
+quality and selection rules before implementing PtRu-alloy mechanisms.
 
 ## PtRu data selection and selected-observable products
 

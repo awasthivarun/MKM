@@ -5,7 +5,7 @@ The public API is re-exported here so existing imports from
 by responsibility.
 """
 
-from .electrochem import (
+from mkm.mechanisms.electrochem import (
     electrochemical_activation_energy,
     electrochemical_free_energy,
     log_equilibrium_constant,

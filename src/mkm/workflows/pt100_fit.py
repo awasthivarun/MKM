@@ -142,6 +142,16 @@ def build_pt100_fit(paths, medium, model_name):
     if "medium" in selected and not selected["medium"].eq(medium).all():
         raise ValueError(f"Selected Pt100 dataset contains observations outside {medium}.")
 
+    return _build_pt100_fit_from_selected(
+        paths, config, prior_config, specification, selected, data_path,
+        paths.ptru_posterior_output_dir(
+            specification.medium, specification.model_name, specification.material,
+        ),
+    )
+
+
+def _build_pt100_fit_from_selected(paths, config, prior_config, specification, selected, data_path, output_dir):
+    """Build the same Pt100 model for full-data or prevalidated LOCO training observations."""
     model_data = build_model_data(
         selected_replicates=selected,
         electrolyte_concentration_column="C_electrolyte_M",
@@ -180,11 +190,7 @@ def build_pt100_fit(paths, medium, model_name):
         data_path=data_path,
         model_config_path=paths.ptru_model_config_path,
         prior_config_path=paths.root / config["priors"]["path"],
-        output_dir=paths.ptru_posterior_output_dir(
-            specification.medium,
-            specification.model_name,
-            specification.material,
-        ),
+        output_dir=output_dir,
         specification=specification,
         model_data=model_data,
     )

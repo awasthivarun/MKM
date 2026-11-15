@@ -3,19 +3,11 @@
 
 import numpy as np
 
-from mkm.inference.likelihoods import RATE_NORMAL
-from mkm.inference.model import build_pymc_model
-from mkm.model_data import build_model_data
-from mkm.model_inputs import build_model_input_arrays
-from mkm.models.pt100 import build_pt100_mechanism
 from mkm.provenance import sha256_file, sha256_mapping
 from mkm.workflows.pt100_fit import (
-    Pt100BuiltFit,
+    _build_pt100_fit_from_selected,
     load_pt100_config,
-    pt100_likelihood_kwargs,
-    pt100_parameter_specs,
     resolve_pt100_fit_specification,
-    resolve_pt100_parameter_specs,
 )
 from mkm.workflows.ptru_posterior import build_pt100_run_metadata, validate_pt100_run_metadata
 
@@ -66,30 +58,9 @@ def build_ptru_loco_fit(paths, medium, model_name, selected_training, output_dir
     if "medium" in selected_training and not selected_training["medium"].eq(medium).all():
         raise ValueError("Training data contain observations from another medium.")
 
-    model_data = build_model_data(selected_training, electrolyte_concentration_column="C_electrolyte_M")
-    inputs = build_model_input_arrays(model_data)
-    physical = resolve_pt100_parameter_specs(prior_config, medium, model_name)
-    mechanism = build_pt100_mechanism(model_name, medium, config["temperature_K"], physical)
-    built_model = build_pymc_model(
-        inputs=inputs,
-        mechanism=mechanism,
-        likelihood_name=RATE_NORMAL,
-        error_structure="shared",
-        likelihood_kwargs=pt100_likelihood_kwargs(config),
-    )
-    return Pt100BuiltFit(
-        medium=medium,
-        model_name=model_name,
-        inputs=inputs,
-        built_model=built_model,
-        parameter_specs=pt100_parameter_specs(prior_config, specification, config),
-        config=config,
-        data_path=paths.ptru_selected_path(medium),
-        model_config_path=paths.ptru_model_config_path,
-        prior_config_path=paths.root / config["priors"]["path"],
-        output_dir=output_dir,
-        specification=specification,
-        model_data=model_data,
+    return _build_pt100_fit_from_selected(
+        paths, config, prior_config, specification, selected_training,
+        paths.ptru_selected_path(medium), output_dir,
     )
 
 

@@ -31,10 +31,21 @@ from mkm.postprocessing.plotting import (
     PATHWAY_COLORS,
     POINTWISE_LABELS,
     plot_alpha_comparison,
+    plot_alpha_overlay_koh,
+    plot_alpha_overlay_pco,
     plot_delta_co_comparison,
+    plot_delta_co_overlay_koh,
+    plot_delta_co_overlay_pco,
     plot_delta_oh_comparison,
+    plot_delta_oh_overlay_pco,
+    plot_loo_diagnostics,
+    plot_loo_pit_summary,
+    plot_pointwise_loo,
+    plot_pointwise_loo_pit,
     plot_observation_grid,
     plot_parameter_posteriors,
+    plot_rate_overlay_koh,
+    plot_rate_overlay_pco,
     plot_pointwise_variables,
     plot_sampling_correlations,
     plot_sampling_energy,
@@ -208,6 +219,8 @@ def plot_ptru_products(
     *,
     observable_points=None,
     second_order_points=None,
+    loo=None,
+    calibration=None,
 ):
     """Use the existing shared plots with PtRu-specific presentation parameters."""
     if plot_level == "none":
@@ -301,6 +314,32 @@ def plot_ptru_products(
                 electrolyte_label=electrolyte_label,
             )
 
+        material_loo = None if loo is None else loo.pointwise.loc[loo.pointwise["material"] == "Pt100"]
+        material_pit = None
+        if calibration is not None:
+            material_pit = calibration.pointwise.loc[
+                calibration.pointwise["material"] == "Pt100"
+            ]
+            if not material_pit.empty:
+                plot(
+                    "Pt100/loo_pit", plot_loo_pit_summary,
+                    material_pit["loo_pit"].to_numpy(dtype=float), run.specification.model_name,
+                    material_dir / "loo_pit.png", context_label=context,
+                )
+        if material_loo is not None and not material_loo.empty:
+            if material_pit is not None and not material_pit.empty:
+                plot(
+                    "Pt100/loo_pointwise_pit", plot_pointwise_loo_pit,
+                    material_loo, material_pit, material_dir / "loo_pointwise_pit.png",
+                    context_label=context, electrolyte_label=electrolyte_label,
+                )
+            else:
+                plot(
+                    "Pt100/loo_pointwise", plot_pointwise_loo,
+                    material_loo, run.specification.model_name, material_dir / "loo_pointwise.png",
+                    context_label=context, electrolyte_label=electrolyte_label,
+                )
+
         if observable_points is not None and not observable_points.empty:
             alpha = observable_points.loc[observable_points["observable"] == "alpha"]
             ion = observable_points.loc[observable_points["observable"] == ion_name]
@@ -338,6 +377,31 @@ def plot_ptru_products(
                     ion_label=ion_label,
                 )
 
+        if observable_points is not None and not observable_points.empty:
+            alpha_all = observable_points.loc[observable_points["observable"] == "alpha"]
+            ion_all = observable_points.loc[observable_points["observable"] == ion_name]
+            co_all = observable_points.loc[observable_points["observable"] == "delta_CO"]
+            overlay_kwargs = {"electrolyte_column": "C_electrolyte_M", "electrolyte_label": electrolyte_label}
+            if not alpha_all.empty:
+                plot("alpha_overlay_pco", plot_alpha_overlay_pco, alpha_all,
+                     figures_dir / "alpha_overlay_PCO.png", **overlay_kwargs)
+                plot("alpha_overlay_electrolyte", plot_alpha_overlay_koh, alpha_all,
+                     figures_dir / f"alpha_overlay_{electrolyte_label}.png", **overlay_kwargs)
+            if not co_all.empty:
+                plot("delta_CO_overlay_pco", plot_delta_co_overlay_pco, co_all,
+                     figures_dir / "delta_CO_overlay_PCO.png", **overlay_kwargs)
+                plot("delta_CO_overlay_electrolyte", plot_delta_co_overlay_koh, co_all,
+                     figures_dir / f"delta_CO_overlay_{electrolyte_label}.png", **overlay_kwargs)
+            if not ion_all.empty:
+                plot(f"{ion_name}_overlay_pco", plot_delta_oh_overlay_pco, ion_all,
+                     figures_dir / f"{ion_name}_overlay_PCO.png", ion_name=ion_name, ion_label=ion_label)
+
+        if observations is not None and not observations.empty:
+            plot("rate_overlay_pco", plot_rate_overlay_pco, observations,
+                 figures_dir / "rate_overlay_PCO.png", electrolyte_label=electrolyte_label)
+            plot("rate_overlay_electrolyte", plot_rate_overlay_koh, observations,
+                 figures_dir / f"rate_overlay_{electrolyte_label}.png", electrolyte_label=electrolyte_label)
+
         plot(
             "sampling_trace", plot_sampling_trace,
             run.inference_data, run.free_parameter_names,
@@ -365,6 +429,14 @@ def plot_ptru_products(
                 "plot:sampling_pairs", "skipped_large_parameter_set",
                 "More than 30 parameters.",
             ))
+
+        if loo is not None:
+            loo_pit = None if calibration is None else calibration.pointwise["loo_pit"].to_numpy(dtype=float)
+            plot(
+                "loo_diagnostics", plot_loo_diagnostics,
+                loo.loo_result, loo_pit, run.specification.model_name,
+                figures_dir / "loo_diagnostics.png", context_label=context,
+            )
 
     status_rows.append(status_row(
         "plots",
@@ -532,6 +604,8 @@ def postprocess_ptru_run(
         run, observations, points, figures_dir, plot_level, status_rows,
         observable_points=observable_points,
         second_order_points=second_order_points,
+        loo=loo,
+        calibration=calibration,
     )
 
     overall = overall_postprocessing_status(status_rows)
