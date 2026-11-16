@@ -6,7 +6,7 @@ Bayesian microkinetic modeling of electrochemical CO oxidation.
 The project investigates CO oxidation on two catalyst families:
 
 - **AgPd in basic media:** Microkinetic modeling, Bayesian inference, and mechanistic discrimination.
-- **Pt and PtRu in acidic and basic media:** Experimental preprocessing and kinetic analysis; Pt100-only microkinetic fitting and validation.
+- **Pt and PtRu in acidic and basic media:** Experimental preprocessing, individual and within-medium all-material microkinetic fitting, and kinetic analysis.
 
 The project also develops generalizable methods for kinetic parameter estimation, uncertainty quantification, model comparison, and mechanistic discrimination.
 
@@ -76,7 +76,7 @@ The primary experimental datasets are Todd's Pt/PtRu measurements in HClO4 and K
 
 Additional Pt/C measurements from Em are processed separately. Pt/ATO is not yet included in the active preprocessing workflow.
 
-**Current status:** Experimental preprocessing and kinetic-observable calculations cover Pt and PtRu materials. Bayesian fitting currently covers **Pt100 only**, independently in acidic and basic media, using `CO_LH`, `CO_ER`, or `CO_ER_LH` with finite-rate CO adsorption, quasi-equilibrated OH adsorption, and the shared linear-rate Normal likelihood. The PtRu alloys and Em preparations are not fitted. Pt100 posterior diagnostics, pointwise PSIS-LOO/LOO-PIT, model comparison, condition-level LOCO refitting, and transition-state DRC analysis are implemented. Pt100 LOMO and all-material fitting are not.
+**Current status:** Experimental preprocessing and kinetic-observable calculations cover Pt100, Pt66Ru33, and Pt50Ru50. Bayesian fitting supports each Todd material individually and all three materials together **within one electrolyte medium**, using the shared linear-rate Normal likelihood. Pt100 supports `CO_LH`, `CO_ER`, and `CO_ER_LH`; the PtRu alloys additionally support BF-containing pathway combinations. All-material physical parameterizations are `shared`, `independent`, and `linear_xRu`. Posterior diagnostics, PSIS-LOO/LOO-PIT, comparisons, transition-state DRC, and individual-material LOCO validation are implemented. Acidic/basic data are never pooled, and the separately processed Em preparations are not fitted. Pooled PtRu LOCO/LOMO refitting is not implemented.
 
 #### Experimental conditions
 
@@ -112,7 +112,7 @@ The current implementation treats CO-stripping ECSA as predominantly Pt-accessib
 
 The assumed area basis for Em's Pt/C current densities should be verified before quantitative comparisons with Todd's data.
 
-The Pt100 fitting configuration uses the same ideal-gas CO activity convention as AgPd: a 1 bar standard pressure and nominal total pressure of 1 bar.
+The PtRu fitting configuration uses the same ideal-gas CO activity convention as AgPd: a 1 bar standard pressure and nominal total pressure of 1 bar.
 
 #### Experimental kinetic observables
 
@@ -163,7 +163,7 @@ Experimental observables are diagnostic quantities derived from measured rates, 
 - Acidic Pt100 contains sharp transitions whose interpretation remains unresolved; possible non-CO-oxidation contributions require investigation.
 - Ideal electrolyte activities are used rather than literature activity-coefficient corrections.
 - Replicate availability differs substantially between datasets.
-- Mechanistic fitting for PtRu alloys remains unimplemented. The existing Pt100 fits cannot establish alloy mechanisms.
+- PtRu alloy models are implemented, but successful fitting does not establish their mechanistic validity. In particular, the BF-neighbor availability factor uses the nominal Ru fraction as a model assumption.
 
 ## Environment
 
@@ -331,7 +331,7 @@ The PtRu pipeline uses:
 - `ptru_observables.py`: PtRu-specific observable calculations and grouping conventions.
 - `ptru_plotting.py`: Rate and observable figures using shared AgPd styling utilities.
 
-Experimental data calculations and plotting implementations reside in `src/mkm/preprocessing/`. Pt100 mechanism and inference implementations reside in `src/mkm/mechanisms/pt100.py`, `src/mkm/models/pt100.py`, and the relevant workflow modules; generic electrochemical functions are in `src/mkm/mechanisms/electrochem.py`. Scripts provide command-line orchestration.
+Experimental data calculations and plotting implementations reside in `src/mkm/preprocessing/`. Unified Pt/PtRu mechanism and inference implementations reside in `src/mkm/mechanisms/ptru.py`, `src/mkm/models/ptru.py`, and `src/mkm/workflows/ptru_fit.py`, with posterior and validation workflows under `src/mkm/workflows/`. Generic electrochemical functions are in `src/mkm/mechanisms/electrochem.py`. Scripts provide command-line orchestration.
 
 ## Interpretation boundary
 

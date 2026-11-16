@@ -42,7 +42,7 @@ raw workbooks
 
 AgPd model identity is now declarative. `src/mkm/models/agpd_registry.py` owns pathway membership, fit scope, fixed parameters, prior variants, coverage-cap mode, and material-specific pathway modifiers. `src/mkm/models/agpd_basic.py` resolves priors/parameterizations and builds PyMC mechanisms from that specification. Negative-`beta_2_BF` models therefore reuse the same kinetic equations and differ through the named `negative_beta_BF` prior variant.
 
-The AgPd mechanism implementation includes `state.py`, `surface.py`, `finite_co.py`, and `legacy_qea.py` under `src/mkm/mechanisms/agpd_basic/`. Generic electrochemical free-energy and rate-constant primitives now live in `src/mkm/mechanisms/electrochem.py` and are imported by both AgPd and Pt100. `agpd_basic/electrochem.py` remains as an import-compatibility re-export; the public `mkm.mechanisms.agpd_basic` path is preserved. The finite-rate BF/ER/LH family uses one common evaluator; pathway masks and optional CO caps are modifiers rather than duplicated kinetic implementations.
+The AgPd mechanism implementation includes `state.py`, `surface.py`, `finite_co.py`, and `legacy_qea.py` under `src/mkm/mechanisms/agpd_basic/`. Generic electrochemical free-energy and rate-constant primitives now live in `src/mkm/mechanisms/electrochem.py` and are imported by both AgPd and unified PtRu mechanisms. `agpd_basic/electrochem.py` remains as an import-compatibility re-export; the public `mkm.mechanisms.agpd_basic` path is preserved. The finite-rate BF/ER/LH family uses one common evaluator; pathway masks and optional CO caps are modifiers rather than duplicated kinetic implementations.
 
 Run metadata stores the resolved model specification, resolved prior specification, and a resolved-fit hash in addition to the full configuration-bundle hash. This separates fit-defining provenance from unrelated edits elsewhere in configuration files.
 
@@ -55,8 +55,8 @@ physical parameterizations. The acidic and basic datasets are never pooled.
 Ru OH adsorption transfers one electron and BF coupling is chemical; no `q` or
 `beta_2_BF` is fitted. The unified fit CLI supports `--overwrite` for test runs.
 Older Pt100/alloy checkpoint source hashes are incompatible with this refactor;
-re-fit rather than bypass validation. Historical PtRu status notes below describe
-the pre-unification implementation.
+re-fit rather than bypass validation. The sections below describe the current
+unified implementation.
 
 ## PtRu preprocessing and experimental observables
 
@@ -81,9 +81,9 @@ Pt/ATO measurements are deferred.
 
 **Implemented for experimental Pt/PtRu data:** Raw-data ingestion, standardization, common-potential interpolation, rate plots, and experimental kinetic observables. The Todd pipeline retains full data and creates selected datasets; only Todd acidic Pt100 currently has configured low-potential exclusions. Full and selected kinetic-observable products are kept separate.
 
-**Implemented for Pt100 only:** Independent acidic/basic Bayesian fits of `CO_LH`, `CO_ER`, and `CO_ER_LH`, posterior diagnostics, PSIS-LOO/LOO-PIT, model comparison, condition-level LOCO refitting with held-out diagnostic plots, and transition-state DRC. These use selected Todd Pt100 observations, not PtRu-alloy or Em data.
+**Implemented for Pt/PtRu inference:** Bayesian fits for individual Pt100, Pt66Ru33, and Pt50Ru50 materials, and within-medium all-material fits with `shared`, `independent`, or `linear_xRu` physical parameters. Pure Pt supports `CO_LH`, `CO_ER`, and `CO_ER_LH`; PtRu alloys also support BF-containing pathways. Posterior diagnostics, PSIS-LOO/LOO-PIT, model comparison, transition-state DRC, and individual-material LOCO with held-out diagnostic plots are implemented. Fitting uses selected Todd data and never pools acidic with basic measurements.
 
-**Not implemented:** Microkinetic fitting for PtRu alloys or Pt100 all-material/LOMO fitting.
+**Not implemented:** Inference on the separately processed Em preparations, pooled PtRu LOCO/LOMO refitting, or cross-medium fits.
 
 ### Experimental replicates
 
@@ -257,7 +257,7 @@ The experimental PtRu entry points are:
 - `scripts/process_ptru_observables.py`
 - `scripts/plot_ptru_observables.py`
 
-Pt100 Bayesian fitting and reporting are implemented by `src/mkm/mechanisms/pt100.py`, `src/mkm/models/pt100.py`, `src/mkm/models/ptru_registry.py`, and `src/mkm/workflows/pt100_fit.py` / `ptru_posterior.py` / `ptru_postprocess.py` / `ptru_validation.py`. The corresponding CLIs are `fit_pt100_posterior.py`, `postprocess_pt100_posterior.py`, `compare_pt100_models.py`, and `validate_pt100_posterior.py`. Generic electrochemical primitives are shared through `src/mkm/mechanisms/electrochem.py`. Pt100 condition-overlay and LOO figures reuse the common postprocessing plotting implementations.
+Unified Pt/PtRu fitting and reporting are implemented by `src/mkm/mechanisms/ptru.py`, `src/mkm/models/ptru.py`, and `src/mkm/workflows/ptru_fit.py` / `ptru_posterior.py` / `ptru_postprocess.py` / `ptru_validation.py`. The corresponding CLIs are `fit_ptru_posterior.py`, `postprocess_ptru_posterior.py`, `postprocess_ptru_drc.py`, `compare_ptru_models.py`, and `validate_ptru_posterior.py`. Generic electrochemical primitives are shared through `src/mkm/mechanisms/electrochem.py`. PtRu condition-overlay and LOO figures reuse the common postprocessing plotting implementations.
 
 The consolidated observable entry point replaces the earlier
 separate alpha, CO-order, and electrolyte-order scripts.
@@ -286,14 +286,14 @@ Output equivalence must be checked against the pre-refactor baseline.
 5. The current reaction-order calculations characterize
    apparent kinetic dependencies, not unique mechanisms.
 
-6. Pt100 has implemented models, priors, and the shared linear-rate
-   Normal likelihood. Their successful fit cannot establish the
-   operative mechanism on PtRu alloys, for which fitting remains
-   unimplemented.
+6. Both pure Pt and PtRu alloy fits use the shared linear-rate
+   Normal likelihood. Statistical fit alone cannot establish the
+   operative mechanism on any of these materials.
 
-The next alloy-specific scientific milestone is to assess data
-quality and selection criteria before constructing and testing
-PtRu-alloy microkinetic models.
+The next alloy-specific scientific work is to assess model adequacy,
+parameter identifiability, and mechanistic discrimination using the
+implemented fits.
+
 ## AgPd active likelihood
 
 The only active likelihood is Normal in linear rate space:
@@ -464,7 +464,7 @@ The current YAML explicitly marks coverage-cap approaches as exploratory / not p
 
 ## Posterior lifecycle and provenance
 
-AgPd and Pt100 posterior runs write `posterior.nc`, parameter summaries, `run_metadata.yaml`, and sampler-health information into deterministic run directories. Both families strictly validate model-defining source-file hashes, raw model-input dataset identity, configuration-file hashes, and resolved fit specification. Source/configuration changes can invalidate older checkpoints even when the mathematical equations are unchanged.
+AgPd and unified PtRu posterior runs write `posterior.nc`, parameter summaries, `run_metadata.yaml`, and sampler-health information into deterministic run directories. Both families strictly validate model-defining source-file hashes, raw model-input dataset identity, configuration-file hashes, and resolved fit specification. Source/configuration changes can invalidate older checkpoints even when the mathematical equations are unchanged.
 
 Before sampling, the lifecycle records a `sampling` state; after an atomic posterior write it records `sampled_free_variables`, then `complete` after finalization. `--resume` resumes finalization from a compatible checkpoint (including an interrupted finalization where recovery is supported). `--overwrite` removes an existing run directory and resamples. They should not be used interchangeably.
 
@@ -486,7 +486,7 @@ Preprocessing scripts write lineage manifests with raw-input, configuration, sou
 - analytic Normal LOO-PIT diagnostics;
 - full/core/no-plot modes.
 
-The standard AgPd and unified PtRu posterior postprocessing entry points run transition-state DRC by default; `--skip-drc` omits recomputation but retains prior DRC tables and figures. Every completed DRC or skipped invocation records its provenance state in `drc/drc_status.json`. Standalone `postprocess_agpd_drc.py` and `postprocess_ptru_drc.py` support finite-step and half-step checks. Pooled `independent`, `linear_xAg`, and `linear_xRu` DRCs perturb effective pointwise transition-state energies; synthetic regression tests compare pooled and independently calculated per-material results and half-step convergence. Pt100 supports `CO_LH`, `CO_ER`, and `CO_ER_LH` in either medium.
+The standard AgPd and unified PtRu posterior postprocessing entry points run transition-state DRC by default; `--skip-drc` omits recomputation but retains prior DRC tables and figures. Every completed DRC or skipped invocation records its provenance state in `drc/drc_status.json`. Standalone `postprocess_agpd_drc.py` and `postprocess_ptru_drc.py` support finite-step and half-step checks. Pooled `independent`, `linear_xAg`, and `linear_xRu` DRCs perturb effective pointwise transition-state energies; synthetic regression tests compare pooled and independently calculated per-material results and half-step convergence. Pt100 supports `CO_LH`, `CO_ER`, and `CO_ER_LH` in either medium, while the PtRu alloys also support BF-containing models.
 
 `plot_agpd_composition_parameters.py` stores posterior effective-parameter trends versus Ag fraction with 80% and 95% posterior HDIs; the `xAg = 0.5` reference composition is marked explicitly.
 
@@ -531,7 +531,7 @@ High-value future directions include hierarchical/correlated residual structures
 
 ## Physical and mathematical conventions
 
-This file documents the physical and mathematical conventions used by the current AgPd basic-media model. The equations in `src/mkm/mechanisms/agpd_basic/` and values in `config/models/agpd_basic.yaml` and `config/priors/agpd_basic.yaml` remain authoritative. Exploratory coverage-cap variants are registered in `src/mkm/models/agpd_registry.py`; no separate experimental cap YAML is included in this repository snapshot.
+This file documents the physical and mathematical conventions used by the current AgPd basic-media model. The equations in `src/mkm/mechanisms/agpd_basic/` and values in `config/models/agpd_basic.yaml` and `config/priors/agpd_basic.yaml` remain authoritative. Exploratory coverage-cap variants are registered in `src/mkm/models/agpd_registry.py`; an additional experimental configuration file exists at `config/models/experimental/agpd_caps.yaml`, separate from the default model configuration.
 
 ### Units and reference states
 

@@ -11,8 +11,9 @@ and basic media. Todd and Em measurements are processed separately.
 
 The PtRu experimental pipeline produces rates, apparent transfer
 coefficients, CO reaction orders, and H+/OH- reaction orders.
-Pt100-only acidic/basic microkinetic inference is implemented as described
-below; inference for the PtRu alloys remains unimplemented.
+Individual and within-medium all-material microkinetic inference is
+implemented for Pt100, Pt66Ru33, and Pt50Ru50, as described below.
+Em preparations remain outside the fitted dataset.
 
 ### 1. Process Todd measurements
 
@@ -380,7 +381,7 @@ Ag10 with BF disabled:
 python scripts/fit_agpd_posterior.py CO_BF_ER_LH_Ag10_no_BF --all-materials --parameterization linear_xAg --error-structure material
 ```
 
-Coverage-cap variants are registered but are currently intended for exploratory sensitivity analysis rather than the main model path. See `src/mkm/models/agpd_registry.py` and `config/models/agpd_basic.yaml` (no separate experimental cap YAML is included in this snapshot).
+Coverage-cap variants are registered but are currently intended for exploratory sensitivity analysis rather than the main model path. See `src/mkm/models/agpd_registry.py`, `config/models/agpd_basic.yaml`, and the separate experimental settings file `config/models/experimental/agpd_caps.yaml`.
 
 ## PowerShell chaining
 

@@ -444,7 +444,7 @@ Multi-model ELPD comparison and pointwise differences.
 
 ### `drc.py`
 
-Shared transition-state DRC and finite-step convergence checks for AgPd individual/composition models and Pt100 acidic/basic models.
+Shared transition-state DRC and finite-step convergence checks for AgPd and PtRu individual/all-material models in their supported media.
 
 ### `composition_parameters.py`
 
@@ -462,7 +462,7 @@ Validation posterior-shift summaries and held-out validation plots.
 
 Shared plotting package for posterior, DRC, and validation products, including
 `observables.py` (electrolyte-configurable overlays) and `loo.py` (common LOO
-figures). The AgPd wrappers retain their existing output conventions; Pt100
+figures). The AgPd wrappers retain their existing output conventions; PtRu
 reuses the shared functions with HClO4/H+ or KOH/OH- labels.
 
 ## Canonical AgPd scripts
@@ -557,7 +557,7 @@ LOCO/LOMO validation is nested under the corresponding full all-material fit dir
 - a mechanism equation: `src/mkm/mechanisms/agpd_basic/`
 - pathway parameter dataclasses: `src/mkm/mechanisms/agpd_basic/finite_co.py`
 - model registry / special variants: `src/mkm/models/agpd_registry.py`
-- base/slope/likelihood config: `config/models/agpd_basic.yaml`; canonical priors/variants: `config/priors/agpd_basic.yaml`; exploratory cap variants: `src/mkm/models/agpd_registry.py` (no separate cap YAML in this ZIP)
+- base/slope/likelihood config: `config/models/agpd_basic.yaml`; canonical priors/variants: `config/priors/agpd_basic.yaml`; exploratory cap variants: `src/mkm/models/agpd_registry.py`; additional experimental cap settings: `config/models/experimental/agpd_caps.yaml`
 - PyMC prior factory: `src/mkm/inference/priors.py`
 - likelihood equation: `src/mkm/inference/likelihoods.py`
 - fit-scope rules: `src/mkm/workflows/agpd_fit.py`
@@ -684,10 +684,10 @@ PtRu organizational refactor.
 ### Status
 
 PtRu selected datasets are implemented; only Todd acidic Pt100 currently has exclusions.
-Selected Todd Pt100 observations can be converted to canonical model tables
-for individual acidic/basic Bayesian fits; PtRu-alloy and Em fitting are not
-implemented. The next alloy-specific scientific stage is assessing data
-quality and selection rules before implementing PtRu-alloy mechanisms.
+Selected Todd observations support individual fits of Pt100, Pt66Ru33, and
+Pt50Ru50, plus all-material inference within either acidic or basic media.
+Em fitting and pooled PtRu LOCO/LOMO are not implemented. Model interpretation
+requires scientific evaluation beyond successful software execution.
 
 ## PtRu data selection and selected-observable products
 
@@ -792,8 +792,10 @@ unchanged.
 
 ### Verification status
 
-The selection workflow has been implemented but has not yet
-undergone numerical or graphical regression verification.
+The selection workflow has synthetic regression tests in
+`tests/preprocessing/test_ptru_selection.py` and
+`tests/preprocessing/test_ptru_truncation_preview.py`. Comprehensive
+parity against archived experimental preprocessing artifacts is not established.
 
 ## AgPd data contract
 
