@@ -216,6 +216,24 @@ python scripts/postprocess_agpd_drc.py CO_BF_ER_LH --all-materials --parameteriz
 python scripts/plot_agpd_composition_parameters.py CO_BF_ER_LH --parameterization linear_xAg --error-structure material
 ```
 
+### DRC calculation provenance (AgPd and PtRu)
+
+Posterior postprocessing normally recomputes transition-state DRCs. When `--skip-drc` is
+passed, previous DRC tables, optional draw files, and per-material DRC figures are
+**retained**, not updated. Each completed DRC calculation or skipped DRC stage writes `drc/drc_status.json` under the selected
+fit result directory, with `status`, `last_invocation_at_utc`,
+`last_computed_at_utc`, `products_present`, and `figures_present`. A status of
+`retained_from_previous_invocation` means the files must **not** be treated as outputs
+of the current postprocessing invocation; `skipped_no_existing_products` means there
+were no identifiable previous DRC products. If DRC products predate this feature,
+`last_computed_at_utc` is null (unknown), not inferred from filesystem timestamps.
+
+DRC computations use finite differences of **effective pointwise transition-state energies**,
+not derivatives with respect to fitted composition slopes. Regression tests compare
+`independent`, `linear_xAg`, and `linear_xRu` pooled calculations with separate
+single-material calculations, check the transition-state DRC sum, and compare half-steps.
+These are mathematical/numerical consistency tests, not evidence that a mechanism is correct.
+
 ### PtRu preprocessing
 
 Standardize and interpolate Todd's Pt/PtRu data:

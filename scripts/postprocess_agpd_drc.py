@@ -10,6 +10,7 @@ from mkm.postprocessing.drc import (
     compute_transition_state_drc,
 )
 from mkm.postprocessing.plotting import plot_transition_state_drc
+from mkm.postprocessing.drc_status import record_drc_status
 from mkm.project_paths import ProjectPaths
 from mkm.workflows.agpd_basic import load_agpd_model_config
 from mkm.workflows.agpd_fit import resolve_agpd_fit_specification
@@ -80,6 +81,8 @@ def main():
     drc_dir = paths.fit_drc_dir(run.output_dir)
     drc_dir.mkdir(parents=True, exist_ok=True)
 
+    for optional in ("drc_transition_state_step_convergence.csv", "drc_transition_state_draws.nc"):
+        (drc_dir / optional).unlink(missing_ok=True)
     result = _compute(run, config, args.step_eV)
     result.summary.to_parquet(
         drc_dir / "drc_transition_state.parquet",
@@ -115,6 +118,10 @@ def main():
                 material_dir / "drc_transition_states.png",
             )
 
+    record_drc_status(drc_dir, recomputed=True, figures_dir=paths.fit_figures_dir(run.output_dir), options={
+        "step_eV": args.step_eV, "check_half_step": args.check_half_step,
+        "save_draws": args.save_draws, "make_plots": not args.skip_plots,
+    })
     print(result.checks.to_string(index=False))
     print(f"DRC products saved to: {drc_dir}")
 

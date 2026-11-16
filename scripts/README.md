@@ -1,4 +1,4 @@
-﻿# MKM workflow scripts
+# MKM workflow scripts
 
 All commands below are intended to be run from the repository root with the `mkm` environment active.
 
@@ -259,7 +259,7 @@ Optional switches:
 --skip-composition   (all-material runs)
 ```
 
-Ordinary AgPd postprocessing runs transition-state DRC by default and generates all-material composition products unless skipped. The standalone DRC command below can be used independently or for half-step diagnostics.
+Ordinary AgPd postprocessing runs transition-state DRC by default and generates all-material composition products unless skipped. The standalone DRC command below can be used independently or for half-step diagnostics. When `--skip-drc` is used, previously computed DRC files and figures remain available but are **not recomputed**; see the `drc/drc_status.json` sidecar for the invocation status and known generation timestamp.
 
 ## Transition-state DRC
 
@@ -450,6 +450,11 @@ model (`CO_BF`), exclude pure Pt using `--exclude-materials Pt100`; otherwise it
 zero modeled CO oxidation rate. Optional material exclusions are supported for other pooled
 fits as well. `--overwrite` removes the selected checkpoint folder; `--resume` and
 `--overwrite` are mutually exclusive.
+
+For both PtRu and AgPd, `--skip-drc` retains prior DRC tables and figures and records
+the state in `drc/drc_status.json`; it does not imply that retained files reflect
+the current invocation. When old DRC files lack a known generation timestamp,
+`last_computed_at_utc` is null. Recompute DRC to update their provenance.
 
 ### Diagnostics and validation
 

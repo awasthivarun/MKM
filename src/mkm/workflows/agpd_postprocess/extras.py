@@ -11,6 +11,7 @@ from mkm.postprocessing.drc import (
     compute_transition_state_drc,
 )
 from mkm.postprocessing.plotting import plot_transition_state_drc
+from mkm.postprocessing.drc_status import record_drc_status
 
 
 def _compute_drc(run, config, step_eV):
@@ -62,6 +63,10 @@ def postprocess_agpd_drc(
                 f"{run.specification.model_name}, {material}",
                 material_dir / "drc_transition_states.png",
             )
+    record_drc_status(drc_dir, recomputed=True, figures_dir=paths.fit_figures_dir(run.output_dir), options={
+        "step_eV": step_eV, "check_half_step": check_half_step, "save_draws": save_draws,
+        "make_plots": make_plots,
+    })
     return result
 
 

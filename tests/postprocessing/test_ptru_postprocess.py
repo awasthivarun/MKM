@@ -311,7 +311,7 @@ def test_ptru_plot_directory_cleanup_failure_is_reported(tmp_path, monkeypatch):
     def blocked(_):
         raise PermissionError("directory in use")
 
-    monkeypatch.setattr(workflow.shutil, "rmtree", blocked)
+    monkeypatch.setattr(workflow, "reset_figures_preserving_drc", blocked)
     status = []
     workflow.plot_ptru_products(None, None, None, figures, "core", status)
 

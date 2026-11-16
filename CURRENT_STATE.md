@@ -486,7 +486,7 @@ Preprocessing scripts write lineage manifests with raw-input, configuration, sou
 - analytic Normal LOO-PIT diagnostics;
 - full/core/no-plot modes.
 
-The standard AgPd and Pt100 posterior postprocessing entry points run transition-state DRC by default; `--skip-drc` omits it. The dedicated `postprocess_agpd_drc.py` and `postprocess_pt100_drc.py` commands support finite-step and half-step convergence checks. AgPd composition DRC perturbs effective composition-specific transition-state energies; Pt100 DRC covers `CO_LH`, `CO_ER`, and `CO_ER_LH` in either medium.
+The standard AgPd and unified PtRu posterior postprocessing entry points run transition-state DRC by default; `--skip-drc` omits recomputation but retains prior DRC tables and figures. Every completed DRC or skipped invocation records its provenance state in `drc/drc_status.json`. Standalone `postprocess_agpd_drc.py` and `postprocess_ptru_drc.py` support finite-step and half-step checks. Pooled `independent`, `linear_xAg`, and `linear_xRu` DRCs perturb effective pointwise transition-state energies; synthetic regression tests compare pooled and independently calculated per-material results and half-step convergence. Pt100 supports `CO_LH`, `CO_ER`, and `CO_ER_LH` in either medium.
 
 `plot_agpd_composition_parameters.py` stores posterior effective-parameter trends versus Ag fraction with 80% and 95% posterior HDIs; the `xAg = 0.5` reference composition is marked explicitly.
 

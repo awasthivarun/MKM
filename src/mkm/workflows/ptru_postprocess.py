@@ -1,7 +1,6 @@
 
 """Posterior postprocessing for pure Pt and PtRu alloys, individually or pooled."""
 
-import shutil
 
 import numpy as np
 import pandas as pd
@@ -10,6 +9,7 @@ from mkm.model_inputs import build_model_point_inputs
 from mkm.postprocessing.drc import (
     compute_ptru_transition_state_drc, compare_transition_state_drc_steps,
 )
+from mkm.postprocessing.drc_status import record_drc_status, reset_figures_preserving_drc
 from mkm.postprocessing.plotting.drc import plot_transition_state_drc
 from mkm.observable_maps import (
     build_adjacent_log_order_map,
@@ -237,9 +237,7 @@ def plot_ptru_products(
         return
 
     try:
-        if figures_dir.exists():
-            shutil.rmtree(figures_dir)
-        figures_dir.mkdir(parents=True, exist_ok=True)
+        reset_figures_preserving_drc(figures_dir)
     except Exception as error:
         status_rows.append(status_row(
             "plots", "error", f"Could not prepare figures directory: {type(error).__name__}: {error}",
@@ -654,7 +652,15 @@ def postprocess_ptru_run(
     )
 
     if skip_drc:
-        status_rows.append(status_row("drc", "skipped_user", "DRC disabled by caller."))
+        drc_dir = paths.fit_drc_dir(run.output_dir)
+        drc_status = record_drc_status(
+            drc_dir, recomputed=False, figures_dir=paths.fit_figures_dir(run.output_dir),
+        )
+        status_rows.append(status_row("drc", "skipped_user", (
+            f"DRC not recomputed: {drc_status['status']}; "
+            f"previous calculation timestamp: {drc_status['last_computed_at_utc'] or 'unknown'}; "
+            f"see {drc_dir / 'drc_status.json'}"
+        )))
     else:
         try:
             postprocess_ptru_drc(
@@ -714,6 +720,10 @@ def postprocess_ptru_drc(
                 figures_dir / "drc_transition_states.png",
                 electrolyte_label=ptru_electrolyte_label(run.specification.medium),
             )
+    record_drc_status(drc_dir, recomputed=True, figures_dir=paths.fit_figures_dir(run.output_dir), options={
+        "step_eV": step_eV, "check_half_step": check_half_step,
+        "save_draws": save_draws, "make_plots": make_plots,
+    })
     return result
 
 

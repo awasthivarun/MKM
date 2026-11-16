@@ -4,6 +4,7 @@ from argparse import ArgumentParser
 
 from mkm.models.agpd_basic import available_agpd_models
 from mkm.project_paths import ProjectPaths
+from mkm.postprocessing.drc_status import record_drc_status
 from mkm.workflows.postprocessing_common import postprocessing_execution_failed
 import pandas as pd
 from mkm.workflows.agpd_basic import load_agpd_model_config
@@ -75,7 +76,13 @@ def main():
         second_order_step_v=args.second_order_step_v,
         plot_level=args.plot_level,
     )
-    if not args.skip_drc:
+    if args.skip_drc:
+        drc_dir = paths.fit_drc_dir(run.output_dir)
+        drc_status = record_drc_status(
+            drc_dir, recomputed=False, figures_dir=paths.fit_figures_dir(run.output_dir),
+        )
+        print(f"DRC: {drc_status['status']} (see {drc_dir / 'drc_status.json'})")
+    else:
         drc = postprocess_agpd_drc(
             run,
             config,

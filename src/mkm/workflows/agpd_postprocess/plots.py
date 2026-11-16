@@ -1,6 +1,6 @@
 """Plot orchestration for AgPd posterior postprocessing."""
 
-import shutil
+from mkm.postprocessing.drc_status import reset_figures_preserving_drc
 
 from mkm.postprocessing.plotting import (
     COVERAGE_COLORS,
@@ -54,9 +54,7 @@ def _make_plots(
         return
 
     try:
-        if figures_dir.exists():
-            shutil.rmtree(figures_dir)
-        figures_dir.mkdir(parents=True, exist_ok=True)
+        reset_figures_preserving_drc(figures_dir)
     except Exception as error:
         status_rows.append(
             status_row("plots", "error", f"Could not prepare figures directory: {type(error).__name__}: {error}")

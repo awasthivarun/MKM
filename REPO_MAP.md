@@ -1,4 +1,4 @@
-﻿# REPO_MAP
+# REPO_MAP
 
 Architecture and ownership guide for the MKM rebuild.
 
@@ -401,6 +401,14 @@ including per-material coverages, rates, rate fractions, kinetic observables, an
 ### `src/mkm/postprocessing/diagnostics.py`
 
 Parameter summaries, sample flattening, physical checks.
+
+### `src/mkm/postprocessing/drc.py` and `drc_status.py`
+
+AgPd/PtRu transition-state DRC finite differences, including pooled effective
+barriers and half-step comparisons. `drc_status.py` records which DRC artifacts
+were recomputed or retained from a previous invocation and protects existing
+DRC plots when ordinary figures are regenerated. See
+`tests/postprocessing/test_pooled_drc_regression.py` and `test_drc_status.py`.
 
 ### `sampling.py`
 
