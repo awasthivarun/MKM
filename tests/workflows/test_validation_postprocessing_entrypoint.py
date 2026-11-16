@@ -76,8 +76,8 @@ def test_agpd_validation_postprocessing_rejects_wrong_training_hash(tmp_path, mo
         script._load_validation_run(paths, {}, SimpleNamespace(error_structure="shared"), args)
 
 
-def test_pt100_heldout_figures_cover_all_existing_diagnostics(tmp_path, monkeypatch):
-    script = _load_script("validate_pt100_posterior.py")
+def test_ptru_heldout_figures_cover_all_existing_diagnostics(tmp_path, monkeypatch):
+    script = _load_script("validate_ptru_posterior.py")
     calls = []
 
     def record(name):
@@ -87,9 +87,9 @@ def test_pt100_heldout_figures_cover_all_existing_diagnostics(tmp_path, monkeypa
 
     monkeypatch.setattr(script, "plot_observation_grid", record("observation"))
     monkeypatch.setattr(script, "plot_heldout_pit_conditions", record("pit"))
-    args = SimpleNamespace(medium="acidic", electrolyte_M=0.5, co_mole_fraction=0.1)
+    args = SimpleNamespace(medium="acidic", material="Pt100", electrolyte_M=0.5, co_mole_fraction=0.1)
     predicted = SimpleNamespace(pointwise=pd.DataFrame({"model_residual": [0.1]}))
-    script.plot_pt100_heldout_products(predicted, tmp_path, args)
+    script.plot_ptru_heldout_products(predicted, tmp_path, args)
     assert {name for _, name, _ in calls} == {
         "heldout_rates_model.png", "heldout_rates_predictive.png",
         "heldout_residuals.png", "heldout_pit_conditions.png",

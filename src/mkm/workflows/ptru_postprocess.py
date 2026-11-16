@@ -1,5 +1,5 @@
 
-"""Posterior postprocessing for Pt100 in acidic and basic electrolyte."""
+"""Posterior postprocessing for pure Pt and PtRu alloys, individually or pooled."""
 
 import shutil
 
@@ -7,7 +7,9 @@ import numpy as np
 import pandas as pd
 
 from mkm.model_inputs import build_model_point_inputs
-from mkm.postprocessing.drc import compute_pt100_transition_state_drc, compare_transition_state_drc_steps
+from mkm.postprocessing.drc import (
+    compute_ptru_transition_state_drc, compare_transition_state_drc_steps,
+)
 from mkm.postprocessing.plotting.drc import plot_transition_state_drc
 from mkm.observable_maps import (
     build_adjacent_log_order_map,
@@ -88,8 +90,9 @@ def ptru_electrolyte_label(medium):
 
 
 
-def load_ptru_experimental_observables(paths, medium):
-    """Load only selected Todd observables for the fitted Pt100 dataset."""
+def load_ptru_experimental_observables(paths, medium, material="Pt100", materials=None):
+    """Load selected Todd observables for one Pt or PtRu material."""
+    materials = (material,) if materials is None else tuple(materials)
     ion_name = ptru_ion_name(medium)
     names = {
         "alpha": "alpha_summary",
@@ -101,13 +104,13 @@ def load_ptru_experimental_observables(paths, medium):
     for observable, product in names.items():
         path = paths.ptru_observable_path(medium, product, selected=True)
         data = pd.read_parquet(path)
-        data = data.loc[data["material"] == "Pt100"].copy()
+        data = data.loc[data["material"].isin(materials)].copy()
 
         if "medium" in data.columns and not data["medium"].eq(medium).all():
             raise ValueError(f"Experimental {observable} table contains another medium.")
 
         if data.empty:
-            raise ValueError(f"No selected Pt100 {observable} observations found: {path}")
+            raise ValueError(f"No selected {materials} {observable} observations found: {path}")
 
         frames[observable] = data
 
@@ -115,7 +118,7 @@ def load_ptru_experimental_observables(paths, medium):
 
 
 def build_ptru_observable_comparisons(run, paths, temperature_K):
-    """Build Pt100 posterior/experimental comparisons using common observable maps."""
+    """Build PtRu posterior/experimental comparisons using common observable maps."""
     medium = run.specification.medium
     ion_name = ptru_ion_name(medium)
     model_points = run.model_data.model_points
@@ -160,7 +163,9 @@ def build_ptru_observable_comparisons(run, paths, temperature_K):
         "lower_CO_mole_fraction": "CO_lower_mole_fraction",
         "upper_CO_mole_fraction": "CO_upper_mole_fraction",
     }
-    experimental = load_ptru_experimental_observables(paths, medium)
+    experimental = load_ptru_experimental_observables(
+        paths, medium, materials=run.inputs.materials,
+    )
 
     comparison_specs = {
         "alpha": (
@@ -254,7 +259,7 @@ def plot_ptru_products(
     electrolyte_label = ptru_electrolyte_label(medium)
     ion_name = ptru_ion_name(medium)
     ion_label = "H+" if medium == "acidic" else "OH"
-    context = f"Pt100 / {medium}"
+    context = f"{medium} / {run.specification.fit_scope}"
 
     plot(
         "posterior_parameters", plot_parameter_posteriors,
@@ -268,119 +273,142 @@ def plot_ptru_products(
         figures_dir / "posterior_correlations.png",
     )
 
-    material_dir = figures_dir / "Pt100"
-    material_dir.mkdir(parents=True, exist_ok=True)
+    for material in run.inputs.materials:
+        context = f"{material} / {medium}"
+        material_observations = observations.loc[observations["material"] == material]
+        material_points = points.loc[points["material"] == material]
+        material_observable_points = (
+            None if observable_points is None else observable_points.loc[observable_points["material"] == material]
+        )
+        material_second_order_points = (
+            None if second_order_points is None else second_order_points.loc[second_order_points["material"] == material]
+        )
+        material_dir = figures_dir / material
+        material_dir.mkdir(parents=True, exist_ok=True)
 
-    plot(
-        "Pt100/rates_model", plot_observation_grid,
-        observations, material_dir / "rates_model.png",
-        distribution="model", context_label=context,
-        electrolyte_label=electrolyte_label,
-    )
-    plot(
-        "Pt100/rates_predictive", plot_observation_grid,
-        observations, material_dir / "rates_predictive.png",
-        distribution="predictive", y_scale="linear", context_label=context,
-        electrolyte_label=electrolyte_label,
-    )
-    plot(
-        "Pt100/residuals", plot_observation_grid,
-        observations, material_dir / "residuals.png",
-        residual=True, y_scale="linear", context_label=context,
-        electrolyte_label=electrolyte_label,
-    )
+        plot(
+            f"{material}/rates_model", plot_observation_grid,
+            material_observations, material_dir / "rates_model.png",
+            distribution="model", context_label=context,
+            electrolyte_label=electrolyte_label,
+        )
+        plot(
+            f"{material}/rates_predictive", plot_observation_grid,
+            material_observations, material_dir / "rates_predictive.png",
+            distribution="predictive", y_scale="linear", context_label=context,
+            electrolyte_label=electrolyte_label,
+        )
+        plot(
+            f"{material}/residuals", plot_observation_grid,
+            material_observations, material_dir / "residuals.png",
+            residual=True, y_scale="linear", context_label=context,
+            electrolyte_label=electrolyte_label,
+        )
+
+        if plot_level == "full":
+            plot(
+                f"{material}/coverages", plot_pointwise_variables,
+                material_points, ("theta_empty", "theta_CO", "theta_OH"),
+                material_dir / "coverages.png",
+                title="Pt site coverages", ylabel="Pt-site coverage",
+                colors=COVERAGE_COLORS, labels=POINTWISE_LABELS,
+                context_label=context, electrolyte_label=electrolyte_label,
+            )
+            if material != "Pt100" and "theta_OH_Ru_median" in material_points:
+                plot(
+                    f"{material}/ru_coverages", plot_pointwise_variables,
+                    material_points, ("theta_empty_Ru", "theta_OH_Ru"),
+                    material_dir / "ru_coverages.png",
+                    title="Ru site coverages", ylabel="Ru-site coverage",
+                    colors={"theta_empty_Ru": "#777777", "theta_OH_Ru": "#009E73"},
+                    labels={"theta_empty_Ru": "empty Ru", "theta_OH_Ru": "OH on Ru"},
+                    context_label=context, electrolyte_label=electrolyte_label,
+                )
+
+            pathways = tuple(
+                name for name in ("rate_fraction_BF", "rate_fraction_ER", "rate_fraction_LH")
+                if f"{name}_median" in material_points
+            )
+            if pathways:
+                pathway_colors = {
+                    "rate_fraction_BF": PATHWAY_COLORS["BF"],
+                    "rate_fraction_ER": PATHWAY_COLORS["ER"],
+                    "rate_fraction_LH": PATHWAY_COLORS["LH"],
+                }
+                plot(
+                    f"{material}/rate_fractions", plot_pointwise_variables,
+                    material_points, pathways, material_dir / "rate_fractions.png",
+                    title="Pathway rate fractions", ylabel="Rate fraction",
+                    colors=pathway_colors, labels=POINTWISE_LABELS,
+                    context_label=context, observed_rates=material_observations,
+                    electrolyte_label=electrolyte_label,
+                )
+
+            material_loo = None if loo is None else loo.pointwise.loc[loo.pointwise["material"] == material]
+            material_pit = None
+            if calibration is not None:
+                material_pit = calibration.pointwise.loc[
+                    calibration.pointwise["material"] == material
+                ]
+                if not material_pit.empty:
+                    plot(
+                        f"{material}/loo_pit", plot_loo_pit_summary,
+                        material_pit["loo_pit"].to_numpy(dtype=float), run.specification.model_name,
+                        material_dir / "loo_pit.png", context_label=context,
+                    )
+            if material_loo is not None and not material_loo.empty:
+                if material_pit is not None and not material_pit.empty:
+                    plot(
+                        f"{material}/loo_pointwise_pit", plot_pointwise_loo_pit,
+                        material_loo, material_pit, material_dir / "loo_pointwise_pit.png",
+                        context_label=context, electrolyte_label=electrolyte_label,
+                    )
+                else:
+                    plot(
+                        f"{material}/loo_pointwise", plot_pointwise_loo,
+                        material_loo, run.specification.model_name, material_dir / "loo_pointwise.png",
+                        context_label=context, electrolyte_label=electrolyte_label,
+                    )
+
+            if material_observable_points is not None and not material_observable_points.empty:
+                alpha = material_observable_points.loc[material_observable_points["observable"] == "alpha"]
+                ion = material_observable_points.loc[material_observable_points["observable"] == ion_name]
+                co = material_observable_points.loc[material_observable_points["observable"] == "delta_CO"]
+
+                if not alpha.empty:
+                    plot(
+                        f"{material}/alpha", plot_alpha_comparison,
+                        alpha, material_dir / "alpha.png", material,
+                        electrolyte_label=electrolyte_label,
+                        electrolyte_column="C_electrolyte_M",
+                    )
+                if not ion.empty:
+                    plot(
+                        f"{material}/{ion_name}", plot_delta_oh_comparison,
+                        ion, material_dir / f"{ion_name}.png", material,
+                        ion_name=ion_name, ion_label=ion_label,
+                    )
+                if not co.empty:
+                    plot(
+                        f"{material}/delta_CO", plot_delta_co_comparison,
+                        co, material_dir / "delta_CO.png", material,
+                        electrolyte_label=electrolyte_label,
+                        electrolyte_column="C_electrolyte_M",
+                    )
+
+            if material_second_order_points is not None and not material_second_order_points.empty:
+                delta2 = material_second_order_points.loc[material_second_order_points["observable"] == "delta2"]
+                if not delta2.empty:
+                    plot(
+                        f"{material}/second_order_difference", plot_second_order_difference,
+                        delta2, material_dir / "second_order_difference.png", material,
+                        electrolyte_column="C_electrolyte_M",
+                        electrolyte_label=electrolyte_label,
+                        ion_label=ion_label,
+                    )
 
     if plot_level == "full":
-        plot(
-            "Pt100/coverages", plot_pointwise_variables,
-            points, ("theta_empty", "theta_CO", "theta_OH"),
-            material_dir / "coverages.png",
-            title="Pt site coverages", ylabel="Pt-site coverage",
-            colors=COVERAGE_COLORS, labels=POINTWISE_LABELS,
-            context_label=context, electrolyte_label=electrolyte_label,
-        )
-
-        pathways = tuple(
-            name for name in ("rate_fraction_ER", "rate_fraction_LH")
-            if f"{name}_median" in points
-        )
-        if pathways:
-            pathway_colors = {
-                "rate_fraction_ER": PATHWAY_COLORS["ER"],
-                "rate_fraction_LH": PATHWAY_COLORS["LH"],
-            }
-            plot(
-                "Pt100/rate_fractions", plot_pointwise_variables,
-                points, pathways, material_dir / "rate_fractions.png",
-                title="Pathway rate fractions", ylabel="Rate fraction",
-                colors=pathway_colors, labels=POINTWISE_LABELS,
-                context_label=context, observed_rates=observations,
-                electrolyte_label=electrolyte_label,
-            )
-
-        material_loo = None if loo is None else loo.pointwise.loc[loo.pointwise["material"] == "Pt100"]
-        material_pit = None
-        if calibration is not None:
-            material_pit = calibration.pointwise.loc[
-                calibration.pointwise["material"] == "Pt100"
-            ]
-            if not material_pit.empty:
-                plot(
-                    "Pt100/loo_pit", plot_loo_pit_summary,
-                    material_pit["loo_pit"].to_numpy(dtype=float), run.specification.model_name,
-                    material_dir / "loo_pit.png", context_label=context,
-                )
-        if material_loo is not None and not material_loo.empty:
-            if material_pit is not None and not material_pit.empty:
-                plot(
-                    "Pt100/loo_pointwise_pit", plot_pointwise_loo_pit,
-                    material_loo, material_pit, material_dir / "loo_pointwise_pit.png",
-                    context_label=context, electrolyte_label=electrolyte_label,
-                )
-            else:
-                plot(
-                    "Pt100/loo_pointwise", plot_pointwise_loo,
-                    material_loo, run.specification.model_name, material_dir / "loo_pointwise.png",
-                    context_label=context, electrolyte_label=electrolyte_label,
-                )
-
-        if observable_points is not None and not observable_points.empty:
-            alpha = observable_points.loc[observable_points["observable"] == "alpha"]
-            ion = observable_points.loc[observable_points["observable"] == ion_name]
-            co = observable_points.loc[observable_points["observable"] == "delta_CO"]
-
-            if not alpha.empty:
-                plot(
-                    "Pt100/alpha", plot_alpha_comparison,
-                    alpha, material_dir / "alpha.png", "Pt100",
-                    electrolyte_label=electrolyte_label,
-                    electrolyte_column="C_electrolyte_M",
-                )
-            if not ion.empty:
-                plot(
-                    f"Pt100/{ion_name}", plot_delta_oh_comparison,
-                    ion, material_dir / f"{ion_name}.png", "Pt100",
-                    ion_name=ion_name, ion_label=ion_label,
-                )
-            if not co.empty:
-                plot(
-                    "Pt100/delta_CO", plot_delta_co_comparison,
-                    co, material_dir / "delta_CO.png", "Pt100",
-                    electrolyte_label=electrolyte_label,
-                    electrolyte_column="C_electrolyte_M",
-                )
-
-        if second_order_points is not None and not second_order_points.empty:
-            delta2 = second_order_points.loc[second_order_points["observable"] == "delta2"]
-            if not delta2.empty:
-                plot(
-                    "Pt100/second_order_difference", plot_second_order_difference,
-                    delta2, material_dir / "second_order_difference.png", "Pt100",
-                    electrolyte_column="C_electrolyte_M",
-                    electrolyte_label=electrolyte_label,
-                    ion_label=ion_label,
-                )
-
+        context = f"{medium} / {run.specification.fit_scope}"
         if observable_points is not None and not observable_points.empty:
             alpha_all = observable_points.loc[observable_points["observable"] == "alpha"]
             ion_all = observable_points.loc[observable_points["observable"] == ion_name]
@@ -467,7 +495,7 @@ def postprocess_ptru_run(
     check_drc_half_step=False,
     save_drc_draws=False,
 ):
-    """Generate Pt100 postprocessing products with shared MKM infrastructure."""
+    """Generate PtRu postprocessing products with shared MKM infrastructure."""
     if plot_level not in {"none", "core", "full"}:
         raise ValueError("plot_level must be one of: none, core, full.")
 
@@ -522,12 +550,12 @@ def postprocess_ptru_run(
             curve_residuals, shared_residuals,
         )
 
-        # Retain old Pt100 CSV filenames with the new common summary schema.
+        # Preserve the established PtRu diagnostic filenames.
         points.to_csv(tables_dir / "posterior_model_points.csv", index=False)
         observations.to_csv(tables_dir / "posterior_observations.csv", index=False)
 
         condition_summary = observations.groupby(
-            ["electrolyte_concentration_M", "CO_mole_fraction"], as_index=False,
+            ["material", "electrolyte_concentration_M", "CO_mole_fraction"], as_index=False,
         ).agg(
             n=("standardized_residual", "size"),
             mean_z=("standardized_residual", "mean"),
@@ -629,7 +657,7 @@ def postprocess_ptru_run(
         status_rows.append(status_row("drc", "skipped_user", "DRC disabled by caller."))
     else:
         try:
-            postprocess_pt100_drc(
+            postprocess_ptru_drc(
                 run, paths, temperature_K=temperature_K, step_eV=drc_step_eV,
                 check_half_step=check_drc_half_step, save_draws=save_drc_draws,
                 make_plots=plot_level != "none",
@@ -647,17 +675,22 @@ def postprocess_ptru_run(
 
 
 
-def postprocess_pt100_drc(
+def postprocess_ptru_drc(
     run, paths, *, temperature_K, step_eV=1e-4, check_half_step=False,
     save_draws=False, make_plots=True,
 ):
-    """Write Pt100 TS DRC outputs with the AgPd schema and step checks."""
+    """Write PtRu TS-DRC outputs, including for pooled composition fits."""
+    from mkm.workflows.ptru_fit import load_ptru_config
+
+    config, priors = load_ptru_config(paths)
     point_inputs = build_model_point_inputs(run.inputs)
+
     def compute(step):
-        return compute_pt100_transition_state_drc(
-            run.inference_data, run.specification.model_name, run.specification.medium,
-            point_inputs, run.model_data.model_points, temperature_K, step_eV=step,
+        return compute_ptru_transition_state_drc(
+            run.inference_data, run.specification, point_inputs, run.model_data.model_points,
+            config, priors, step_eV=step,
         )
+
     drc_dir = paths.fit_drc_dir(run.output_dir)
     drc_dir.mkdir(parents=True, exist_ok=True)
     for optional in ("drc_transition_state_step_convergence.csv", "drc_transition_state_draws.nc"):
@@ -672,11 +705,17 @@ def postprocess_pt100_drc(
             drc_dir / "drc_transition_state_step_convergence.csv", index=False,
         )
     if make_plots:
-        figures_dir = paths.fit_figures_dir(run.output_dir) / "Pt100"
-        figures_dir.mkdir(parents=True, exist_ok=True)
-        plot_transition_state_drc(
-            result.summary, f"{run.specification.model_name}, Pt100 / {run.specification.medium}",
-            figures_dir / "drc_transition_states.png",
-            electrolyte_label=ptru_electrolyte_label(run.specification.medium),
-        )
+        for material in run.inputs.materials:
+            figures_dir = paths.fit_figures_dir(run.output_dir) / material
+            figures_dir.mkdir(parents=True, exist_ok=True)
+            summary = result.summary.loc[result.summary["material"] == material]
+            plot_transition_state_drc(
+                summary, f"{run.specification.model_name}, {material} / {run.specification.medium}",
+                figures_dir / "drc_transition_states.png",
+                electrolyte_label=ptru_electrolyte_label(run.specification.medium),
+            )
     return result
+
+
+# Compatibility name for historical direct DRC consumers.
+postprocess_pt100_drc = postprocess_ptru_drc

@@ -1,4 +1,4 @@
-"""Run Pt100 prior-predictive checks without sampling a posterior."""
+"""Run PtRu prior-predictive checks without sampling a posterior."""
 
 from argparse import ArgumentParser
 
@@ -6,18 +6,23 @@ import numpy as np
 import pandas as pd
 
 from mkm.inference.prior_predictive import sample_prior_predictive, summarize_prior_predictive
-from mkm.models.ptru_registry import available_ptru_models
+from mkm.models.ptru import available_ptru_models
 from mkm.postprocessing.diagnostics import build_physical_checks
 from mkm.project_paths import ProjectPaths
 from mkm.provenance import write_run_metadata
-from mkm.workflows.pt100_fit import build_pt100_fit
-from mkm.workflows.ptru_posterior import build_pt100_run_metadata
+from mkm.workflows.ptru_fit import build_ptru_fit, load_ptru_config, resolve_ptru_fit_specification
+from mkm.workflows.ptru_posterior import build_ptru_run_metadata
 
 
 def parse_args():
     parser = ArgumentParser(description=__doc__)
     parser.add_argument("model", choices=available_ptru_models())
     parser.add_argument("--medium", choices=("acidic", "basic"), required=True)
+    parser.add_argument("--material", default="Pt100")
+    parser.add_argument("--all-materials", action="store_true")
+    parser.add_argument("--parameterization", choices=("shared", "independent", "linear_xRu"), default="shared")
+    parser.add_argument("--error-structure", choices=("shared", "material"), default="shared")
+    parser.add_argument("--exclude-materials", nargs="*", default=())
     parser.add_argument("--draws", type=int, default=1000)
     parser.add_argument("--random-seed", type=int, default=1)
     parser.add_argument("--save-draws", action="store_true")
@@ -30,12 +35,22 @@ def main():
         raise ValueError("--draws must be at least 2.")
 
     paths = ProjectPaths.discover(__file__)
-    fit = build_pt100_fit(paths, args.medium, args.model)
+    config, _ = load_ptru_config(paths)
+    spec = resolve_ptru_fit_specification(
+        config, args.medium, args.model, material=args.material,
+        all_materials=args.all_materials, parameterization=args.parameterization,
+        error_structure=args.error_structure, excluded_materials=args.exclude_materials,
+    )
+    fit = build_ptru_fit(paths, spec)
     prior = sample_prior_predictive(fit.built_model, draws=args.draws, random_seed=args.random_seed)
     parameter_names = tuple(variable.name for variable in fit.built_model.model.free_RVs)
     summary = summarize_prior_predictive(prior, fit.model_data, parameter_names=parameter_names)
 
-    output_dir = paths.ptru_prior_predictive_output_dir(args.medium, args.model)
+    output_dir = paths.ptru_prior_predictive_output_dir(
+        args.medium, args.model, args.material,
+        fit_scope=spec.fit_scope, parameterization=spec.parameterization,
+        error_structure=spec.error_structure, excluded_materials=spec.excluded_materials,
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
     summary.parameter_summary.to_csv(output_dir / "prior_parameters.csv", index=False)
     summary.model_point_summary.to_parquet(output_dir / "prior_model_points.parquet", index=False)
@@ -49,7 +64,7 @@ def main():
         "n_ln_rate_above_exp_range": int(np.sum(ln_rate > np.log(np.finfo(float).max))),
     }]).to_csv(output_dir / "prior_numerical_checks.csv", index=False)
 
-    metadata = build_pt100_run_metadata(
+    metadata = build_ptru_run_metadata(
         paths, fit, sampler={"draws": args.draws, "random_seed": args.random_seed},
     )
     metadata["analysis"] = "prior_predictive"

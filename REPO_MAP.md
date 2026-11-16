@@ -62,11 +62,12 @@ completed all-material posterior
 
 The old split between individual fitting and separate composition-fitting scripts no longer exists. `fit_agpd_posterior.py`, `postprocess_agpd_posterior.py`, and `postprocess_agpd_drc.py` each handle both scopes through `--all-materials`.
 
-## PtRu preprocessing and Pt100 inference flow
+## Unified PtRu preprocessing and inference flow
 
 PtRu experimental preprocessing covers Pt100, Pt66Ru33, and Pt50Ru50 in
 acidic/basic electrolyte, with Todd and Em data handled separately.
-Microkinetic inference currently applies only to Pt100 on selected Todd data.
+Microkinetic inference supports individual Pt100, Pt66Ru33, and Pt50Ru50 fits, plus
+all-material fits within an acidic or basic medium. The media are never combined.
 
 ```text
 Todd / Em raw Excel workbooks
@@ -101,22 +102,22 @@ ptru_plotting.py        ptru_observables.py
              kinetic-observable Parquets
 ```
 
-Only selected **Todd Pt100** observations enter the following independent
-acidic/basic inference path (Em and alloy observations are excluded):
+Selected Todd PtRu observations enter the common fitting stack; Pt100 and alloys
+use the same evaluator, registry, likelihood, and posterior code:
 
 ```text
-Todd Pt100 selected observations
+Todd selected observations (acidic or basic, independently)
              |
              v
-pt100_fit.py / models/pt100.py
+ptru_fit.py / models/ptru.py / mechanisms/ptru.py
              |
              v
-scripts/fit_pt100_posterior.py --> posterior.nc
+scripts/fit_ptru_posterior.py --> posterior.nc
              |
-             +--> scripts/postprocess_pt100_posterior.py (includes DRC by default)
-             +--> scripts/postprocess_pt100_drc.py (standalone DRC)
-             +--> scripts/compare_pt100_models.py (compatible fitted models)
-             +--> scripts/validate_pt100_posterior.py (LOCO training refit)
+             +--> scripts/postprocess_ptru_posterior.py (includes optional DRC)
+             +--> scripts/postprocess_ptru_drc.py (standalone DRC)
+             +--> scripts/compare_ptru_models.py (compatible fitted models)
+             +--> scripts/validate_ptru_posterior.py (individual LOCO)
 ```
 
 ### Configuration
@@ -134,10 +135,10 @@ preprocessing conventions for both Todd and Em:
 Em's additional CO concentrations and sample preparations are
 identified from the source-specific data.
 
-Pt100 mechanism and prior settings are defined in `config/models/pt100.yaml`
-and `config/priors/pt100.yaml`. The Pt100 model registry supports `CO_LH`,
-`CO_ER`, and `CO_ER_LH` in either medium, in individual-material fits only.
-PtRu alloy fitting is not configured.
+PtRu mechanism and prior settings are defined in `config/models/ptru.yaml`
+and `config/priors/ptru.yaml`. Pure Pt supports `CO_LH`, `CO_ER`, and `CO_ER_LH`.
+PtRu alloys additionally support BF pathway combinations. All-material parameterizations
+are `shared`, `independent`, and `linear_xRu`; acid and base remain separate.
 
 ### Module ownership
 
@@ -287,12 +288,11 @@ transition-state-rate, and temperature primitives used by both AgPd and Pt100.
 `src/mkm/mechanisms/agpd_basic/electrochem.py` re-exports these functions to
 preserve older imports; it no longer owns their implementations.
 
-### `src/mkm/mechanisms/pt100.py` and `src/mkm/models/pt100.py`
+### `src/mkm/mechanisms/ptru.py` and `src/mkm/models/ptru.py`
 
-Implement the Pt100 finite-rate CO adsorption, OH QEA, and ER/LH pathways
-in acidic/basic media and assemble the fit-ready mechanism. The
-`src/mkm/models/ptru_registry.py` registry currently permits individual
-Pt100 fits only; it does not enable PtRu-alloy fitting.
+Unified finite-rate Pt CO SSA, Pt/Ru OH QEA, and BF/ER/LH pathway subsets in acid or base.
+Ru OH adsorption is one-electron; no fitted `q` or `beta_2_BF` exists. Pure Pt has no BF
+pathway. `models/ptru.py` registers single- and all-material priors and parameterizations.
 
 ### `src/mkm/mechanisms/pd_basic.py`
 
@@ -382,23 +382,19 @@ Owns AgPd LOCO/LOMO split logic and held-out prediction:
 - compute held-out log predictive density and PIT;
 - summarize held-out model/predictive distributions.
 
-### `src/mkm/workflows/pt100_fit.py` / `ptru_posterior.py` / `ptru_validation.py`
+### `src/mkm/workflows/ptru_fit.py` / `ptru_posterior.py` / `ptru_validation.py`
 
-The Pt100 fit builder is shared by ordinary fits and Pt100 LOCO training fits;
-LOCO keeps condition selection and validation identity/provenance separate.
-`ptru_posterior.py` performs strict checkpoint validation and posterior loading.
-Both AgPd and Pt100 loaders validate source, data, configuration, and resolved-fit identity.
-Changes to model-source hashes, including the shared electrochemical module
-relocation and fit-builder consolidation, may invalidate older Pt100/LOCO
-checkpoints without implying a numerical change. No automatic metadata
-migration or relaxed validation is provided.
+The same PtRu fit builder supports individual material and pooled within-medium inference,
+while LOCO uses an individual-material training subset and the same fitted model. Both
+acidic and basic datasets use their own input identity and result directories.
+`ptru_posterior.py` strictly validates checkpoint provenance, including the source,
+configuration, and resolved model. Historical checkpoints created under dedicated Pt100
+or alloy modules require fresh fitting; they are not automatically migrated.
 
 ### `src/mkm/workflows/ptru_postprocess.py`
 
-Pt100 uses common diagnostics, experimental-observable comparisons, condition
-and rate overlays, transition-state DRC, and available pointwise LOO/LOO-PIT figures. Existing
-reliability checks and `full`/`core`/`none` plot-level semantics are preserved.
-Acidic/basic runs retain separate results directories.
+Shared posterior diagnostics and plots work for individual and pooled PtRu runs,
+including per-material coverages, rates, rate fractions, kinetic observables, and DRC.
 
 ## Postprocessing
 

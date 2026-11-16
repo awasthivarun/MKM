@@ -8,6 +8,7 @@ import xarray as xr
 
 from mkm.constants import F_C_mol, R_J_mol_K
 from mkm.model_data import build_model_data
+from mkm.model_inputs import build_model_input_arrays
 from mkm.postprocessing.diagnostics import build_physical_checks
 from mkm.postprocessing.model_points import summarize_model_points
 from mkm.postprocessing.second_order import build_second_order_outputs
@@ -87,7 +88,8 @@ def synthetic_ptru_run(medium):
     })
 
     return SimpleNamespace(
-        specification=SimpleNamespace(medium=medium),
+        specification=SimpleNamespace(medium=medium, fit_scope="individual", model_name="CO_ER_LH"),
+        inputs=build_model_input_arrays(data),
         model_data=data,
         inference_data=SimpleNamespace(posterior=posterior),
     )
@@ -242,7 +244,8 @@ def test_ptru_full_observable_plots_accept_electrolyte_column(tmp_path, monkeypa
     figures = tmp_path / "figures"
     status = []
     workflow.plot_ptru_products(
-        run, pd.DataFrame(), pd.DataFrame(), figures, "full", status,
+        run, pd.DataFrame(columns=["material"]), pd.DataFrame(columns=["material"]),
+        figures, "full", status,
         observable_points=comparisons,
     )
 
@@ -268,13 +271,14 @@ def test_ptru_plot_levels_remove_stale_figures_but_none_preserves_them(tmp_path,
 
     monkeypatch.setattr(workflow, "safe_plot", save_placeholder)
     run = SimpleNamespace(
-        specification=SimpleNamespace(medium=medium),
+        specification=SimpleNamespace(medium=medium, fit_scope="individual", model_name="CO_LH"),
+        inputs=SimpleNamespace(materials=("Pt100",)),
         inference_data=SimpleNamespace(posterior=None),
         parameter_specs={}, free_parameter_names=(),
     )
     figures = tmp_path / "figures"
-    observations = pd.DataFrame()
-    points = pd.DataFrame({"rate_fraction_ER_median": [0.5]})
+    observations = pd.DataFrame(columns=["material"])
+    points = pd.DataFrame({"material": ["Pt100"], "rate_fraction_ER_median": [0.5]})
 
     full_status = []
     workflow.plot_ptru_products(run, observations, points, figures, "full", full_status)

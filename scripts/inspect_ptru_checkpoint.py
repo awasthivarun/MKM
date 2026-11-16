@@ -1,34 +1,45 @@
-"""Audit saved Pt100 metadata without loading, modifying, or resuming a posterior."""
+"""Audit saved PtRu metadata without loading, modifying, or resuming a posterior."""
 
 from argparse import ArgumentParser
 
-from mkm.models.ptru_registry import available_ptru_models
+from mkm.models.ptru import available_ptru_models
 from mkm.project_paths import ProjectPaths
 from mkm.provenance import read_run_metadata
-from mkm.workflows.pt100_fit import build_pt100_fit
-from mkm.workflows.ptru_checkpoint_audit import audit_pt100_checkpoint
-from mkm.workflows.ptru_posterior import build_pt100_run_metadata
+from mkm.workflows.ptru_fit import build_ptru_fit, load_ptru_config, resolve_ptru_fit_specification
+from mkm.workflows.ptru_checkpoint_audit import audit_ptru_checkpoint
+from mkm.workflows.ptru_posterior import build_ptru_run_metadata
 
 
 def parse_args():
     parser = ArgumentParser(description=__doc__)
     parser.add_argument("model", choices=available_ptru_models())
     parser.add_argument("--medium", choices=("acidic", "basic"), required=True)
+    parser.add_argument("--material", default="Pt100")
+    parser.add_argument("--all-materials", action="store_true")
+    parser.add_argument("--parameterization", choices=("shared", "independent", "linear_xRu"), default="shared")
+    parser.add_argument("--error-structure", choices=("shared", "material"), default="shared")
+    parser.add_argument("--exclude-materials", nargs="*", default=())
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
     paths = ProjectPaths.discover(__file__)
-    fit = build_pt100_fit(paths, args.medium, args.model)
+    config, _ = load_ptru_config(paths)
+    spec = resolve_ptru_fit_specification(
+        config, args.medium, args.model, material=args.material,
+        all_materials=args.all_materials, parameterization=args.parameterization,
+        error_structure=args.error_structure, excluded_materials=args.exclude_materials,
+    )
+    fit = build_ptru_fit(paths, spec)
     metadata_path = fit.output_dir / "run_metadata.yaml"
     posterior_path = fit.output_dir / "posterior.nc"
     if not posterior_path.is_file():
         raise FileNotFoundError(f"Posterior not found: {posterior_path}")
 
     saved = read_run_metadata(metadata_path)
-    expected = build_pt100_run_metadata(paths, fit, saved.get("sampler") or {})
-    audit = audit_pt100_checkpoint(saved, expected)
+    expected = build_ptru_run_metadata(paths, fit, saved.get("sampler") or {})
+    audit = audit_ptru_checkpoint(saved, expected)
 
     print(f"Checkpoint: {posterior_path}")
     print(f"Audit status: {audit.status}")

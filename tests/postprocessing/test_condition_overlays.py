@@ -83,12 +83,15 @@ def test_ptru_full_reuses_shared_overlay_and_loo_plots(tmp_path, monkeypatch, me
 
     monkeypatch.setattr(ptru, "safe_plot", record_plot)
     run = SimpleNamespace(
-        specification=SimpleNamespace(medium=medium, model_name="CO_LH"),
+        specification=SimpleNamespace(medium=medium, model_name="CO_LH", fit_scope="individual"),
+        inputs=SimpleNamespace(materials=("Pt100",)),
         inference_data=SimpleNamespace(posterior=None), parameter_specs={}, free_parameter_names=(),
     )
     observations = pd.DataFrame({"material": ["Pt100"], "rate": [0.5]})
-    points = pd.DataFrame({"rate_fraction_LH_median": [1.0]})
-    observable_points = pd.DataFrame({"observable": ["alpha", "delta_CO", ion_name]})
+    points = pd.DataFrame({"material": ["Pt100"], "rate_fraction_LH_median": [1.0]})
+    observable_points = pd.DataFrame({
+        "material": ["Pt100"] * 3, "observable": ["alpha", "delta_CO", ion_name],
+    })
     loo = SimpleNamespace(pointwise=pd.DataFrame({"material": ["Pt100"]}), loo_result=object())
     calibration = SimpleNamespace(pointwise=pd.DataFrame({"material": ["Pt100"], "loo_pit": [0.5]}))
 
@@ -115,12 +118,14 @@ def test_ptru_loo_without_pit_keeps_pointwise_plot_and_diagnostics(tmp_path, mon
     calls = []
     monkeypatch.setattr(ptru, "safe_plot", lambda _, name, *args, **kwargs: calls.append(name) or True)
     run = SimpleNamespace(
-        specification=SimpleNamespace(medium="acidic", model_name="CO_LH"),
+        specification=SimpleNamespace(medium="acidic", model_name="CO_LH", fit_scope="individual"),
+        inputs=SimpleNamespace(materials=("Pt100",)),
         inference_data=SimpleNamespace(posterior=None), parameter_specs={}, free_parameter_names=(),
     )
     loo = SimpleNamespace(pointwise=pd.DataFrame({"material": ["Pt100"]}), loo_result=object())
     ptru.plot_ptru_products(
-        run, pd.DataFrame(), pd.DataFrame(), tmp_path / "figures", "full", [], loo=loo,
+        run, pd.DataFrame(columns=["material"]), pd.DataFrame(columns=["material"]),
+        tmp_path / "figures", "full", [], loo=loo,
     )
     assert "Pt100/loo_pointwise" in calls
     assert "loo_diagnostics" in calls

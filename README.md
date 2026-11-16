@@ -246,21 +246,30 @@ The consolidated observable entry point replaces the earlier separate alpha, CO-
 
 PtRu experimental-preprocessing figures are exported as both PNG and SVG.
 
-### Pt100 Bayesian inference and validation
+### Unified PtRu Bayesian inference and validation
 
-The current Pt100 models use Todd's **selected** Pt100 observations for the requested medium; they do not pool alloy or Em measurements. See `scripts/README.md` for all options and checkpoint inspection.
+The PtRu inference stack uses `src/mkm/mechanisms/ptru.py`, `src/mkm/models/ptru.py`, and
+`src/mkm/workflows/ptru_fit.py` for Pt100, Pt66Ru33, and Pt50Ru50. Acidic HClO4 and
+basic KOH **always remain separate**. Individual and all-material fits share the existing
+linear-rate Normal likelihood and posterior checkpoint lifecycle.
 
 ```powershell
-python scripts/check_pt100_prior_predictive.py CO_ER_LH --medium acidic --draws 1000
-python scripts/fit_pt100_posterior.py CO_ER_LH --medium acidic
-python scripts/postprocess_pt100_posterior.py CO_ER_LH --medium acidic --plot-level full
-python scripts/postprocess_pt100_drc.py CO_ER_LH --medium acidic --check-half-step
-python scripts/validate_pt100_posterior.py CO_ER_LH --medium acidic --electrolyte-M 0.1 --co-mole-fraction 0.01
+python scripts/fit_ptru_posterior.py CO_ER_LH --medium acidic --material Pt100 --overwrite
+python scripts/fit_ptru_posterior.py CO_BF_ER_LH --medium basic --material Pt66Ru33 --overwrite
+python scripts/fit_ptru_posterior.py CO_BF_ER_LH --medium basic --all-materials --parameterization linear_xRu --error-structure material --overwrite
+python scripts/postprocess_ptru_posterior.py CO_BF_ER_LH --medium basic --all-materials --parameterization linear_xRu --error-structure material --plot-level full
 ```
 
-AgPd and Pt100 checkpoints validate model-defining source code, input data, and configuration identity strictly. A checkpoint can be resumed for finalization only under the required identity checks. Refactors to hashed model-building files can invalidate older checkpoints without changing the scientific equations; no automatic metadata migration is performed.
+Pooled physical parameterizations are `shared`, `independent`, and `linear_xRu`.
+Pure Pt excludes BF-only fits and does not sample inactive BF parameters under `independent`.
+Ru OH adsorption transfers one full electron, so no `q` or `beta_2_BF` is fitted.
+See `scripts/README.md` for prior prediction, standalone DRC, comparisons, LOCO, and
+`--exclude-materials` options.
 
-Standard preprocessing commands write lineage manifests containing hashes of raw inputs, configurations, source files, and generated products. Posterior postprocessing writes `postprocessing_manifest.yaml` and `tables/postprocessing_status.csv` to distinguish current outputs, skipped stages, warnings, and execution failures. Standalone DRC commands are available for both families; ordinary posterior postprocessing runs DRC by default (use `--skip-drc` to omit it).
+Strict checkpoint provenance tracks the unified model source, configuration, and data.
+Old Pt100 and alloy checkpoints are not automatically migrated; use `--overwrite` to
+create fresh checkpoints. Preprocessing and postprocessing retain their existing lineage,
+status, and failure manifests.
 
 ## Repository structure
 

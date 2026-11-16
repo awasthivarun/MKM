@@ -204,8 +204,8 @@ def test_ptru_paths_preserve_existing_layout(tmp_path, medium):
     assert paths.ptru_posterior_output_dir(medium, "CO_ER_LH") == (
         tmp_path / "results" / dataset / "posterior" / "individual" / "Pt100" / "CO_ER_LH"
     )
-    assert paths.ptru_model_config_path == tmp_path / "config" / "models" / "pt100.yaml"
-    assert paths.ptru_prior_config_path == tmp_path / "config" / "priors" / "pt100.yaml"
+    assert paths.ptru_model_config_path == tmp_path / "config" / "models" / "ptru.yaml"
+    assert paths.ptru_prior_config_path == tmp_path / "config" / "priors" / "ptru.yaml"
 
     assert paths.ptru_em_path(medium, "PtC_20pct") == (
         tmp_path / "data" / "processed" / dataset / "analysis"
@@ -213,14 +213,20 @@ def test_ptru_paths_preserve_existing_layout(tmp_path, medium):
     )
 
 
-def test_ptru_paths_reject_invalid_medium_and_unsupported_material(tmp_path):
+def test_ptru_paths_reject_invalid_medium_and_support_all_material_layout(tmp_path):
     paths = ProjectPaths(root=tmp_path)
-
     with pytest.raises(ValueError, match="medium"):
         paths.ptru_selected_path("neutral")
-
-    with pytest.raises(ValueError, match="Pt100"):
-        paths.ptru_posterior_output_dir("acidic", "CO_LH", material="Pt66Ru33")
-
-    with pytest.raises(ValueError, match="Unknown Pt100 mechanism"):
-        paths.ptru_posterior_output_dir("acidic", "CO_BF")
+    assert paths.ptru_posterior_output_dir("acidic", "CO_BF_ER_LH", "Pt66Ru33").parts[-3:] == (
+        "individual", "Pt66Ru33", "CO_BF_ER_LH",
+    )
+    assert paths.ptru_posterior_output_dir(
+        "basic", "CO_BF_ER_LH", material=None, fit_scope="all_materials",
+        parameterization="linear_xRu", error_structure="material",
+    ).parts[-4:] == ("all_materials", "linear_xRu", "material", "CO_BF_ER_LH")
+    assert paths.ptru_posterior_output_dir(
+        "acidic", "CO_BF", material=None, fit_scope="all_materials",
+        parameterization="independent", excluded_materials=("Pt100",),
+    ).name == "CO_BF_exclude_Pt100"
+    with pytest.raises(ValueError, match="parameterization"):
+        paths.ptru_posterior_output_dir("basic", "CO_LH", fit_scope="all_materials")

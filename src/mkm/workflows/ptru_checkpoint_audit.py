@@ -1,4 +1,4 @@
-"""Read-only comparison of Pt100 checkpoint provenance with the current fit.
+"""Read-only comparison of PtRu checkpoint provenance with the current fit.
 
 An audit never approves an old posterior for loading, resuming, or rewriting.
 Source changes require independent mathematical/numerical equivalence checks.
@@ -18,7 +18,7 @@ MODEL_FIELDS = ("family", "medium", "model_name", "assumptions")
 
 
 @dataclass(frozen=True)
-class Pt100CheckpointAudit:
+class PtRuCheckpointAudit:
     status: str
     blocking_differences: tuple[str, ...]
     source_differences: tuple[str, ...]
@@ -29,7 +29,7 @@ class Pt100CheckpointAudit:
         return self.status == "strict_match"
 
 
-def audit_pt100_checkpoint(saved, expected):
+def audit_ptru_checkpoint(saved, expected):
     """Classify metadata differences; never infer physical equivalence from a hash mismatch."""
     blocking = []
     source = []
@@ -76,9 +76,14 @@ def audit_pt100_checkpoint(saved, expected):
     else:
         status = "strict_match"
 
-    return Pt100CheckpointAudit(
+    return PtRuCheckpointAudit(
         status=status,
         blocking_differences=tuple(blocking),
         source_differences=tuple(source),
         provenance_differences=tuple(provenance),
     )
+
+
+# Historical name preserved for existing read-only audit consumers.
+Pt100CheckpointAudit = PtRuCheckpointAudit
+audit_pt100_checkpoint = audit_ptru_checkpoint

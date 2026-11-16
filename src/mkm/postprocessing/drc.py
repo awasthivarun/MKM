@@ -20,7 +20,8 @@ from mkm.models.agpd_basic import (
     get_agpd_prior_profile,
     is_agpd_independent_parameterization,
 )
-from mkm.models.ptru_registry import get_ptru_model_definition
+from mkm.mechanisms.ptru import PTRU_PARAMETER_CLASSES, evaluate_ptru_co
+from mkm.models.ptru import ptru_parameter_names
 from mkm.postprocessing.diagnostics import summarize_samples
 
 
@@ -429,26 +430,131 @@ def compute_transition_state_drc(
     )
 
 
+def compute_ptru_transition_state_drc(
+    inference_data, specification, point_inputs, model_points, config, priors, step_eV=1e-4,
+):
+    """PtRu TS DRC, including pointwise physical-parameter perturbations for pooled fits."""
+    model_name = specification.model_name
+    medium = specification.medium
+    param_class = PTRU_PARAMETER_CLASSES[model_name]
+    param_names = tuple(field.name for field in fields(param_class))
+    ru_by_material = np.array([
+        config["surface_composition"][material]["Ru_fraction"] for material in point_inputs.materials
+    ], dtype=float)
+    point_index = np.asarray(point_inputs.material_index, dtype=int)
+    ru_fraction = ru_by_material[point_index]
+    parameterization = specification.parameterization
+    is_pooled = specification.is_all_materials
+    vector_parameters = is_pooled and parameterization in ("independent", "linear_xRu")
+    symbols = {name: pt.dvector(name) if vector_parameters else pt.dscalar(name) for name in param_names}
+    evaluated = evaluate_ptru_co(
+        point_inputs, param_class(**symbols), config["temperature_K"], medium, model_name, ru_fraction,
+    )
+    function = pytensor.function(
+        [symbols[name] for name in param_names], evaluated.ln_rate, on_unused_input="raise",
+    )
+    controls = transition_state_controls(model_name)
+    if not vector_parameters:
+        return _compute_scalar_transition_state_drc(
+            inference_data, model_name, point_inputs, model_points, config["temperature_K"],
+            param_names, function, controls, step_eV,
+        )
+    if not np.isfinite(step_eV) or step_eV <= 0:
+        raise ValueError("DRC step must be positive and finite.")
+    posterior = _posterior_dataset(inference_data.posterior)
+    n_chains, n_draws = int(posterior.sizes["chain"]), int(posterior.sizes["draw"])
+    n_points = len(point_index)
+    draws = np.empty((n_chains, n_draws, len(controls), n_points), dtype=float)
+    if parameterization == "independent":
+        material_names = tuple(
+            f"{name}_{material}" for material in point_inputs.materials
+            for name in param_names if name in ptru_parameter_names(model_name, material)
+        )
+        samples = _posterior_scalar_parameter_draws(posterior, material_names)
+    else:
+        slope_names = tuple(f"{name}_xRu_slope" for name in param_names)
+        samples = _posterior_scalar_parameter_draws(posterior, (*param_names, *slope_names))
+        x_reference = float(config["parameterizations"]["linear_xRu"]["x_reference"])
+        x_shift = ru_fraction - x_reference
+        beta_spec = priors["prior_profiles"][medium]["parameters"].get("beta_2_ER", {})
+
+    for chain in range(n_chains):
+        for draw in range(n_draws):
+            effective = {}
+            for name in param_names:
+                if parameterization == "independent":
+                    available = [material for material in point_inputs.materials
+                                 if f"{name}_{material}" in samples]
+                    fallback = float(samples[f"{name}_{available[0]}"][chain, draw])
+                    by_material = np.array([
+                        float(samples[f"{name}_{material}"][chain, draw])
+                        if f"{name}_{material}" in samples else fallback
+                        for material in point_inputs.materials
+                    ])
+                    effective[name] = by_material[point_index]
+                else:
+                    value = float(samples[name][chain, draw])
+                    slope = float(samples[f"{name}_xRu_slope"][chain, draw])
+                    if name == "beta_2_ER":
+                        margin = min(value - beta_spec["lower"], beta_spec["upper"] - value)
+                        slope *= margin / max(abs(x_reference), abs(0.5 - x_reference))
+                    effective[name] = value + slope * x_shift
+
+            for control_index, control in enumerate(controls):
+                plus, minus = dict(effective), dict(effective)
+                plus[control.parameter] = effective[control.parameter] + step_eV
+                minus[control.parameter] = effective[control.parameter] - step_eV
+                rate_plus = _evaluate_parameter_set(function, param_names, plus)
+                rate_minus = _evaluate_parameter_set(function, param_names, minus)
+                draws[chain, draw, control_index] = (
+                    -K_B_EV_K * float(config["temperature_K"]) * (rate_plus - rate_minus) / (2 * step_eV)
+                )
+
+    data = xr.Dataset(
+        {"X_TS": (("chain", "draw", "control", "model_point"), draws)},
+        coords={
+            "chain": np.asarray(posterior.coords["chain"]), "draw": np.asarray(posterior.coords["draw"]),
+            "control": [control.name for control in controls],
+            "model_point": np.arange(n_points, dtype=np.int64),
+            "control_parameter": ("control", [control.parameter for control in controls]),
+            "control_label": ("control", [control.label for control in controls]),
+        },
+        attrs={"model_name": model_name, "parameterization": parameterization,
+               "temperature_K": float(config["temperature_K"]), "step_eV": step_eV,
+               "definition": "X_TS = -kBT * d ln(rate) / d G_TS_effective"},
+    )
+    return TransitionStateDRC(
+        draws=data, summary=_summarize_transition_state_draws(data, model_points),
+        checks=_build_transition_state_checks(data, step_eV),
+    )
+
+
 def compute_pt100_transition_state_drc(
     inference_data, model_name, medium, point_inputs, model_points, temperature_K, step_eV=1e-4,
 ):
-    """Existing AgPd transition-state methodology applied to Pt100 in either medium."""
-    if medium not in ("acidic", "basic"):
-        raise ValueError(f"Unsupported Pt100 medium: {medium}")
-    definition = get_ptru_model_definition(model_name)
-    parameter_names = tuple(field.name for field in fields(definition.parameter_class))
-    symbols = {name: pt.dscalar(name) for name in parameter_names}
-    evaluated = definition.evaluator(
-        state=point_inputs, parameters=definition.parameter_class(**symbols),
-        temperature_K=temperature_K, medium=medium, model_name=model_name,
+    """Compatibility wrapper for legacy pure-Pt DRC callers."""
+    from types import SimpleNamespace
+
+    spec = SimpleNamespace(model_name=model_name, medium=medium, parameterization=None, is_all_materials=False)
+    config = {"temperature_K": temperature_K, "surface_composition": {"Pt100": {"Ru_fraction": 0.0}}}
+    return compute_ptru_transition_state_drc(
+        inference_data, spec, point_inputs, model_points, config, {}, step_eV,
     )
-    function = pytensor.function(
-        [symbols[name] for name in parameter_names], evaluated.ln_rate, on_unused_input="raise",
-    )
-    controls = transition_state_controls(model_name)
-    return _compute_scalar_transition_state_drc(
-        inference_data, model_name, point_inputs, model_points, temperature_K,
-        parameter_names, function, controls, step_eV,
+
+
+def compute_ptru_alloy_transition_state_drc(
+    inference_data, model_name, medium, point_inputs, model_points,
+    temperature_K, *, ru_fraction, step_eV=1e-4,
+):
+    """Compatibility wrapper for legacy single-alloy DRC callers."""
+    from types import SimpleNamespace
+
+    spec = SimpleNamespace(model_name=model_name, medium=medium, parameterization=None, is_all_materials=False)
+    config = {"temperature_K": temperature_K, "surface_composition": {
+        material: {"Ru_fraction": ru_fraction} for material in point_inputs.materials
+    }}
+    return compute_ptru_transition_state_drc(
+        inference_data, spec, point_inputs, model_points, config, {}, step_eV,
     )
 
 

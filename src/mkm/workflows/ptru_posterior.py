@@ -1,30 +1,23 @@
-"""PtRu posterior provenance, checkpoint validation, and loading."""
+"""Unified PtRu posterior provenance, validation, and deterministic reconstruction."""
 
+from copy import deepcopy
 from dataclasses import dataclass
 
 from mkm.inference.likelihoods import RATE_NORMAL
 from mkm.inference.posterior import (
-    compute_posterior_deterministics,
-    load_inference_data,
+    compute_posterior_deterministics, load_inference_data, validate_inference_data_alignment,
 )
-from mkm.models.ptru_registry import ptru_model_metadata
+from mkm.models.ptru import ptru_parameterization_metadata
 from mkm.provenance import (
-    build_fit_metadata,
-    read_run_metadata,
-    sha256_file,
-    sha256_mapping,
-    PT100_MODEL_SOURCE_FILES as _PT100_MODEL_SOURCE_FILES,
+    PTRU_MODEL_SOURCE_FILES, build_fit_metadata, read_run_metadata, sha256_mapping,
     source_file_hashes, validate_fit_input_identity,
 )
 from mkm.workflows.posterior_lifecycle import RUN_STATUS_COMPLETE
-from mkm.workflows.pt100_fit import build_pt100_fit
-
-
-PT100_SOURCE_FILES = _PT100_MODEL_SOURCE_FILES
+from mkm.workflows.ptru_fit import build_ptru_fit
 
 
 @dataclass(frozen=True)
-class Pt100PosteriorRun:
+class PtRuPosteriorRun:
     specification: object
     metadata: dict
     output_dir: object
@@ -36,158 +29,93 @@ class Pt100PosteriorRun:
     free_parameter_names: tuple[str, ...]
 
 
-def pt100_model_specification(paths, fit):
+def ptru_model_specification(paths, fit):
+    spec = fit.specification
     return {
-        "family": "Pt100",
-        "medium": fit.specification.medium,
-        "model_name": fit.specification.model_name,
-        "assumptions": fit.config["mechanism_assumptions"],
-        "registry": ptru_model_metadata(fit.specification.model_name),
-        "source_sha256": source_file_hashes(paths.root, PT100_SOURCE_FILES),
+        "family": "PtRu", "medium": spec.medium, "model_name": spec.model_name,
+        "materials": list(spec.materials), "assumptions": deepcopy(fit.config["mechanism_assumptions"]),
+        "surface_composition": {material: deepcopy(fit.config["surface_composition"][material])
+                                for material in spec.materials},
+        "source_sha256": source_file_hashes(paths.root, PTRU_MODEL_SOURCE_FILES),
     }
 
 
-def build_pt100_run_metadata(paths, fit, sampler):
+def build_ptru_run_metadata(paths, fit, sampler):
+    spec = fit.specification
     return build_fit_metadata(
-        root=paths.root,
-        fit_scope=fit.specification.fit_scope,
-        materials=fit.inputs.materials,
-        model_name=fit.specification.model_name,
-        error_structure=fit.specification.error_structure,
-        data_path=fit.data_path,
-        model_config_path=fit.model_config_path,
+        root=paths.root, fit_scope=spec.fit_scope, materials=fit.inputs.materials,
+        model_name=spec.model_name, error_structure=spec.error_structure,
+        data_path=fit.data_path, model_config_path=fit.model_config_path,
         model_config_paths=(fit.model_config_path, fit.prior_config_path),
-        sampler=sampler,
-        parameterization=fit.specification.parameterization,
-        model_specification=pt100_model_specification(paths, fit),
-        prior_specification=fit.parameter_specs,
+        sampler=sampler, parameterization=spec.parameterization,
+        parameterization_specification=ptru_parameterization_metadata(fit.config, spec),
+        model_specification=ptru_model_specification(paths, fit), prior_specification=fit.parameter_specs,
     )
 
 
-def validate_pt100_run_metadata(
-    metadata, paths, fit, *, allowed_statuses=(RUN_STATUS_COMPLETE,),
-):
-    model_specification = pt100_model_specification(paths, fit)
-    prior_specification = fit.parameter_specs
+def validate_ptru_run_metadata(metadata, paths, fit, *, allowed_statuses=(RUN_STATUS_COMPLETE,)):
     spec = fit.specification
-
-    expected = {
-        "fit_scope": spec.fit_scope,
-        "materials": list(fit.inputs.materials),
-        "model": spec.model_name,
-        "likelihood": RATE_NORMAL,
-        "error_structure": spec.error_structure,
-        "parameterization": spec.parameterization,
+    model_specification = ptru_model_specification(paths, fit)
+    parameterization_specification = ptru_parameterization_metadata(fit.config, spec)
+    resolved = {
         "model_specification": model_specification,
-        "prior_specification": prior_specification,
-        "resolved_fit_sha256": sha256_mapping({
-            "model_specification": model_specification,
-            "parameterization_specification": None,
-            "prior_specification": prior_specification,
-            "error_structure": spec.error_structure,
-            "likelihood": RATE_NORMAL,
-        }),
+        "parameterization_specification": parameterization_specification,
+        "prior_specification": fit.parameter_specs,
+        "error_structure": spec.error_structure,
+        "likelihood": RATE_NORMAL,
     }
-
-    mismatches = [
-        key for key, value in expected.items()
-        if metadata.get(key) != value
-    ]
-
+    expected = {
+        "fit_scope": spec.fit_scope, "materials": list(fit.inputs.materials),
+        "model": spec.model_name, "likelihood": RATE_NORMAL,
+        "error_structure": spec.error_structure, "parameterization": spec.parameterization,
+        "parameterization_specification": parameterization_specification,
+        "model_specification": model_specification, "prior_specification": fit.parameter_specs,
+        "resolved_fit_sha256": sha256_mapping(resolved),
+    }
+    mismatches = [name for name, value in expected.items() if metadata.get(name) != value]
     mismatches.extend(validate_fit_input_identity(
         metadata, paths.root, fit.data_path, fit.model_config_path,
         (fit.model_config_path, fit.prior_config_path),
     ))
-
     if metadata.get("status") not in allowed_statuses:
         mismatches.append("status")
-
     if mismatches:
-        raise ValueError(
-            "Posterior checkpoint does not match the current Pt100 fit: "
-            + ", ".join(mismatches)
-        )
+        raise ValueError("PtRu checkpoint mismatch: " + ", ".join(mismatches))
 
 
-
-def load_pt100_posterior_run(
-    paths,
-    medium,
-    model_name,
-    *,
-    reconstruct_model_rate=False,
-    reconstruct_pointwise=False,
-    progressbar=True,
+def load_ptru_posterior_run(
+    paths, specification, *, reconstruct_model_rate=False, reconstruct_pointwise=False, progressbar=True,
 ):
-    fit = build_pt100_fit(paths, medium, model_name)
+    fit = build_ptru_fit(paths, specification)
     posterior_path = fit.output_dir / "posterior.nc"
-    metadata_path = fit.output_dir / "run_metadata.yaml"
-
     if not posterior_path.exists():
         raise FileNotFoundError(f"Posterior not found: {posterior_path}")
-
-    metadata = read_run_metadata(metadata_path)
-    validate_pt100_run_metadata(metadata, paths, fit)
-
+    metadata = read_run_metadata(fit.output_dir / "run_metadata.yaml")
+    validate_ptru_run_metadata(metadata, paths, fit)
     inference_data = load_inference_data(posterior_path)
-    built = fit.built_model
-    free_parameter_names = tuple(variable.name for variable in built.model.free_RVs)
-
-    missing_free = [
-        name for name in free_parameter_names
-        if name not in inference_data.posterior
-    ]
-    if missing_free:
-        raise ValueError(f"Posterior is missing fitted variables: {missing_free}")
-
+    names = tuple(variable.name for variable in fit.built_model.model.free_RVs)
+    missing = [name for name in names if name not in inference_data.posterior]
+    if missing:
+        raise ValueError(f"PtRu posterior is missing fitted variables: {missing}")
     deterministic_names = []
     if reconstruct_model_rate or reconstruct_pointwise:
         deterministic_names.append("ln_rate_model")
     if reconstruct_pointwise:
-        deterministic_names.extend(built.mechanism_result.pointwise)
-
-    missing = [
-        name for name in dict.fromkeys(deterministic_names)
-        if name not in inference_data.posterior
-    ]
-
-    if missing:
+        deterministic_names.extend(fit.built_model.mechanism_result.pointwise)
+    absent = [name for name in dict.fromkeys(deterministic_names) if name not in inference_data.posterior]
+    if absent:
         posterior = compute_posterior_deterministics(
-            inference_data,
-            built,
-            var_names=missing,
-            backend="numba",
-            progressbar=progressbar,
+            inference_data, fit.built_model, var_names=absent, backend="numba", progressbar=progressbar,
         )
         if hasattr(posterior, "to_dataset"):
             posterior = posterior.to_dataset()
-
         inference_data = inference_data.copy()
         inference_data.posterior = posterior
-
-    if not hasattr(inference_data, "log_likelihood"):
-        raise ValueError(
-            "Posterior does not contain pointwise log likelihood. "
-            "Resume the fit before postprocessing."
-        )
-
-    if "rate_observed" not in inference_data.log_likelihood:
-        raise ValueError(
-            "Posterior log likelihood does not contain 'rate_observed'. "
-            "Resume the fit before postprocessing."
-        )
-
-    from mkm.inference.posterior import validate_inference_data_alignment
+    if not hasattr(inference_data, "log_likelihood") or "rate_observed" not in inference_data.log_likelihood:
+        raise ValueError("PtRu posterior lacks rate_observed log likelihood; resume fitting first.")
     validate_inference_data_alignment(inference_data)
-
-    return Pt100PosteriorRun(
-        specification=fit.specification,
-        metadata=metadata,
-        output_dir=fit.output_dir,
-        model_data=fit.model_data,
-        inputs=fit.inputs,
-        built_model=built,
-        inference_data=inference_data,
-        parameter_specs=fit.parameter_specs,
-        free_parameter_names=free_parameter_names,
+    return PtRuPosteriorRun(
+        specification=specification, metadata=metadata, output_dir=fit.output_dir,
+        model_data=fit.model_data, inputs=fit.inputs, built_model=fit.built_model,
+        inference_data=inference_data, parameter_specs=fit.parameter_specs, free_parameter_names=names,
     )

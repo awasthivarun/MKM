@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import xarray as xr
 
 from mkm.inference.prior_predictive import summarize_prior_model_points
-from mkm.models.ptru_registry import available_ptru_models
+from mkm.models.ptru import available_ptru_models
 from mkm.project_paths import ProjectPaths
 from mkm.workflows.ptru_validation import (
     build_ptru_loco_fit,
@@ -51,11 +51,15 @@ def test_ptru_loco_excludes_all_replicates_and_potentials():
 
 def test_ptru_loco_rejects_missing_condition_and_lomo():
     selected = synthetic_selected()
-    with pytest.raises(ValueError, match="No Pt100 observations"):
+    with pytest.raises(ValueError, match="LOCO requires"):
         split_ptru_loco(selected, 0.2, 0.01)
-    with pytest.raises(ValueError, match="only Pt100"):
-        split_ptru_loco(selected.assign(material="Pt66Ru33"), 0.1, 0.01)
-    with pytest.raises(ValueError, match="training condition"):
+    alloy = selected.assign(material="Pt66Ru33")
+    training, heldout = split_ptru_loco(alloy, 0.1, 0.01)
+    assert len(training) + len(heldout) == len(alloy)
+    mixed = pd.concat([selected, alloy], ignore_index=True)
+    with pytest.raises(ValueError, match="exactly one material"):
+        split_ptru_loco(mixed, 0.1, 0.01)
+    with pytest.raises(ValueError, match="both training and held-out observations"):
         split_ptru_loco(selected.iloc[:6], 0.1, 0.01)
 
 
@@ -63,12 +67,14 @@ def test_ptru_validation_path_is_separate_and_material_restricted(tmp_path):
     paths = ProjectPaths(root=tmp_path)
     output = ptru_validation_output_dir(paths, "acidic", "CO_LH", 0.1, 0.01)
     assert output == (
-        tmp_path / "results" / "PtRu_COOx_acidic" / "validation" / "loco" / "CO_LH"
+        tmp_path / "results" / "PtRu_COOx_acidic" / "validation" / "loco" / "Pt100" / "CO_LH"
         / "electrolyte_0.1M__CO_0.01"
     )
-    assert available_ptru_models(fit_scope="all_materials") == ()
-    with pytest.raises(ValueError, match="Unknown Pt100 mechanism"):
-        ptru_validation_output_dir(paths, "acidic", "CO_BF", 0.1, 0.01)
+    assert "CO_BF_ER_LH" in available_ptru_models()
+    from mkm.workflows.ptru_fit import load_ptru_config, resolve_ptru_fit_specification
+    config, _ = load_ptru_config(ProjectPaths.discover(__file__))
+    with pytest.raises(ValueError, match="Pt100 supports"):
+        resolve_ptru_fit_specification(config, "acidic", "CO_BF", material="Pt100")
 
 
 def test_ptru_loco_fit_uses_training_points_only():
@@ -107,8 +113,8 @@ def test_ptru_loco_checkpoint_tracks_training_and_heldout_content(monkeypatch):
     fit = SimpleNamespace(model_data=training_data)
 
     # Test the LOCO-specific fingerprint contract separately from full-fit provenance.
-    monkeypatch.setattr(workflow, "build_pt100_run_metadata", lambda *args: {})
-    monkeypatch.setattr(workflow, "validate_pt100_run_metadata", lambda *args, **kwargs: None)
+    monkeypatch.setattr(workflow, "build_ptru_run_metadata", lambda *args: {})
+    monkeypatch.setattr(workflow, "validate_ptru_run_metadata", lambda *args, **kwargs: None)
 
     metadata = workflow.ptru_loco_metadata(paths, fit, {}, 0.1, 0.01, heldout_data)
     assert len(metadata["training_observations_sha256"]) == 64
@@ -149,13 +155,15 @@ def test_ptru_loco_checkpoint_tracks_training_and_heldout_content(monkeypatch):
 
 
 def test_ptru_loco_and_full_fit_share_the_model_building_pipeline(monkeypatch, tmp_path):
-    from mkm.workflows import pt100_fit
+    from mkm.workflows import ptru_fit
 
     paths = ProjectPaths.discover(__file__)
     selected = synthetic_selected()
-    monkeypatch.setattr(pt100_fit.pd, "read_parquet", lambda _: selected)
+    monkeypatch.setattr(ptru_fit.pd, "read_parquet", lambda _: selected)
 
-    full = pt100_fit.build_pt100_fit(paths, "acidic", "CO_LH")
+    config, _ = ptru_fit.load_ptru_config(paths)
+    spec = ptru_fit.resolve_ptru_fit_specification(config, "acidic", "CO_LH")
+    full = ptru_fit.build_ptru_fit(paths, spec)
     validation = build_ptru_loco_fit(paths, "acidic", "CO_LH", selected, tmp_path / "loco")
 
     assert validation.output_dir == tmp_path / "loco"

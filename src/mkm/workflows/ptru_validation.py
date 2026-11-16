@@ -1,77 +1,55 @@
-"""Pt100-only leave-one-condition-out (LOCO) validation helpers."""
-
+"""PtRu individual-material leave-one-condition-out validation helpers."""
 
 import numpy as np
 
 from mkm.provenance import model_data_observation_sha256, sha256_file
-from mkm.workflows.pt100_fit import (
-    _build_pt100_fit_from_selected,
-    load_pt100_config,
-    resolve_pt100_fit_specification,
-)
-from mkm.workflows.ptru_posterior import build_pt100_run_metadata, validate_pt100_run_metadata
+from mkm.workflows.ptru_fit import build_ptru_fit, load_ptru_config, resolve_ptru_fit_specification
+from mkm.workflows.ptru_posterior import build_ptru_run_metadata, validate_ptru_run_metadata
 
 
 def split_ptru_loco(selected, electrolyte_M, co_mole_fraction):
-    """Hold out every Pt100 replicate/potential in one electrolyte/CO condition."""
-    if selected.empty or set(selected["material"]) != {"Pt100"}:
-        raise ValueError("Pt100 LOCO requires selected data containing only Pt100.")
-
-    electrolyte_M = float(electrolyte_M)
-    co_mole_fraction = float(co_mole_fraction)
-    if not np.isfinite(electrolyte_M) or electrolyte_M <= 0:
+    """Hold out all replicates and potentials for one electrolyte/CO condition."""
+    if selected.empty or selected["material"].nunique() != 1:
+        raise ValueError("PtRu individual LOCO requires observations from exactly one material.")
+    concentration, co_fraction = float(electrolyte_M), float(co_mole_fraction)
+    if not np.isfinite(concentration) or concentration <= 0:
         raise ValueError("Holdout electrolyte concentration must be finite and positive.")
-    if not np.isfinite(co_mole_fraction) or not 0 < co_mole_fraction <= 1:
-        raise ValueError("Holdout CO mole fraction must lie in (0, 1].")
-
+    if not np.isfinite(co_fraction) or not 0 < co_fraction <= 1:
+        raise ValueError("Holdout CO mole fraction must be in (0, 1].")
     holdout = (
-        np.isclose(selected["C_electrolyte_M"].to_numpy(float), electrolyte_M, rtol=0, atol=1e-12)
-        & np.isclose(selected["CO_mole_fraction"].to_numpy(float), co_mole_fraction, rtol=0, atol=1e-12)
+        np.isclose(selected["C_electrolyte_M"].to_numpy(float), concentration, rtol=0, atol=1e-12)
+        & np.isclose(selected["CO_mole_fraction"].to_numpy(float), co_fraction, rtol=0, atol=1e-12)
     )
-    if not holdout.any():
-        raise ValueError(f"No Pt100 observations at electrolyte={electrolyte_M}, CO={co_mole_fraction}.")
-    if holdout.all():
-        raise ValueError("LOCO requires at least one training condition.")
+    if not holdout.any() or holdout.all():
+        raise ValueError("LOCO requires both training and held-out observations.")
     return selected.loc[~holdout].copy(), selected.loc[holdout].copy()
 
 
-def ptru_validation_output_dir(paths, medium, model_name, electrolyte_M, co_mole_fraction):
-    """Keep Pt100 validation results apart from fitted posteriors."""
-    # Validate the medium/mechanism using the already-established P1 path contract.
-    paths.ptru_posterior_output_dir(medium, model_name)
-    concentration = float(electrolyte_M)
-    co_fraction = float(co_mole_fraction)
+def ptru_validation_output_dir(paths, medium, model_name, electrolyte_M, co_mole_fraction, material="Pt100"):
+    paths.ptru_posterior_output_dir(medium, model_name, material)
+    concentration, co_fraction = float(electrolyte_M), float(co_mole_fraction)
     if not np.isfinite(concentration) or concentration <= 0:
-        raise ValueError("Electrolyte concentration must be finite and positive.")
+        raise ValueError("Electrolyte concentration must be positive and finite.")
     if not np.isfinite(co_fraction) or not 0 < co_fraction <= 1:
         raise ValueError("CO mole fraction must lie in (0, 1].")
-    condition = f"electrolyte_{concentration:.12g}M__CO_{co_fraction:.12g}"
-    return paths.ptru_results_root(medium) / "validation" / "loco" / model_name / condition
+    label = f"electrolyte_{concentration:.12g}M__CO_{co_fraction:.12g}"
+    return paths.ptru_results_root(medium) / "validation" / "loco" / material / model_name / label
 
 
-def build_ptru_loco_fit(paths, medium, model_name, selected_training, output_dir):
-    """Build an actual training-data fit; never reuse the full-data likelihood."""
-    config, prior_config = load_pt100_config(paths)
-    specification = resolve_pt100_fit_specification(config, medium, model_name)
-    if selected_training.empty or set(selected_training["material"]) != {"Pt100"}:
-        raise ValueError("Pt100 LOCO training data must contain Pt100 observations only.")
-    if "medium" in selected_training and not selected_training["medium"].eq(medium).all():
-        raise ValueError("Training data contain observations from another medium.")
-
-    return _build_pt100_fit_from_selected(
-        paths, config, prior_config, specification, selected_training,
-        paths.ptru_selected_path(medium), output_dir,
-    )
+def build_ptru_loco_fit(paths, medium, model_name, selected_training, output_dir, material="Pt100"):
+    config, _ = load_ptru_config(paths)
+    spec = resolve_ptru_fit_specification(config, medium, model_name, material=material)
+    if selected_training.empty or set(selected_training["material"]) != {material}:
+        raise ValueError("LOCO training observations must contain only the requested PtRu material.")
+    return build_ptru_fit(paths, spec, selected=selected_training, output_dir=output_dir)
 
 
 _model_data_observation_sha256 = model_data_observation_sha256
 
 
 def _ptru_loco_identity(paths, fit, electrolyte_M, co_mole_fraction, heldout_data):
-    """Identify both subsets, independently of the full selected-data file hash."""
     return {
-        "validation_scheme": "loco",
-        "holdout_electrolyte_M": float(electrolyte_M),
+        "validation_scheme": "loco", "holdout_electrolyte_M": float(electrolyte_M),
         "holdout_co_mole_fraction": float(co_mole_fraction),
         "n_training_observations": len(fit.model_data.observations),
         "n_heldout_observations": len(heldout_data.observations),
@@ -82,8 +60,7 @@ def _ptru_loco_identity(paths, fit, electrolyte_M, co_mole_fraction, heldout_dat
 
 
 def ptru_loco_metadata(paths, fit, sampler, electrolyte_M, co_mole_fraction, heldout_data):
-    """Record source-file provenance and exact canonical LOCO training/holdout subsets."""
-    metadata = build_pt100_run_metadata(paths, fit, sampler)
+    metadata = build_ptru_run_metadata(paths, fit, sampler)
     metadata.update(_ptru_loco_identity(paths, fit, electrolyte_M, co_mole_fraction, heldout_data))
     return metadata
 
@@ -91,8 +68,8 @@ def ptru_loco_metadata(paths, fit, sampler, electrolyte_M, co_mole_fraction, hel
 def validate_ptru_loco_metadata(
     metadata, paths, fit, electrolyte_M, co_mole_fraction, heldout_data, *, allowed_statuses,
 ):
-    validate_pt100_run_metadata(metadata, paths, fit, allowed_statuses=allowed_statuses)
+    validate_ptru_run_metadata(metadata, paths, fit, allowed_statuses=allowed_statuses)
     expected = _ptru_loco_identity(paths, fit, electrolyte_M, co_mole_fraction, heldout_data)
     mismatches = [key for key, value in expected.items() if metadata.get(key) != value]
     if mismatches:
-        raise ValueError(f"Pt100 LOCO checkpoint split/provenance mismatch: {', '.join(mismatches)}.")
+        raise ValueError("PtRu LOCO checkpoint split/provenance mismatch: " + ", ".join(mismatches))

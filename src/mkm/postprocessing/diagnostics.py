@@ -14,6 +14,10 @@ COVERAGE_VARIABLES = (
     "theta_empty_Pd",
     "theta_OH_Ag",
     "theta_empty_Ag",
+    "theta_OH_Pt",
+    "theta_empty_Pt",
+    "theta_OH_Ru",
+    "theta_empty_Ru",
     "theta_OH",
     "theta_empty",
 )
@@ -331,6 +335,7 @@ def build_balance_summary(posterior):
         "Pd_site_balance": ("theta_CO", "theta_OH_Pd", "theta_empty_Pd"),
         "Ag_site_balance": ("theta_OH_Ag", "theta_empty_Ag"),
         "Pt_site_balance": ("theta_CO", "theta_OH", "theta_empty"),
+        "Ru_site_balance": ("theta_OH_Ru", "theta_empty_Ru"),
     }
 
     for label, variables in balance_definitions.items():

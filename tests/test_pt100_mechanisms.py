@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from mkm.constants import H_J_S, K_B_EV_K, K_B_J_K
-from mkm.mechanisms.pt100 import PT100_PARAMETER_CLASSES, evaluate_pt100_co
+from mkm.mechanisms.ptru import PT100_PARAMETER_CLASSES, evaluate_pt100_co
 from mkm.model_inputs import ModelPointInputs
 
 
@@ -161,14 +161,14 @@ def test_pt100_invalid_material_is_rejected(medium, model_name):
 
 
 def test_pt100_invalid_medium_is_rejected():
-    with pytest.raises(ValueError, match="Unsupported medium"):
+    with pytest.raises(ValueError, match="Unknown PtRu medium"):
         evaluate_pt100_co(
             make_inputs(), make_parameters("CO_LH"), TEMPERATURE_K, "neutral", "CO_LH",
         )
 
 
 def test_pt100_unknown_mechanism_is_rejected():
-    with pytest.raises(ValueError, match="Unknown Pt100 mechanism"):
+    with pytest.raises(ValueError, match="Pure Pt evaluation"):
         evaluate_pt100_co(
             make_inputs(), make_parameters("CO_LH"), TEMPERATURE_K, "acidic", "CO_BF",
         )

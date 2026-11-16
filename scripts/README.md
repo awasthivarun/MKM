@@ -401,14 +401,13 @@ python scripts/fit_agpd_posterior.py CO_BF_ER_LH --all-materials --parameterizat
 The corresponding result stays in the usual all-material directory and uses a compact model-leaf suffix such as `CO_BF_ER_LH__no_Ag10Pd90_Ag90Pd10`. Pass the same `--exclude-materials` list when postprocessing. `postprocess_agpd_posterior.py` now runs the standard products, transition-state DRC products, and all-material composition-parameter products in one command by default. Use `--skip-drc` or `--skip-composition` only when needed.
 
 
-## Pt100 / PtRu workflows (acidic and basic electrolyte)
+## Unified PtRu workflows (Pt100, Pt66Ru33, Pt50Ru50)
 
-Only **Pt100** is currently available for Bayesian fitting. Todd's PtRu-alloy data
-and Em's Pt/C preparations are preprocessed independently; they must not be
-silently included in a Pt100 fit. AgPd retains its own composition and
-all-material model paths.
+PtRu uses one mechanism registry, fit builder, and family of CLIs for all three Todd materials.
+Both acidic and basic data have separate models, prior profiles, checkpoints, and output trees;
+**never pool acid with base**. Em's Pt/C preparations are preprocessed separately and are not fitted here.
 
-### Preprocessing and diagnostics
+### Preprocessing
 
 ```powershell
 python scripts/process_ptru_todd.py
@@ -418,85 +417,60 @@ python scripts/plot_ptru_todd.py
 python scripts/plot_ptru_observables.py
 ```
 
-Todd's configured acidic Pt100 low-potential selection is applied before
-fitting. Em preparations are not merged or truncated. Check source files,
-concentration/activity conventions, and rate-normalization units before fitting.
-
-### Fitting and postprocessing
+### Individual-material fitting (including pure Pt)
 
 ```powershell
-python scripts/check_pt100_prior_predictive.py CO_ER_LH --medium acidic --draws 1000
-python scripts/fit_pt100_posterior.py CO_ER_LH --medium acidic
-python scripts/postprocess_pt100_posterior.py CO_ER_LH --medium acidic --plot-level full
+python scripts/check_ptru_prior_predictive.py CO_ER_LH --medium acidic --material Pt100 --draws 1000
+python scripts/fit_ptru_posterior.py CO_ER_LH --medium acidic --material Pt100 --overwrite
+python scripts/postprocess_ptru_posterior.py CO_ER_LH --medium acidic --material Pt100 --plot-level full
+python scripts/fit_ptru_posterior.py CO_BF_ER_LH --medium basic --material Pt66Ru33 --overwrite
+python scripts/postprocess_ptru_posterior.py CO_BF_ER_LH --medium basic --material Pt66Ru33 --plot-level full
 ```
 
-The prior-predictive check should be reviewed **before** starting an expensive
-fit. The linear-rate Normal likelihood is shared with AgPd, but Pt100 presently
-uses only a shared error structure. Postprocessing uses the shared 80% and 95%
-HDI summaries, not the old Pt100 equal-tail quantile convention. Pt100 DRC
-runs with normal posterior postprocessing unless `--skip-drc` is provided.
+Pure Pt supports only `CO_LH`, `CO_ER`, and `CO_ER_LH`. Both alloys support all seven
+BF/ER/LH pathway combinations. Ru OH adsorption transfers **one full electron**; BF coupling
+is chemical, and there is **no fitted `q` or `beta_2_BF`**. Pt and Ru site balances are distinct,
+with the nominal Ru fraction used as a provisional BF-neighbor availability factor. Rates are
+normalized per Pt CO adsorption site.
 
-### Standalone Pt100 transition-state DRC
+### All-material fits within one electrolyte medium
 
 ```powershell
-python scripts/postprocess_pt100_drc.py CO_ER_LH --medium acidic --check-half-step
+python scripts/fit_ptru_posterior.py CO_ER_LH --medium acidic --all-materials --parameterization shared --error-structure shared --overwrite
+python scripts/fit_ptru_posterior.py CO_BF_ER_LH --medium basic --all-materials --parameterization linear_xRu --error-structure material --overwrite
+python scripts/postprocess_ptru_posterior.py CO_BF_ER_LH --medium basic --all-materials --parameterization linear_xRu --error-structure material --plot-level full
+python scripts/fit_ptru_posterior.py CO_BF_ER_LH --medium acidic --all-materials --parameterization independent --error-structure shared --overwrite
 ```
 
-Use `--step-eV`, `--save-draws`, and `--skip-plots` as needed. The same
-command works in basic medium and for the existing `CO_LH` and `CO_ER` models.
+`shared` uses one physical parameter vector across materials. `independent` fits separate
+physical parameters for each material, omitting BF-only parameters on Pt100 and requiring
+shared likelihood errors. `linear_xRu` varies physical parameters with nominal Ru fraction.
+The `material` error structure fits material-specific rate-normal noise scales. For a BF-only
+model (`CO_BF`), exclude pure Pt using `--exclude-materials Pt100`; otherwise it would have
+zero modeled CO oxidation rate. Optional material exclusions are supported for other pooled
+fits as well. `--overwrite` removes the selected checkpoint folder; `--resume` and
+`--overwrite` are mutually exclusive.
 
-### Posterior checkpoint provenance
-
-Current AgPd and Pt100 checkpoints include source, configuration, and data hashes as well as resolved-fit identity.
-A posterior produced with the earlier implementation will ordinarily fail
-strict validation with `model_specification` and `resolved_fit_sha256`
-mismatches. Inspect such a checkpoint without changing it:
+### Diagnostics and validation
 
 ```powershell
-python scripts/inspect_pt100_checkpoint.py CO_ER_LH --medium acidic
+python scripts/postprocess_ptru_drc.py CO_ER_LH --medium acidic --material Pt100 --check-half-step
+python scripts/compare_ptru_models.py --medium acidic --material Pt100 --comparison-name pathways --run LH,CO_LH --run ER,CO_ER --run ER_LH,CO_ER_LH
+python scripts/inspect_ptru_checkpoint.py CO_ER_LH --medium acidic --material Pt100
+python scripts/validate_ptru_posterior.py CO_ER_LH --medium acidic --material Pt100 --electrolyte-M 0.1 --co-mole-fraction 0.01
 ```
 
-The audit distinguishes changes to inputs, prior specification, model
-assumptions, source code, and derived fit hashes. Strict validation also
-applies to AgPd checkpoints; legacy checkpoints are not silently migrated. A
-`source_change_unverified` result means **the old and current implementations
-have not been shown to be mathematically or numerically equivalent**. It is
-not permission to override checkpoint validation, relabel metadata, resume
-sampling, or interpret old posterior predictions under new code. Retain the
-original checkpoint until independent equivalence checks are available.
-
-### Comparison and validation
-
-```powershell
-python scripts/compare_pt100_models.py --medium acidic --comparison-name pathways --run LH,CO_LH --run ER,CO_ER --run ER_LH,CO_ER_LH
-python scripts/validate_pt100_posterior.py CO_ER_LH --medium acidic --electrolyte-M 0.1 --co-mole-fraction 0.01
-```
-
-Comparison requires completed, compatible checkpoints with identical ordered
-observations. Pointwise PSIS-LOO leaves out individual measured rates, **not**
-correlated potential curves or whole electrolyte/CO conditions. Check Pareto-k
-reliability, and do not interpret ELPD differences as mechanistic proof.
-Condition-level LOCO refits all remaining conditions and excludes every
-replicate and potential point from the held-out condition. Pt100 LOMO and
-composition-dependent Bayesian fits are not implemented.
-
-### Run and preprocessing manifests
-
-Preprocessing commands write YAML manifests identifying raw input hashes,
-configuration/source hashes, output hashes, and row counts. After posterior
-postprocessing, inspect `postprocessing_manifest.yaml` and
-`tables/postprocessing_status.csv` for generated products and stage status.
-Requested computation failures raise an error; unreliable PSIS-LOO is
-reported separately as a statistical warning.
+Pass the same `--all-materials`, `--parameterization`, `--error-structure`, and
+`--exclude-materials` arguments for diagnostic scripts operating on a pooled posterior.
+LOCO validation currently supports one selected PtRu material at a time, not pooled refits.
+Strict source/configuration/data hashes apply; checkpoints created with the deleted dedicated
+Pt100/alloy modules must be regenerated under the unified source hashes. Pointwise PSIS-LOO
+leaves out measured rates, not entire correlated curves or conditions.
 
 ### Regression tests
 
-The repository includes synthetic tests of Pt100 mechanism behavior, the
-shared CO steady-state solver, Todd/Em preprocessing, postprocessing products,
-checkpoint provenance, and Pt100 condition holdouts. They require no MCMC
-sampling and should run alongside the full AgPd regression suite:
-
 ```powershell
-pytest tests/test_shared_co_ssa.py tests/workflows/test_ptru_checkpoint_audit.py tests/workflows/test_ptru_postprocessing_smoke.py -q
+pytest tests/test_pt100_mechanisms.py tests/test_ptru_alloy_mechanisms.py tests/test_ptru_model_registry.py -q
+pytest tests/workflows/test_ptru_fit.py tests/workflows/test_ptru_alloy_fit.py tests/workflows/test_ptru_posterior.py -q
 pytest tests -q
 ```

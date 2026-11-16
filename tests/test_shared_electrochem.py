@@ -1,11 +1,11 @@
-"""Regression guards for the AgPd/Pt100 shared electrochemical primitives."""
+"""Regression guards for the AgPd/PtRu shared electrochemical primitives."""
 
 import numpy as np
 import pytest
 import pytensor.tensor as pt
 
 from mkm.mechanisms import electrochem as shared
-from mkm.mechanisms import pt100
+from mkm.mechanisms import ptru
 from mkm.mechanisms.agpd_basic import electrochem as legacy
 from mkm.mechanisms.agpd_basic import finite_co, full_ssa, legacy_qea
 
@@ -17,7 +17,7 @@ from mkm.mechanisms.agpd_basic import finite_co, full_ssa, legacy_qea
 def test_legacy_electrochem_exports_are_shared_objects(function_name):
     function = getattr(shared, function_name)
     assert getattr(legacy, function_name) is function
-    for consumer in (pt100, finite_co, full_ssa, legacy_qea):
+    for consumer in (ptru, finite_co, full_ssa, legacy_qea):
         if hasattr(consumer, function_name):
             assert getattr(consumer, function_name) is function
 

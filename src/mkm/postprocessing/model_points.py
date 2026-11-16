@@ -2,6 +2,7 @@
 """Posterior summaries for kinetic-model points, shared across catalyst families."""
 
 import numpy as np
+import pandas as pd
 
 from mkm.postprocessing.diagnostics import flatten_posterior_samples, summarize_samples
 
@@ -18,13 +19,14 @@ def summarize_model_points(inference_data, model_points, pointwise_variables=())
     if ln_rate.ndim != 2 or ln_rate.shape[1] != len(result):
         raise ValueError("Posterior log-rates do not align with model points.")
 
+    summary_columns = {}
     variables = (
         ("ln_rate_model", ln_rate),
         ("rate_model", np.exp(ln_rate)),
     )
     for name, values in variables:
         for statistic, data in summarize_samples(values).items():
-            result[f"{name}_{statistic}"] = data
+            summary_columns[f"{name}_{statistic}"] = data
 
     for name in dict.fromkeys(pointwise_variables):
         if name not in posterior:
@@ -35,6 +37,6 @@ def summarize_model_points(inference_data, model_points, pointwise_variables=())
             raise ValueError(f"Posterior variable '{name}' does not align with model points.")
 
         for statistic, data in summarize_samples(values).items():
-            result[f"{name}_{statistic}"] = data
+            summary_columns[f"{name}_{statistic}"] = data
 
-    return result
+    return pd.concat([result, pd.DataFrame(summary_columns, index=result.index)], axis=1)

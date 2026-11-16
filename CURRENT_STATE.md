@@ -1,4 +1,4 @@
-﻿# CURRENT_STATE
+# CURRENT_STATE
 
 Implementation status describes the Python and YAML in this working tree; confirm the active Git revision locally before relying on a source-code checkpoint.
 
@@ -45,6 +45,18 @@ AgPd model identity is now declarative. `src/mkm/models/agpd_registry.py` owns p
 The AgPd mechanism implementation includes `state.py`, `surface.py`, `finite_co.py`, and `legacy_qea.py` under `src/mkm/mechanisms/agpd_basic/`. Generic electrochemical free-energy and rate-constant primitives now live in `src/mkm/mechanisms/electrochem.py` and are imported by both AgPd and Pt100. `agpd_basic/electrochem.py` remains as an import-compatibility re-export; the public `mkm.mechanisms.agpd_basic` path is preserved. The finite-rate BF/ER/LH family uses one common evaluator; pathway masks and optional CO caps are modifiers rather than duplicated kinetic implementations.
 
 Run metadata stores the resolved model specification, resolved prior specification, and a resolved-fit hash in addition to the full configuration-bundle hash. This separates fit-defining provenance from unrelated edits elsewhere in configuration files.
+
+## PtRu unified inference update (November 16, 2026)
+
+Pt100, Pt66Ru33, and Pt50Ru50 now share `models/ptru.yaml`, `priors/ptru.yaml`,
+`mkm.mechanisms.ptru`, `mkm.models.ptru`, and `mkm.workflows.ptru_fit`.
+Within-medium all-material fits support `shared`, `independent`, and `linear_xRu`
+physical parameterizations. The acidic and basic datasets are never pooled.
+Ru OH adsorption transfers one electron and BF coupling is chemical; no `q` or
+`beta_2_BF` is fitted. The unified fit CLI supports `--overwrite` for test runs.
+Older Pt100/alloy checkpoint source hashes are incompatible with this refactor;
+re-fit rather than bypass validation. Historical PtRu status notes below describe
+the pre-unification implementation.
 
 ## PtRu preprocessing and experimental observables
 

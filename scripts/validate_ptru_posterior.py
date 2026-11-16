@@ -1,4 +1,4 @@
-"""Refit Pt100 after holding out a complete CO/electrolyte condition (LOCO)."""
+"""Refit one PtRu material after holding out a complete CO/electrolyte condition (LOCO)."""
 
 from argparse import ArgumentParser
 
@@ -6,8 +6,7 @@ import pandas as pd
 
 from mkm.model_data import build_model_data
 from mkm.model_inputs import build_model_input_arrays
-from mkm.models.ptru_registry import available_ptru_models
-from mkm.models.pt100 import build_pt100_mechanism
+from mkm.models.ptru import available_ptru_models, build_ptru_mechanism
 from mkm.postprocessing.plotting import plot_observation_grid
 from mkm.postprocessing.validation import (
     plot_heldout_pit_conditions,
@@ -21,8 +20,8 @@ from mkm.workflows.posterior_lifecycle import (
     RUN_STATUS_SAMPLED,
     run_posterior_lifecycle,
 )
-from mkm.workflows.pt100_fit import resolve_pt100_parameter_specs, load_pt100_config
-from mkm.workflows.ptru_posterior import load_pt100_posterior_run
+from mkm.workflows.ptru_fit import load_ptru_config, resolve_ptru_fit_specification
+from mkm.workflows.ptru_posterior import load_ptru_posterior_run
 from mkm.workflows.ptru_validation import (
     build_ptru_loco_fit,
     ptru_loco_metadata,
@@ -36,6 +35,7 @@ def parse_args():
     parser = ArgumentParser(description=__doc__)
     parser.add_argument("model", choices=available_ptru_models())
     parser.add_argument("--medium", choices=("acidic", "basic"), required=True)
+    parser.add_argument("--material", default="Pt100")
     parser.add_argument("--electrolyte-M", type=float, required=True)
     parser.add_argument("--co-mole-fraction", type=float, required=True)
     parser.add_argument("--draws", type=int, default=1000)
@@ -50,7 +50,7 @@ def parse_args():
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument(
         "--compare-full-posterior", action="store_true",
-        help="Also compare parameter posteriors against a compatible full-data Pt100 checkpoint.",
+        help="Also compare parameter posteriors against a compatible full-data PtRu checkpoint.",
     )
     return parser.parse_args()
 
@@ -68,13 +68,13 @@ def sampler_settings(args):
     }
 
 
-def plot_pt100_heldout_products(predicted, output_dir, args):
+def plot_ptru_heldout_products(predicted, output_dir, args):
     """Write the four established validation figures with the correct electrolyte label."""
     figures_dir = output_dir / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)
     plot_frame = predicted.pointwise.copy()
     plot_frame["residual"] = plot_frame["model_residual"]
-    context = f"Pt100 LOCO / {args.medium}, {args.electrolyte_M:g} M, {100 * args.co_mole_fraction:g}% CO"
+    context = f"{args.material} LOCO / {args.medium}, {args.electrolyte_M:g} M, {100 * args.co_mole_fraction:g}% CO"
     electrolyte_label = "HClO4" if args.medium == "acidic" else "KOH"
     plot_observation_grid(
         plot_frame, figures_dir / "heldout_rates_model.png", distribution="model",
@@ -100,22 +100,19 @@ def main():
         raise ValueError("--resume and --overwrite cannot be used together.")
     paths = ProjectPaths.discover(__file__)
     selected = pd.read_parquet(paths.ptru_selected_path(args.medium))
-    selected = selected.loc[selected["material"] == "Pt100"].copy()
+    selected = selected.loc[selected["material"] == args.material].copy()
     if "medium" in selected and not selected["medium"].eq(args.medium).all():
-        raise ValueError("Selected Pt100 observations contain a different medium.")
+        raise ValueError("Selected PtRu observations contain a different medium.")
     training, heldout = split_ptru_loco(selected, args.electrolyte_M, args.co_mole_fraction)
     heldout_data = build_model_data(heldout, electrolyte_concentration_column="C_electrolyte_M")
     heldout_inputs = build_model_input_arrays(heldout_data)
 
     output_dir = ptru_validation_output_dir(
-        paths, args.medium, args.model, args.electrolyte_M, args.co_mole_fraction,
+        paths, args.medium, args.model, args.electrolyte_M, args.co_mole_fraction, args.material,
     )
-    fit = build_ptru_loco_fit(paths, args.medium, args.model, training, output_dir)
-    config, prior_config = load_pt100_config(paths)
-    physical = resolve_pt100_parameter_specs(prior_config, args.medium, args.model)
-    heldout_mechanism = build_pt100_mechanism(
-        args.model, args.medium, config["temperature_K"], physical,
-    )
+    fit = build_ptru_loco_fit(paths, args.medium, args.model, training, output_dir, args.material)
+    config, priors = load_ptru_config(paths)
+    heldout_mechanism = build_ptru_mechanism(fit.specification, config, priors)
     prediction_model = build_mechanism_prediction_model(heldout_inputs, heldout_mechanism)
     sampler = sampler_settings(args)
 
@@ -157,13 +154,11 @@ def main():
     predicted.pointwise.to_parquet(output_dir / "heldout_predictions.parquet", index=False)
     predicted.summary.to_csv(output_dir / "validation_summary.csv", index=False)
 
-    plot_pt100_heldout_products(predicted, output_dir, args)
+    plot_ptru_heldout_products(predicted, output_dir, args)
 
     if args.compare_full_posterior:
         # The full-data checkpoint must pass P1 provenance validation; never bypass it.
-        full_run = load_pt100_posterior_run(
-            paths, args.medium, args.model, progressbar=False,
-        )
+        full_run = load_ptru_posterior_run(paths, fit.specification, progressbar=False)
         shift = summarize_validation_posterior_shift(
             full_run.inference_data, result.inference_data, fit.parameter_specs,
         )
@@ -175,10 +170,10 @@ def main():
             result.inference_data,
             fit.parameter_specs,
             figures_dir / "posterior_vs_full.png",
-            context_label=f"Pt100 LOCO, {args.medium}",
+            context_label=f"{args.material} LOCO, {args.medium}",
         )
 
-    print(f"Pt100 LOCO validation saved to: {output_dir}")
+    print(f"PtRu LOCO validation saved to: {output_dir}")
     print(f"Training observations: {len(fit.model_data.observations):,}")
     print(f"Held-out observations: {len(heldout_data.observations):,}")
     print(predicted.summary.to_string(index=False))

@@ -1,3 +1,4 @@
+"""Unified PtRu CLI and preprocessing output contracts."""
 
 import importlib.util
 import sys
@@ -9,8 +10,7 @@ import pandas as pd
 import pytest
 
 from mkm.project_paths import ProjectPaths
-from mkm.workflows import pt100_fit
-
+from mkm.workflows import ptru_fit
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -25,111 +25,61 @@ def load_script(name):
 
 
 @pytest.mark.parametrize("medium", ["acidic", "basic"])
-@pytest.mark.parametrize("model", ["CO_LH", "CO_ER", "CO_ER_LH"])
-def test_pt100_fit_cli_contract(monkeypatch, medium, model):
-    script = load_script("fit_pt100_posterior")
-    monkeypatch.setattr(sys, "argv", ["fit_pt100_posterior.py", model, "--medium", medium])
-
+@pytest.mark.parametrize("model", ["CO_LH", "CO_ER", "CO_ER_LH", "CO_BF_ER_LH"])
+def test_unified_fit_cli_options(monkeypatch, medium, model):
+    script = load_script("fit_ptru_posterior")
+    monkeypatch.setattr(sys, "argv", [
+        "fit_ptru_posterior.py", model, "--medium", medium,
+        "--all-materials", "--parameterization", "linear_xRu", "--overwrite",
+    ])
     args = script.parse_args()
-
-    assert args.model == model
-    assert args.medium == medium
-    assert args.draws == 1000
-    assert args.tune == 1000
-    assert args.chains == 4
-    assert args.cores == 4
-    assert args.target_accept == 0.95
-    assert args.nuts_sampler == "nutpie"
-    assert args.backend == "numba"
-    assert not args.resume
-    assert not args.overwrite
+    assert args.model == model and args.medium == medium
+    assert args.all_materials and args.parameterization == "linear_xRu"
+    assert args.overwrite and not args.resume
+    assert args.draws == 1000 and args.tune == 1000 and args.chains == 4 and args.cores == 4
+    assert args.target_accept == 0.95 and args.nuts_sampler == "nutpie" and args.backend == "numba"
 
 
 @pytest.mark.parametrize("medium", ["acidic", "basic"])
-@pytest.mark.parametrize("model", ["CO_LH", "CO_ER", "CO_ER_LH"])
-def test_pt100_postprocess_cli_contract(monkeypatch, medium, model):
-    script = load_script("postprocess_pt100_posterior")
-    monkeypatch.setattr(
-        sys, "argv", ["postprocess_pt100_posterior.py", model, "--medium", medium],
-    )
-
-    args = script.parse_args()
-
-    assert args.model == model
-    assert args.medium == medium
-    assert not hasattr(args, "draws_per_chain")
-    assert args.random_seed == 1
-
-
-def test_pt100_postprocess_rejects_removed_draw_thinning_option(monkeypatch):
-    script = load_script("postprocess_pt100_posterior")
+def test_unified_postprocess_options(monkeypatch, medium):
+    script = load_script("postprocess_ptru_posterior")
     monkeypatch.setattr(sys, "argv", [
-        "postprocess_pt100_posterior.py", "CO_ER_LH", "--medium", "acidic",
-        "--draws-per-chain", "125",
+        "postprocess_ptru_posterior.py", "CO_ER_LH", "--medium", medium,
+        "--material", "Pt100", "--plot-level", "none",
     ])
+    args = script.parse_args()
+    assert args.model == "CO_ER_LH" and args.medium == medium
+    assert args.material == "Pt100" and args.random_seed == 1
+    assert not hasattr(args, "draws_per_chain")
 
-    with pytest.raises(SystemExit, match="2"):
-        script.parse_args()
 
-
-def test_pt100_fit_requires_medium(monkeypatch):
-    script = load_script("fit_pt100_posterior")
-    monkeypatch.setattr(sys, "argv", ["fit_pt100_posterior.py", "CO_LH"])
-
+def test_fit_requires_medium(monkeypatch):
+    script = load_script("fit_ptru_posterior")
+    monkeypatch.setattr(sys, "argv", ["fit_ptru_posterior.py", "CO_LH"])
     with pytest.raises(SystemExit):
         script.parse_args()
 
 
-@pytest.mark.parametrize("medium", ["acidic", "basic"])
-@pytest.mark.parametrize("model", ["CO_LH", "CO_ER", "CO_ER_LH"])
-def test_pt100_fit_data_and_output_paths(monkeypatch, medium, model):
+def test_unified_fit_data_and_output_paths(monkeypatch):
     paths = ProjectPaths(root=ROOT)
-    model_marker = object()
+    config, _ = ptru_fit.load_ptru_config(paths)
+    spec = ptru_fit.resolve_ptru_fit_specification(config, "basic", "CO_ER_LH", material="Pt100")
+    sentinel = object()
 
-    def fake_read_parquet(path):
-        assert path == (
-            paths.processed_data_dir / f"PtRu_COOx_{medium}"
-            / "analysis" / f"PtRu_COOx_{medium}_selected.parquet"
-        )
-        return pd.DataFrame({
-            "material": ["Pt100", "Pt66Ru33"],
-            "medium": [medium, medium],
-            "rate_s_inv": [1.0, 2.0],
-        })
+    def read_parquet(path):
+        assert path == paths.ptru_selected_path("basic")
+        return pd.DataFrame({"material": ["Pt100", "Pt66Ru33"], "medium": ["basic", "basic"]})
 
-    def fake_build_model_data(selected_replicates, electrolyte_concentration_column):
-        assert electrolyte_concentration_column == "C_electrolyte_M"
-        assert selected_replicates["material"].tolist() == ["Pt100"]
-        assert set(selected_replicates["medium"]) == {medium}
-        return object()
-
-    monkeypatch.setattr(pt100_fit.pd, "read_parquet", fake_read_parquet)
-    monkeypatch.setattr(pt100_fit, "build_model_data", fake_build_model_data)
-    monkeypatch.setattr(
-        pt100_fit, "build_model_input_arrays",
-        lambda data: SimpleNamespace(materials=("Pt100",)),
-    )
-    monkeypatch.setattr(
-        pt100_fit, "build_pt100_mechanism",
-        lambda **kwargs: object(),
-    )
-    monkeypatch.setattr(
-        pt100_fit, "build_pymc_model",
-        lambda **kwargs: model_marker,
-    )
-
-    fit = pt100_fit.build_pt100_fit(paths, medium, model)
-
-    assert fit.medium == medium
-    assert fit.model_name == model
-    assert fit.built_model is model_marker
-    assert fit.inputs.materials == ("Pt100",)
-    assert fit.model_config_path == paths.config_dir / "models" / "pt100.yaml"
-    assert fit.prior_config_path == paths.config_dir / "priors" / "pt100.yaml"
-    assert fit.output_dir == (
-        paths.results_dir / f"PtRu_COOx_{medium}"
-        / "posterior" / "individual" / "Pt100" / model
-    )
+    monkeypatch.setattr(ptru_fit.pd, "read_parquet", read_parquet)
+    monkeypatch.setattr(ptru_fit, "build_model_data", lambda frame, **kwargs: object())
+    monkeypatch.setattr(ptru_fit, "build_model_input_arrays", lambda _: SimpleNamespace(materials=("Pt100",)))
+    monkeypatch.setattr(ptru_fit, "build_ptru_mechanism", lambda *args: object())
+    monkeypatch.setattr(ptru_fit, "build_pymc_model", lambda *args, **kwargs: sentinel)
+    fit = ptru_fit.build_ptru_fit(paths, spec)
+    assert fit.built_model is sentinel
+    assert fit.output_dir.parts[-3:] == ("individual", "Pt100", "CO_ER_LH")
+    assert fit.model_config_path == paths.config_dir / "models" / "ptru.yaml"
+    assert fit.prior_config_path == paths.config_dir / "priors" / "ptru.yaml"
     assert {"sigma_rate_abs", "sigma_rate_rel"} <= set(fit.parameter_specs)
 
 

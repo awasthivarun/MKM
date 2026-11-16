@@ -211,12 +211,13 @@ AGPD_MODEL_SOURCE_FILES = MODEL_SOURCE_COMMON + (
     "src/mkm/workflows/agpd_basic.py",
     "src/mkm/workflows/agpd_fit.py",
 )
-PT100_MODEL_SOURCE_FILES = MODEL_SOURCE_COMMON + (
-    "src/mkm/mechanisms/pt100.py",
-    "src/mkm/models/pt100.py",
-    "src/mkm/models/ptru_registry.py",
-    "src/mkm/workflows/pt100_fit.py",
+PTRU_MODEL_SOURCE_FILES = MODEL_SOURCE_COMMON + (
+    "src/mkm/mechanisms/ptru.py",
+    "src/mkm/models/ptru.py",
+    "src/mkm/workflows/ptru_fit.py",
 )
+# Legacy name used by historical checkpoint-audit tests and utilities.
+PT100_MODEL_SOURCE_FILES = PTRU_MODEL_SOURCE_FILES
 
 
 def source_file_hashes(root, filenames):

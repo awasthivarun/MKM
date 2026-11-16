@@ -334,11 +334,11 @@ class ProjectPaths:
 
     @property
     def ptru_model_config_path(self) -> Path:
-        return self.config_dir / "models" / "pt100.yaml"
+        return self.config_dir / "models" / "ptru.yaml"
 
     @property
     def ptru_prior_config_path(self) -> Path:
-        return self.config_dir / "priors" / "pt100.yaml"
+        return self.config_dir / "priors" / "ptru.yaml"
 
     @property
     def ptru_preprocessing_config_path(self) -> Path:
@@ -356,31 +356,55 @@ class ProjectPaths:
     def ptru_prior_predictive_root(self, medium: str) -> Path:
         return self.ptru_results_root(medium) / "prior_predictive"
 
-    def ptru_posterior_output_dir(self, medium: str, model_name: str, material: str = "Pt100") -> Path:
-        if material != "Pt100":
-            raise ValueError("Only Pt100 Bayesian fits are currently implemented.")
-        if model_name not in ("CO_LH", "CO_ER", "CO_ER_LH"):
-            raise ValueError(f"Unknown Pt100 mechanism: {model_name}")
-        return self.ptru_posterior_root(medium) / "individual" / material / model_name
+    def ptru_posterior_output_dir(
+        self, medium: str, model_name: str, material: str | None = "Pt100", *,
+        fit_scope="individual", parameterization=None, error_structure="shared", excluded_materials=(),
+    ) -> Path:
+        self._validate_ptru_medium(medium)
+        if fit_scope == "individual":
+            if not material:
+                raise ValueError("PtRu individual fits require --material.")
+            return self.ptru_posterior_root(medium) / "individual" / material / model_name
+        if fit_scope != "all_materials":
+            raise ValueError(f"Unknown PtRu fit scope: {fit_scope}")
+        if parameterization not in ("shared", "independent", "linear_xRu"):
+            raise ValueError(f"Unknown PtRu parameterization: {parameterization}")
+        self._validate_error_structure(error_structure)
+        leaf = model_name
+        if excluded_materials:
+            leaf += "_exclude_" + "_".join(excluded_materials)
+        return self.ptru_posterior_root(medium) / "all_materials" / parameterization / error_structure / leaf
 
     def ptru_posterior_dir(
-        self, medium: str, model_name: str, material: str = "Pt100", *, require_posterior=True,
+        self, medium: str, model_name: str, material: str | None = "Pt100", *, require_posterior=True,
+        **kwargs,
     ) -> Path:
-        directory = self.ptru_posterior_output_dir(medium, model_name, material)
+        directory = self.ptru_posterior_output_dir(medium, model_name, material, **kwargs)
         posterior = directory / "posterior.nc"
         if require_posterior and not posterior.exists():
             raise FileNotFoundError(f"Posterior not found: {posterior}")
         return directory
 
-    def ptru_prior_predictive_output_dir(self, medium: str, model_name: str) -> Path:
-        self.ptru_posterior_output_dir(medium, model_name)
-        return self.ptru_prior_predictive_root(medium) / "individual" / "Pt100" / model_name
+    def ptru_prior_predictive_output_dir(self, medium: str, model_name: str, material="Pt100", **kwargs) -> Path:
+        relative = self.ptru_posterior_output_dir(medium, model_name, material, **kwargs).relative_to(
+            self.ptru_posterior_root(medium)
+        )
+        return self.ptru_prior_predictive_root(medium) / relative
 
-    def ptru_model_comparison_dir(self, medium: str, comparison_name: str) -> Path:
+    def ptru_model_comparison_dir(
+        self, medium: str, comparison_name: str, material="Pt100", *, fit_scope="individual",
+    ) -> Path:
         name = str(comparison_name).strip()
         if not name or Path(name).name != name or name in (".", ".."):
             raise ValueError("A model comparison requires a valid single-directory name.")
-        return self.ptru_posterior_root(medium) / "individual" / "Pt100" / "model_comparison" / name
+        self._validate_ptru_medium(medium)
+        if fit_scope == "individual":
+            base = self.ptru_posterior_root(medium) / "individual" / material
+        elif fit_scope == "all_materials":
+            base = self.ptru_posterior_root(medium) / "all_materials"
+        else:
+            raise ValueError(f"Unknown PtRu fit scope: {fit_scope}")
+        return base / "model_comparison" / name
 
     def ptru_observable_path(
         self, medium: str, product: str, *, selected: bool = False, sample_id: str | None = None,
