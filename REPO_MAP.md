@@ -113,7 +113,8 @@ pt100_fit.py / models/pt100.py
              v
 scripts/fit_pt100_posterior.py --> posterior.nc
              |
-             +--> scripts/postprocess_pt100_posterior.py
+             +--> scripts/postprocess_pt100_posterior.py (includes DRC by default)
+             +--> scripts/postprocess_pt100_drc.py (standalone DRC)
              +--> scripts/compare_pt100_models.py (compatible fitted models)
              +--> scripts/validate_pt100_posterior.py (LOCO training refit)
 ```
@@ -339,7 +340,7 @@ Generic PyMC assembly: creates coordinates, evaluates the mechanism, stores dete
 
 ### `src/mkm/inference/posterior.py`
 
-Sampling/reconstruction utilities used by the posterior lifecycle.
+Sampling/reconstruction utilities used by the posterior lifecycle, including chain/draw coordinate-alignment checks.
 
 ## Workflow orchestration
 
@@ -369,7 +370,7 @@ Loads completed runs, reconstructs deterministics as needed, and validates run m
 
 ### `src/mkm/workflows/posterior_lifecycle.py`
 
-Owns checkpoint/sample/finalize behavior, including `--resume`, `--overwrite`, metadata, sampler health, and saved posterior lifecycle state.
+Owns checkpoint/sample/finalize behavior, including `sampling` / `sampled_free_variables` / `complete` states, `--resume`, `--overwrite`, metadata, sampler health, and checkpoint recovery.
 
 ### `src/mkm/workflows/agpd_validation.py`
 
@@ -386,6 +387,7 @@ Owns AgPd LOCO/LOMO split logic and held-out prediction:
 The Pt100 fit builder is shared by ordinary fits and Pt100 LOCO training fits;
 LOCO keeps condition selection and validation identity/provenance separate.
 `ptru_posterior.py` performs strict checkpoint validation and posterior loading.
+Both AgPd and Pt100 loaders validate source, data, configuration, and resolved-fit identity.
 Changes to model-source hashes, including the shared electrochemical module
 relocation and fit-builder consolidation, may invalidate older Pt100/LOCO
 checkpoints without implying a numerical change. No automatic metadata
@@ -394,7 +396,7 @@ migration or relaxed validation is provided.
 ### `src/mkm/workflows/ptru_postprocess.py`
 
 Pt100 uses common diagnostics, experimental-observable comparisons, condition
-and rate overlays, and available pointwise LOO/LOO-PIT figures. Existing
+and rate overlays, transition-state DRC, and available pointwise LOO/LOO-PIT figures. Existing
 reliability checks and `full`/`core`/`none` plot-level semantics are preserved.
 Acidic/basic runs retain separate results directories.
 
@@ -438,7 +440,7 @@ Multi-model ELPD comparison and pointwise differences.
 
 ### `drc.py`
 
-Individual and composition-resolved transition-state DRC and finite-step convergence checks.
+Shared transition-state DRC and finite-step convergence checks for AgPd individual/composition models and Pt100 acidic/basic models.
 
 ### `composition_parameters.py`
 
@@ -476,6 +478,8 @@ validate_agpd_posterior.py
 
 See `scripts/README.md` for CLI examples.
 
+Preprocessing commands write source/raw-data/configuration/output lineage manifests alongside processed products. Posterior postprocessing maintains a per-invocation manifest and stage-status table, and clears only known stage-owned stale tables.
+
 ## AgPd result hierarchy
 
 Individual posterior:
@@ -496,8 +500,9 @@ Inside a fit directory, products are organized primarily as:
 posterior.nc
 posterior_parameters.csv
 run_metadata.yaml
+postprocessing_manifest.yaml
 sampling_health.*
-tables/
+tables/  (including postprocessing_status.csv)
 figures/
 drc/
 composition/
@@ -548,7 +553,7 @@ LOCO/LOMO validation is nested under the corresponding full all-material fit dir
 - a mechanism equation: `src/mkm/mechanisms/agpd_basic/`
 - pathway parameter dataclasses: `src/mkm/mechanisms/agpd_basic/finite_co.py`
 - model registry / special variants: `src/mkm/models/agpd_registry.py`
-- base/slope/likelihood config: `config/models/agpd_basic.yaml`; canonical priors/variants: `config/priors/agpd_basic.yaml`; exploratory cap config: `config/models/experimental/agpd_caps.yaml`
+- base/slope/likelihood config: `config/models/agpd_basic.yaml`; canonical priors/variants: `config/priors/agpd_basic.yaml`; exploratory cap variants: `src/mkm/models/agpd_registry.py` (no separate cap YAML in this ZIP)
 - PyMC prior factory: `src/mkm/inference/priors.py`
 - likelihood equation: `src/mkm/inference/likelihoods.py`
 - fit-scope rules: `src/mkm/workflows/agpd_fit.py`

@@ -200,6 +200,7 @@ For a full-data run intended as the source/reference for **LOMO**, fit the same 
 
 ```powershell
 python scripts/fit_agpd_posterior.py CO_BF_ER_LH --all-materials --parameterization linear_xAg --error-structure shared
+```
 
 Independent per-material mechanism parameters with one shared error pair:
 
@@ -210,7 +211,6 @@ python scripts/fit_agpd_posterior.py CO_BF_ER_LH --all-materials --parameterizat
 This fit samples 10 mechanism parameters independently for each alloy and the six active ER/LH/Pd parameters
 for Pd100. The four Ag/BF-only Pd100 parameters (`deltaG5_0`, `beta_2_BF`, `q`, `Gact2_BF_0`) are not sampled.
 The mechanism therefore has 56 free physical parameters plus the shared `sigma_rate_abs` and `sigma_rate_rel` pair.
-```
 
 LOMO cannot extrapolate independent material-specific error parameters to a material omitted from training.
 
@@ -255,7 +255,11 @@ Optional switches:
 ```text
 --skip-loo
 --skip-observables
+--skip-drc
+--skip-composition   (all-material runs)
 ```
+
+Ordinary AgPd postprocessing runs transition-state DRC by default and generates all-material composition products unless skipped. The standalone DRC command below can be used independently or for half-step diagnostics.
 
 ## Transition-state DRC
 
@@ -376,7 +380,7 @@ Ag10 with BF disabled:
 python scripts/fit_agpd_posterior.py CO_BF_ER_LH_Ag10_no_BF --all-materials --parameterization linear_xAg --error-structure material
 ```
 
-Coverage-cap variants are registered but are currently intended for exploratory sensitivity analysis rather than the main model path. See `src/mkm/models/agpd_registry.py` and `config/models/experimental/agpd_caps.yaml`.
+Coverage-cap variants are registered but are currently intended for exploratory sensitivity analysis rather than the main model path. See `src/mkm/models/agpd_registry.py` and `config/models/agpd_basic.yaml` (no separate experimental cap YAML is included in this snapshot).
 
 ## PowerShell chaining
 
@@ -429,11 +433,21 @@ python scripts/postprocess_pt100_posterior.py CO_ER_LH --medium acidic --plot-le
 The prior-predictive check should be reviewed **before** starting an expensive
 fit. The linear-rate Normal likelihood is shared with AgPd, but Pt100 presently
 uses only a shared error structure. Postprocessing uses the shared 80% and 95%
-HDI summaries, not the old Pt100 equal-tail quantile convention.
+HDI summaries, not the old Pt100 equal-tail quantile convention. Pt100 DRC
+runs with normal posterior postprocessing unless `--skip-drc` is provided.
+
+### Standalone Pt100 transition-state DRC
+
+```powershell
+python scripts/postprocess_pt100_drc.py CO_ER_LH --medium acidic --check-half-step
+```
+
+Use `--step-eV`, `--save-draws`, and `--skip-plots` as needed. The same
+command works in basic medium and for the existing `CO_LH` and `CO_ER` models.
 
 ### Posterior checkpoint provenance
 
-Post-P1 checkpoints include additional source hashes and registry metadata.
+Current AgPd and Pt100 checkpoints include source, configuration, and data hashes as well as resolved-fit identity.
 A posterior produced with the earlier implementation will ordinarily fail
 strict validation with `model_specification` and `resolved_fit_sha256`
 mismatches. Inspect such a checkpoint without changing it:
@@ -443,7 +457,8 @@ python scripts/inspect_pt100_checkpoint.py CO_ER_LH --medium acidic
 ```
 
 The audit distinguishes changes to inputs, prior specification, model
-assumptions, source code, and derived fit hashes. A
+assumptions, source code, and derived fit hashes. Strict validation also
+applies to AgPd checkpoints; legacy checkpoints are not silently migrated. A
 `source_change_unverified` result means **the old and current implementations
 have not been shown to be mathematically or numerically equivalent**. It is
 not permission to override checkpoint validation, relabel metadata, resume
@@ -464,6 +479,15 @@ reliability, and do not interpret ELPD differences as mechanistic proof.
 Condition-level LOCO refits all remaining conditions and excludes every
 replicate and potential point from the held-out condition. Pt100 LOMO and
 composition-dependent Bayesian fits are not implemented.
+
+### Run and preprocessing manifests
+
+Preprocessing commands write YAML manifests identifying raw input hashes,
+configuration/source hashes, output hashes, and row counts. After posterior
+postprocessing, inspect `postprocessing_manifest.yaml` and
+`tables/postprocessing_status.csv` for generated products and stage status.
+Requested computation failures raise an error; unreliable PSIS-LOO is
+reported separately as a statistical warning.
 
 ### Regression tests
 

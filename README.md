@@ -76,7 +76,7 @@ The primary experimental datasets are Todd's Pt/PtRu measurements in HClO4 and K
 
 Additional Pt/C measurements from Em are processed separately. Pt/ATO is not yet included in the active preprocessing workflow.
 
-**Current status:** Experimental preprocessing and kinetic-observable calculations cover Pt and PtRu materials. Bayesian fitting currently covers **Pt100 only**, independently in acidic and basic media, using `CO_LH`, `CO_ER`, or `CO_ER_LH` with finite-rate CO adsorption, quasi-equilibrated OH adsorption, and the shared linear-rate Normal likelihood. The PtRu alloys and Em preparations are not fitted. Pt100 posterior diagnostics, pointwise PSIS-LOO/LOO-PIT, model comparison, and condition-level LOCO refitting are implemented; Pt100 LOMO, all-material fitting, and DRC analysis are not.
+**Current status:** Experimental preprocessing and kinetic-observable calculations cover Pt and PtRu materials. Bayesian fitting currently covers **Pt100 only**, independently in acidic and basic media, using `CO_LH`, `CO_ER`, or `CO_ER_LH` with finite-rate CO adsorption, quasi-equilibrated OH adsorption, and the shared linear-rate Normal likelihood. The PtRu alloys and Em preparations are not fitted. Pt100 posterior diagnostics, pointwise PSIS-LOO/LOO-PIT, model comparison, condition-level LOCO refitting, and transition-state DRC analysis are implemented. Pt100 LOMO and all-material fitting are not.
 
 #### Experimental conditions
 
@@ -254,10 +254,13 @@ The current Pt100 models use Todd's **selected** Pt100 observations for the requ
 python scripts/check_pt100_prior_predictive.py CO_ER_LH --medium acidic --draws 1000
 python scripts/fit_pt100_posterior.py CO_ER_LH --medium acidic
 python scripts/postprocess_pt100_posterior.py CO_ER_LH --medium acidic --plot-level full
+python scripts/postprocess_pt100_drc.py CO_ER_LH --medium acidic --check-half-step
 python scripts/validate_pt100_posterior.py CO_ER_LH --medium acidic --electrolyte-M 0.1 --co-mole-fraction 0.01
 ```
 
-Pt100 checkpoints validate source-code and configuration hashes strictly. Refactors that relocate or edit hashed model-building files can invalidate older checkpoints without changing the scientific equations; no automatic metadata migration is performed.
+AgPd and Pt100 checkpoints validate model-defining source code, input data, and configuration identity strictly. A checkpoint can be resumed for finalization only under the required identity checks. Refactors to hashed model-building files can invalidate older checkpoints without changing the scientific equations; no automatic metadata migration is performed.
+
+Standard preprocessing commands write lineage manifests containing hashes of raw inputs, configurations, source files, and generated products. Posterior postprocessing writes `postprocessing_manifest.yaml` and `tables/postprocessing_status.csv` to distinguish current outputs, skipped stages, warnings, and execution failures. Standalone DRC commands are available for both families; ordinary posterior postprocessing runs DRC by default (use `--skip-drc` to omit it).
 
 ## Repository structure
 
