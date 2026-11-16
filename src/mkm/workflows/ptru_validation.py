@@ -3,7 +3,7 @@
 
 import numpy as np
 
-from mkm.provenance import sha256_file, sha256_mapping
+from mkm.provenance import model_data_observation_sha256, sha256_file
 from mkm.workflows.pt100_fit import (
     _build_pt100_fit_from_selected,
     load_pt100_config,
@@ -64,13 +64,7 @@ def build_ptru_loco_fit(paths, medium, model_name, selected_training, output_dir
     )
 
 
-def _model_data_observation_sha256(model_data):
-    """Fingerprint the canonical observation ordering and model-point assignments."""
-    observations = model_data.observations
-    return sha256_mapping({
-        "columns": list(observations.columns),
-        "rows": observations.to_dict(orient="records"),
-    })
+_model_data_observation_sha256 = model_data_observation_sha256
 
 
 def _ptru_loco_identity(paths, fit, electrolyte_M, co_mole_fraction, heldout_data):

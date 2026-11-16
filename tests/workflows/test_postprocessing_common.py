@@ -73,3 +73,16 @@ def test_common_loo_stage_writes_products_and_status(tmp_path, monkeypatch):
     assert status[-1]["stage"] == "loo"
     assert status[-1]["status"] == "warning"
     assert status[-1]["n_pareto_k_above_good_k"] == 2
+
+
+def test_stage_cleanup_removes_only_generated_tables(tmp_path):
+    from mkm.workflows.postprocessing_common import clear_postprocessing_tables
+    for name in ("loo_summary.csv", "loo_pointwise.parquet", "posterior_parameters.csv",
+                 "experimental_observable_summary.csv", "posterior.nc"):
+        (tmp_path / name).write_text("old")
+    clear_postprocessing_tables(tmp_path, stages=("loo", "observables"))
+    assert not (tmp_path / "loo_summary.csv").exists()
+    assert not (tmp_path / "loo_pointwise.parquet").exists()
+    assert not (tmp_path / "experimental_observable_summary.csv").exists()
+    assert (tmp_path / "posterior_parameters.csv").exists()
+    assert (tmp_path / "posterior.nc").exists()

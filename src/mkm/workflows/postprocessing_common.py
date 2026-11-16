@@ -213,7 +213,7 @@ def compute_loo_pit_stage(run, loo, tables_dir, status_rows):
 
 
 def overall_postprocessing_status(status_rows):
-    aggregate_stages = {"core", "loo", "loo_pit", "observables", "second_order", "plots"}
+    aggregate_stages = {"core", "loo", "loo_pit", "observables", "second_order", "plots", "drc"}
     aggregate = {
         row["stage"]: row["status"]
         for row in status_rows
@@ -232,3 +232,50 @@ def overall_postprocessing_status(status_rows):
     if any(status == "warning" for status in aggregate.values()):
         return "complete_with_warnings"
     return "complete"
+
+
+# Deliberately limited to owned generated TABLES, not independently produced checkpoints.
+POSTPROCESSING_STAGE_FILES = {
+    "core": (
+        "observation_diagnostics.parquet", "model_point_diagnostics.parquet", "physical_checks.csv",
+        "material_summary.csv", "posterior_parameter_diagnostics.csv", "posterior_covariance_matrix.csv",
+        "posterior_correlation_matrix.csv", "residual_curves.csv", "shared_replicate_residuals.csv",
+        "posterior_model_points.csv", "posterior_observations.csv", "posterior_condition_summary.csv",
+    ),
+    "loo": ("loo_summary.csv", "loo_pointwise.parquet"),
+    "loo_pit": ("loo_pit_summary.csv", "loo_pit_pointwise.parquet"),
+    "observables": ("experimental_observable_comparisons.parquet", "experimental_observable_summary.csv"),
+    "second_order": ("second_order_observables.csv", "second_order_summary.csv"),
+}
+
+
+def clear_postprocessing_tables(tables_dir, stages=tuple(POSTPROCESSING_STAGE_FILES)):
+    """Remove only previously generated tables from specified stages before a new invocation."""
+    for stage in stages:
+        for filename in POSTPROCESSING_STAGE_FILES[stage]:
+            (tables_dir / filename).unlink(missing_ok=True)
+
+
+def postprocessing_execution_failed(status_rows):
+    return any(row["status"] == "error" for row in status_rows)
+
+
+def write_postprocessing_manifest(output_dir, run, *, options, status="running"):
+    from datetime import datetime, timezone
+    from mkm.provenance import write_run_metadata
+    path = output_dir / "postprocessing_manifest.yaml"
+    metadata = getattr(run, "metadata", {}) or {}
+    tables_dir = output_dir / "tables"
+    write_run_metadata({
+        "created_utc": datetime.now(timezone.utc).isoformat(),
+        "status": status,
+        "current_tables": sorted(p.name for p in tables_dir.iterdir() if p.is_file())
+        if tables_dir.exists() else [],
+        "posterior_run": {
+            "model": metadata.get("model"), "materials": metadata.get("materials"),
+            "resolved_fit_sha256": metadata.get("resolved_fit_sha256"),
+            "inputs": metadata.get("inputs"),
+        },
+        "options": dict(options),
+        "retained_figures_when_plot_level_none": options.get("plot_level") == "none",
+    }, path)

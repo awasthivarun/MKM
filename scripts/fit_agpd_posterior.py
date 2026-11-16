@@ -16,7 +16,7 @@ from mkm.workflows.agpd_fit import (
     resolved_prior_metadata,
     resolve_agpd_fit_specification,
 )
-from mkm.workflows.agpd_posterior import validate_agpd_run_metadata
+from mkm.workflows.agpd_posterior import agpd_model_specification, validate_agpd_run_metadata
 from mkm.workflows.posterior_lifecycle import (
     RUN_STATUS_COMPLETE,
     RUN_STATUS_SAMPLED,
@@ -129,7 +129,7 @@ def main():
                 config,
             ),
             prior_material=specification.prior_material,
-            model_specification=resolved_model_metadata(specification),
+            model_specification=agpd_model_specification(paths, specification),
             prior_specification=resolved_prior_metadata(specification, config),
         )
 

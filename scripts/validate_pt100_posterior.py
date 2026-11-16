@@ -8,7 +8,9 @@ from mkm.model_data import build_model_data
 from mkm.model_inputs import build_model_input_arrays
 from mkm.models.ptru_registry import available_ptru_models
 from mkm.models.pt100 import build_pt100_mechanism
+from mkm.postprocessing.plotting import plot_observation_grid
 from mkm.postprocessing.validation import (
+    plot_heldout_pit_conditions,
     plot_validation_parameter_posteriors,
     summarize_validation_posterior_shift,
 )
@@ -64,6 +66,32 @@ def sampler_settings(args):
         "target_accept": args.target_accept,
         "random_seed": args.random_seed,
     }
+
+
+def plot_pt100_heldout_products(predicted, output_dir, args):
+    """Write the four established validation figures with the correct electrolyte label."""
+    figures_dir = output_dir / "figures"
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    plot_frame = predicted.pointwise.copy()
+    plot_frame["residual"] = plot_frame["model_residual"]
+    context = f"Pt100 LOCO / {args.medium}, {args.electrolyte_M:g} M, {100 * args.co_mole_fraction:g}% CO"
+    electrolyte_label = "HClO4" if args.medium == "acidic" else "KOH"
+    plot_observation_grid(
+        plot_frame, figures_dir / "heldout_rates_model.png", distribution="model",
+        y_scale="log", context_label=context, electrolyte_label=electrolyte_label,
+    )
+    plot_observation_grid(
+        plot_frame, figures_dir / "heldout_rates_predictive.png", distribution="predictive",
+        y_scale="linear", context_label=context, electrolyte_label=electrolyte_label,
+    )
+    plot_observation_grid(
+        plot_frame, figures_dir / "heldout_residuals.png", residual=True,
+        y_scale="linear", context_label=context, electrolyte_label=electrolyte_label,
+    )
+    plot_heldout_pit_conditions(
+        plot_frame, figures_dir / "heldout_pit_conditions.png", context_label=context,
+        electrolyte_label=electrolyte_label,
+    )
 
 
 def main():
@@ -128,6 +156,8 @@ def main():
     )
     predicted.pointwise.to_parquet(output_dir / "heldout_predictions.parquet", index=False)
     predicted.summary.to_csv(output_dir / "validation_summary.csv", index=False)
+
+    plot_pt100_heldout_products(predicted, output_dir, args)
 
     if args.compare_full_posterior:
         # The full-data checkpoint must pass P1 provenance validation; never bypass it.

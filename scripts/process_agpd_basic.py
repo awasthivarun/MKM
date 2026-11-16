@@ -12,6 +12,7 @@ from mkm.preprocessing.agpd_basic import (
     truncate_agpd_analysis,
 )
 from mkm.project_paths import ProjectPaths
+from mkm.provenance import write_preprocessing_manifest
 
 
 def main():
@@ -57,6 +58,30 @@ def main():
     analysis_selected.to_parquet(paths.agpd_selected_path, index=False)
     summary_selected.to_parquet(paths.agpd_summary_path, index=False)
     truncation.to_parquet(paths.agpd_truncation_path, index=False)
+
+    products = {
+        "standardized": (paths.agpd_standardized_path, len(standardized)),
+        "full": (paths.agpd_full_path, len(analysis_full)),
+        "selected": (paths.agpd_selected_path, len(analysis_selected)),
+        "summary": (paths.agpd_summary_path, len(summary_selected)),
+        "truncation": (paths.agpd_truncation_path, len(truncation)),
+        "delta_OH": (paths.agpd_delta_oh_path, len(delta_OH)),
+        "delta_CO": (paths.agpd_delta_co_path, len(delta_CO)),
+        "delta_CO_replicates": (paths.agpd_delta_co_replicates_path, len(delta_CO_replicates)),
+    }
+    write_preprocessing_manifest(
+        paths.agpd_processed_dir / "preprocessing_manifest.yaml", root=paths.root,
+        raw_paths=[paths.agpd_raw_dir / f"{material}_current_densities.xlsx" for material in config["materials"]],
+        config_paths=[paths.agpd_preprocessing_config_path],
+        source_files=[
+            "src/mkm/preprocessing/agpd_basic.py", "src/mkm/preprocessing/interpolation.py",
+            "src/mkm/preprocessing/observables.py", "src/mkm/preprocessing/potential.py",
+            "src/mkm/preprocessing/validation.py",
+            "scripts/process_agpd_basic_maxtof.py" if paths.agpd_data_variant == "maxtof"
+            else "scripts/process_agpd_basic.py",
+        ] + (["src/mkm/preprocessing/agpd_basic_maxtof.py"] if paths.agpd_data_variant == "maxtof" else []),
+        products=products,
+    )
 
     print(f"Standardized data: {len(standardized)} rows")
     print(f"Full analysis-grid data: {len(analysis_full)} rows")

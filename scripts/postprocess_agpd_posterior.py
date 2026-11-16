@@ -4,6 +4,8 @@ from argparse import ArgumentParser
 
 from mkm.models.agpd_basic import available_agpd_models
 from mkm.project_paths import ProjectPaths
+from mkm.workflows.postprocessing_common import postprocessing_execution_failed
+import pandas as pd
 from mkm.workflows.agpd_basic import load_agpd_model_config
 from mkm.workflows.agpd_fit import resolve_agpd_fit_specification
 from mkm.workflows.agpd_posterior import load_agpd_posterior_run
@@ -91,6 +93,9 @@ def main():
 
     print(f"Postprocessing products saved to: {run.output_dir}")
     print(f"Postprocessing status: {overall}")
+    status = pd.read_csv(paths.fit_tables_dir(run.output_dir) / "postprocessing_status.csv")
+    if postprocessing_execution_failed(status.to_dict(orient="records")):
+        raise RuntimeError("AgPd postprocessing encountered an execution error; inspect status CSV.")
 
 
 if __name__ == "__main__":

@@ -2,16 +2,23 @@
 
 from argparse import ArgumentParser
 
+import numpy as np
+import pandas as pd
+
 from mkm.inference.prior_predictive import (
     sample_prior_predictive,
     summarize_prior_predictive,
 )
 from mkm.models.agpd_basic import available_agpd_models
+from mkm.postprocessing.diagnostics import build_physical_checks
 from mkm.project_paths import ProjectPaths
+from mkm.provenance import build_fit_metadata, write_run_metadata
+from mkm.workflows.agpd_posterior import agpd_model_specification
 from mkm.workflows.agpd_basic import build_agpd_model_data, load_agpd_model_config
 from mkm.workflows.agpd_fit import (
     build_agpd_fit_model,
     fit_materials,
+    resolved_parameterization_metadata, resolved_prior_metadata,
     resolve_agpd_fit_specification,
 )
 
@@ -82,6 +89,30 @@ def main():
         output_dir / "prior_observations.parquet",
         index=False,
     )
+    build_physical_checks(prior_predictive.prior).to_csv(
+        output_dir / "prior_physical_checks.csv", index=False,
+    )
+    ln_rate = np.asarray(prior_predictive.prior["ln_rate_model"], dtype=float)
+    pd.DataFrame([{
+        "n_draw_values": ln_rate.size,
+        "n_nonfinite_ln_rate": int(np.sum(~np.isfinite(ln_rate))),
+        "n_ln_rate_above_exp_range": int(np.sum(ln_rate > np.log(np.finfo(float).max))),
+    }]).to_csv(output_dir / "prior_numerical_checks.csv", index=False)
+    metadata = build_fit_metadata(
+        root=paths.root, fit_scope=specification.fit_scope, materials=fit.inputs.materials,
+        model_name=specification.model_name, error_structure=specification.error_structure,
+        data_path=paths.agpd_selected_path,
+        model_config_path=paths.agpd_model_config_path,
+        model_config_paths=paths.agpd_model_config_paths,
+        sampler={"draws": args.draws, "random_seed": args.random_seed},
+        parameterization=specification.parameterization,
+        parameterization_specification=resolved_parameterization_metadata(specification, config),
+        prior_material=specification.prior_material,
+        model_specification=agpd_model_specification(paths, specification),
+        prior_specification=resolved_prior_metadata(specification, config),
+    )
+    metadata["analysis"] = "prior_predictive"
+    write_run_metadata(metadata, output_dir / "run_metadata.yaml")
     if args.save_draws:
         prior_predictive.to_netcdf(
             output_dir / "prior_predictive.nc",

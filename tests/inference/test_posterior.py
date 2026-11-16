@@ -168,3 +168,24 @@ def test_retain_group_variables_rejects_missing_variable():
 
     with pytest.raises(ValueError, match="missing variables"):
         retain_group_variables(inference_data, "posterior", ["x", "missing"])
+
+
+def test_inference_alignment_rejects_reordered_and_missing_coordinates():
+    from types import SimpleNamespace
+    from mkm.inference.posterior import validate_inference_data_alignment
+    import pytest
+    posterior = xr.Dataset({"theta": (("chain", "draw"), np.ones((2, 3)))},
+                           coords={"chain": [0, 1], "draw": [0, 1, 2]})
+    stats = xr.Dataset({"diverging": (("chain", "draw"), np.zeros((2, 3)))},
+                       coords={"chain": [1, 0], "draw": [0, 1, 2]})
+    likelihood = xr.Dataset({"rate_observed": (("chain", "draw", "observation"),
+                                               np.zeros((2, 3, 1)))},
+                            coords={"chain": [0, 1], "draw": [0, 1, 2]})
+    with pytest.raises(ValueError, match="mismatched chain coordinates"):
+        validate_inference_data_alignment(SimpleNamespace(
+            posterior=posterior, sample_stats=stats, log_likelihood=likelihood,
+        ))
+    with pytest.raises(ValueError, match="sample_stats"):
+        validate_inference_data_alignment(SimpleNamespace(
+            posterior=posterior, log_likelihood=likelihood,
+        ))

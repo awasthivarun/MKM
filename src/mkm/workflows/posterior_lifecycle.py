@@ -20,6 +20,7 @@ from mkm.postprocessing.sampling import build_sampling_health
 from mkm.provenance import read_run_metadata, write_run_metadata
 
 
+RUN_STATUS_SAMPLING = "sampling"
 RUN_STATUS_SAMPLED = "sampled_free_variables"
 RUN_STATUS_COMPLETE = "complete"
 
@@ -61,8 +62,13 @@ def _sample_or_load(
         if not posterior_path.exists():
             raise FileNotFoundError(f"Posterior checkpoint not found: {posterior_path}")
         metadata = read_run_metadata(metadata_path)
-        checkpoint_validator(metadata)
+        # An atomic checkpoint may be complete even if the subsequent status write failed.
+        recovery = metadata.get("status") == RUN_STATUS_SAMPLING
+        checkpoint_validator({**metadata, "status": RUN_STATUS_SAMPLED} if recovery else metadata)
         inference_data = load_inference_data(posterior_path)
+        if recovery:
+            metadata["status"] = RUN_STATUS_SAMPLED
+            write_run_metadata(metadata, metadata_path)
         return inference_data, metadata, None, posterior_path, metadata_path
 
     if posterior_path.exists():
@@ -70,6 +76,9 @@ def _sample_or_load(
             f"Posterior already exists: {posterior_path}. Use --resume or --overwrite."
         )
 
+    metadata = metadata_factory()
+    metadata["status"] = RUN_STATUS_SAMPLING
+    write_run_metadata(metadata, metadata_path)
     start = perf_counter()
     inference_data = sample_posterior(
         built,
@@ -85,8 +94,11 @@ def _sample_or_load(
     )
     sampling_seconds = perf_counter() - start
 
+    # The validators normally accept sampled/complete only; verify a snapshot with
+    # an allowed status, while retaining the durable 'sampling' state on disk.
+    verified = {**metadata, "status": RUN_STATUS_SAMPLED}
+    checkpoint_validator(verified)
     write_inference_data(inference_data, posterior_path)
-    metadata = metadata_factory()
     metadata["status"] = RUN_STATUS_SAMPLED
     write_run_metadata(metadata, metadata_path)
     return inference_data, metadata, sampling_seconds, posterior_path, metadata_path
@@ -182,6 +194,8 @@ def run_posterior_lifecycle(
     )
     parameter_summary.to_csv(output_dir / "posterior_parameters.csv", index=False)
 
+    # Recompute the input/source identity before declaring this checkpoint complete.
+    checkpoint_validator({**metadata, "status": RUN_STATUS_SAMPLED})
     metadata["status"] = RUN_STATUS_COMPLETE
     metadata["sampling_health"] = sampling_health
     metadata["stored_posterior_variables"] = list(

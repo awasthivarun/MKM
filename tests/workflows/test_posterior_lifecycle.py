@@ -101,3 +101,65 @@ def test_posterior_lifecycle_owns_finalization_and_parameter_summary(tmp_path, m
 
     summary = pd.read_csv(tmp_path / "posterior_parameters.csv")
     assert summary.to_dict("records") == [{"parameter": "theta", "mean": 1.5}]
+
+
+def test_lifecycle_records_sampling_identity_before_sampler_and_rejects_change(tmp_path, monkeypatch):
+    from mkm.workflows import posterior_lifecycle as lifecycle
+    from mkm.provenance import sha256_file
+    source = tmp_path / "source.py"
+    source.write_text("before")
+    seen = []
+
+    def write_metadata(data, output_path):
+        seen.append((data["status"], data["source_sha256"]))
+
+    def sample(*_args, **_kwargs):
+        assert seen and seen[0][0] == lifecycle.RUN_STATUS_SAMPLING
+        source.write_text("after")
+        return SimpleNamespace(posterior=xr.Dataset({"theta": (("chain", "draw"), [[1.0]])}))
+
+    monkeypatch.setattr(lifecycle, "write_run_metadata", write_metadata)
+    monkeypatch.setattr(lifecycle, "sample_posterior", sample)
+    monkeypatch.setattr(lifecycle, "write_inference_data", lambda *_: None)
+    built = SimpleNamespace(model=SimpleNamespace(free_RVs=[SimpleNamespace(name="theta")]))
+    sampler = {"draws": 1, "tune": 0, "chains": 1, "cores": 1, "target_accept": 0.9,
+               "random_seed": 1, "nuts_sampler": None, "backend": "numba"}
+
+    def validate(data):
+        if data["source_sha256"] != sha256_file(source):
+            raise ValueError("source mismatch")
+
+    import pytest
+    with pytest.raises(ValueError, match="source mismatch"):
+        lifecycle.run_posterior_lifecycle(
+            built=built, output_dir=tmp_path / "fit", parameter_specs={}, sampler=sampler,
+            metadata_factory=lambda: {"source_sha256": sha256_file(source)},
+            checkpoint_validator=validate,
+        )
+    assert len(seen) == 1
+    assert seen[0][0] == lifecycle.RUN_STATUS_SAMPLING
+
+
+def test_resume_recovers_atomic_checkpoint_with_interrupted_status_write(tmp_path, monkeypatch):
+    from mkm.workflows import posterior_lifecycle as lifecycle
+    from mkm.provenance import read_run_metadata, write_run_metadata
+    directory = tmp_path / "run"
+    directory.mkdir()
+    (directory / "posterior.nc").write_bytes(b"atomic checkpoint")
+    write_run_metadata({"status": lifecycle.RUN_STATUS_SAMPLING, "identity": "unchanged"},
+                       directory / "run_metadata.yaml")
+    inference_data = SimpleNamespace(posterior=xr.Dataset({"theta": (("chain", "draw"), [[1.0]])}))
+    monkeypatch.setattr(lifecycle, "load_inference_data", lambda *_: inference_data)
+    sampler = {"draws": 1, "tune": 0, "chains": 1, "cores": 1, "target_accept": 0.9,
+               "random_seed": 1, "nuts_sampler": None, "backend": "numba"}
+
+    def validate(metadata):
+        assert metadata["status"] == lifecycle.RUN_STATUS_SAMPLED
+        assert metadata["identity"] == "unchanged"
+
+    _, metadata, _, _, _ = lifecycle._sample_or_load(
+        built=None, output_dir=directory, sampler=sampler, resume=True, overwrite=False,
+        metadata_factory=lambda: None, checkpoint_validator=validate,
+    )
+    assert metadata["status"] == lifecycle.RUN_STATUS_SAMPLED
+    assert read_run_metadata(directory / "run_metadata.yaml")["status"] == lifecycle.RUN_STATUS_SAMPLED

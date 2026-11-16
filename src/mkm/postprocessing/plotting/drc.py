@@ -19,7 +19,7 @@ from ._shared import (
 )
 
 
-def plot_transition_state_drc(summary, model_name, output_path: str | Path):
+def plot_transition_state_drc(summary, model_name, output_path: str | Path, *, electrolyte_label="KOH"):
     koh_values = sorted(summary["electrolyte_concentration_M"].unique())
     co_values = sorted(summary["CO_mole_fraction"].unique())
     controls = summary[["control", "label"]].drop_duplicates().itertuples(index=False)
@@ -50,7 +50,7 @@ def plot_transition_state_drc(summary, model_name, output_path: str | Path):
             ax.axhline(0.0, color=REFERENCE_COLOR, linestyle="--", linewidth=0.8, alpha=0.55)
             ax.axhline(1.0, color=REFERENCE_COLOR, linestyle=":", linewidth=0.8, alpha=0.45)
             if row == 0:
-                ax.set_title(f"{c_koh:g} M KOH", pad=TEXT_GAP_PT, fontweight="bold")
+                ax.set_title(f"{c_koh:g} M {electrolyte_label}", pad=TEXT_GAP_PT, fontweight="bold")
             if col == len(koh_values) - 1:
                 ax.text(
                     1.035, 0.5, f"{100 * co_fraction:g}% CO", transform=ax.transAxes,

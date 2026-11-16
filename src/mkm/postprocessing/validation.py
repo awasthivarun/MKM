@@ -219,6 +219,7 @@ def plot_heldout_pit_conditions(
     output_path: str | Path,
     *,
     context_label: str,
+    electrolyte_label: str = "KOH",
 ):
     """Plot predictive PIT values for observations that were genuinely held out."""
     koh_values = sorted(pointwise["electrolyte_concentration_M"].unique())
@@ -256,7 +257,7 @@ def plot_heldout_pit_conditions(
             ax.set_ylim(-0.03, 1.03)
             ax.grid(alpha=0.20)
             if row == 0:
-                ax.set_title(f"{c_koh:g} M KOH")
+                ax.set_title(f"{c_koh:g} M {electrolyte_label}")
             if col == len(koh_values) - 1:
                 ax.text(
                     1.04,

@@ -158,6 +158,8 @@ def test_todd_processing_output_contract(tmp_path, monkeypatch):
         lambda self, path, index=False: written.append(Path(path)),
     )
 
+    # Parquet writes are mocked in this contract test; lineage has its own file-based tests.
+    monkeypatch.setattr(script, "write_preprocessing_manifest", lambda *args, **kwargs: None)
     script.main()
 
     expected = set()
@@ -196,6 +198,8 @@ def test_em_processing_output_contract(tmp_path, monkeypatch):
         lambda self, path, index=False: written.append(Path(path)),
     )
 
+    # Parquet writes are mocked in this contract test; lineage has its own file-based tests.
+    monkeypatch.setattr(script, "write_preprocessing_manifest", lambda *args, **kwargs: None)
     script.main()
 
     expected = set()
@@ -258,6 +262,8 @@ def test_ptru_observable_output_contract(tmp_path, monkeypatch, medium, source_l
         lambda fig, path: figures.append(Path(path).name),
     )
 
+    # Parquet writes are mocked in this contract test; lineage has its own file-based tests.
+    monkeypatch.setattr(script, "write_preprocessing_manifest", lambda *args, **kwargs: None)
     script.process_source(
         analysis_path=analysis_path,
         figure_dir=tmp_path / "figures",

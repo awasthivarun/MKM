@@ -50,6 +50,7 @@ def _compute(run, config, step_eV):
         return compute_composition_transition_state_drc(
             **kwargs,
             parameterization=run.specification.parameterization,
+            prior_material=run.specification.prior_material or "Ag10Pd90",
         )
     return compute_transition_state_drc(**kwargs)
 

@@ -6,6 +6,9 @@ import shutil
 import numpy as np
 import pandas as pd
 
+from mkm.model_inputs import build_model_point_inputs
+from mkm.postprocessing.drc import compute_pt100_transition_state_drc, compare_transition_state_drc_steps
+from mkm.postprocessing.plotting.drc import plot_transition_state_drc
 from mkm.observable_maps import (
     build_adjacent_log_order_map,
     build_alpha_map,
@@ -68,6 +71,7 @@ from mkm.workflows.postprocessing_common import (
     safe_plot,
     status_row,
     write_postprocessing_status,
+    clear_postprocessing_tables, write_postprocessing_manifest,
 )
 
 
@@ -458,6 +462,10 @@ def postprocess_ptru_run(
     skip_observables=False,
     second_order_step_v=0.05,
     plot_level="core",
+    skip_drc=True,
+    drc_step_eV=1e-4,
+    check_drc_half_step=False,
+    save_drc_draws=False,
 ):
     """Generate Pt100 postprocessing products with shared MKM infrastructure."""
     if plot_level not in {"none", "core", "full"}:
@@ -467,6 +475,14 @@ def postprocess_ptru_run(
     figures_dir = paths.fit_figures_dir(run.output_dir)
     tables_dir.mkdir(parents=True, exist_ok=True)
     status_rows = []
+    clear_postprocessing_tables(tables_dir)
+    options = {
+        "random_seed": random_seed, "skip_loo": skip_loo,
+        "skip_observables": skip_observables, "second_order_step_v": second_order_step_v,
+        "plot_level": plot_level, "skip_drc": skip_drc, "drc_step_eV": drc_step_eV,
+        "check_drc_half_step": check_drc_half_step, "save_drc_draws": save_drc_draws,
+    }
+    write_postprocessing_manifest(run.output_dir, run, options=options)
 
     try:
         observations = build_observation_diagnostics(
@@ -524,6 +540,7 @@ def postprocess_ptru_run(
         status_rows.append(status_row("core", "error", f"{type(error).__name__}: {error}"))
         status_rows.append(status_row("overall", "error", "Core postprocessing failed."))
         write_postprocessing_status(tables_dir, status_rows)
+        write_postprocessing_manifest(run.output_dir, run, options=options, status="error")
         raise
 
     status_rows.append(status_row("core", "complete"))
@@ -608,8 +625,58 @@ def postprocess_ptru_run(
         calibration=calibration,
     )
 
+    if skip_drc:
+        status_rows.append(status_row("drc", "skipped_user", "DRC disabled by caller."))
+    else:
+        try:
+            postprocess_pt100_drc(
+                run, paths, temperature_K=temperature_K, step_eV=drc_step_eV,
+                check_half_step=check_drc_half_step, save_draws=save_drc_draws,
+                make_plots=plot_level != "none",
+            )
+            status_rows.append(status_row("drc", "complete"))
+        except Exception as error:
+            status_rows.append(status_row("drc", "error", f"{type(error).__name__}: {error}"))
+    write_postprocessing_status(tables_dir, status_rows)
+
     overall = overall_postprocessing_status(status_rows)
     status_rows.append(status_row("overall", overall))
     write_postprocessing_status(tables_dir, status_rows)
+    write_postprocessing_manifest(run.output_dir, run, options=options, status=overall)
     return overall
 
+
+
+def postprocess_pt100_drc(
+    run, paths, *, temperature_K, step_eV=1e-4, check_half_step=False,
+    save_draws=False, make_plots=True,
+):
+    """Write Pt100 TS DRC outputs with the AgPd schema and step checks."""
+    point_inputs = build_model_point_inputs(run.inputs)
+    def compute(step):
+        return compute_pt100_transition_state_drc(
+            run.inference_data, run.specification.model_name, run.specification.medium,
+            point_inputs, run.model_data.model_points, temperature_K, step_eV=step,
+        )
+    drc_dir = paths.fit_drc_dir(run.output_dir)
+    drc_dir.mkdir(parents=True, exist_ok=True)
+    for optional in ("drc_transition_state_step_convergence.csv", "drc_transition_state_draws.nc"):
+        (drc_dir / optional).unlink(missing_ok=True)
+    result = compute(step_eV)
+    result.summary.to_parquet(drc_dir / "drc_transition_state.parquet", index=False)
+    result.checks.to_csv(drc_dir / "drc_transition_state_checks.csv", index=False)
+    if save_draws:
+        result.draws.to_netcdf(drc_dir / "drc_transition_state_draws.nc")
+    if check_half_step:
+        compare_transition_state_drc_steps(result, compute(step_eV / 2)).to_csv(
+            drc_dir / "drc_transition_state_step_convergence.csv", index=False,
+        )
+    if make_plots:
+        figures_dir = paths.fit_figures_dir(run.output_dir) / "Pt100"
+        figures_dir.mkdir(parents=True, exist_ok=True)
+        plot_transition_state_drc(
+            result.summary, f"{run.specification.model_name}, Pt100 / {run.specification.medium}",
+            figures_dir / "drc_transition_states.png",
+            electrolyte_label=ptru_electrolyte_label(run.specification.medium),
+        )
+    return result

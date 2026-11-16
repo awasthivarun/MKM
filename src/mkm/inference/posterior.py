@@ -183,3 +183,36 @@ def summarize_sampler_health(inference_data):
         mean_tree_depth=float(np.mean(tree_depth)),
         max_tree_depth=int(np.max(tree_depth)),
     )
+
+
+def validate_inference_data_alignment(inference_data):
+    """Require matching MCMC chain/draw coordinate identities across diagnostic groups."""
+    posterior = _get_group(inference_data, "posterior")
+    posterior = posterior.to_dataset() if hasattr(posterior, "to_dataset") else posterior
+    for dim in ("chain", "draw"):
+        if dim not in posterior.dims:
+            raise ValueError(f"Posterior is missing {dim} dimension.")
+
+    for group_name in ("sample_stats", "log_likelihood"):
+        try:
+            group = _get_group(inference_data, group_name)
+        except ValueError as error:
+            raise ValueError(f"Inference data is missing required {group_name} group.") from error
+
+        group = group.to_dataset() if hasattr(group, "to_dataset") else group
+        for dim in ("chain", "draw"):
+            if dim not in group.dims:
+                raise ValueError(f"{group_name} is missing {dim} dimension.")
+            if group.sizes[dim] != posterior.sizes[dim]:
+                raise ValueError(f"Posterior and {group_name} have different {dim} dimensions.")
+
+            # get_index uses positional RangeIndex when a valid xarray dataset has implicit coordinates.
+            if not np.array_equal(np.asarray(group.get_index(dim)), np.asarray(posterior.get_index(dim))):
+                raise ValueError(f"Posterior and {group_name} have mismatched {dim} coordinates.")
+
+    likelihood = _get_group(inference_data, "log_likelihood")
+    if "rate_observed" not in likelihood:
+        raise ValueError("Inference data is missing log_likelihood.rate_observed.")
+    for dim in ("chain", "draw"):
+        if dim not in likelihood["rate_observed"].dims:
+            raise ValueError(f"log_likelihood.rate_observed is missing {dim} dimension.")

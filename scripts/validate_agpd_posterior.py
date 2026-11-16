@@ -13,7 +13,7 @@ from mkm.postprocessing.validation import (
     plot_validation_parameter_posteriors,
     summarize_validation_posterior_shift,
 )
-from mkm.provenance import build_fit_metadata
+from mkm.provenance import build_fit_metadata, model_data_observation_sha256, sha256_file
 from mkm.workflows.agpd_basic import (
     available_agpd_materials,
     build_agpd_inputs,
@@ -30,6 +30,7 @@ from mkm.workflows.agpd_fit import (
     resolve_agpd_fit_specification,
 )
 from mkm.workflows.agpd_posterior import (
+    agpd_model_specification,
     load_agpd_posterior_run,
     validate_agpd_run_metadata,
 )
@@ -216,7 +217,7 @@ def main():
                 config,
             ),
             prior_material=specification.prior_material,
-            model_specification=resolved_model_metadata(specification),
+            model_specification=agpd_model_specification(paths, specification),
             prior_specification=resolved_prior_metadata(specification, config),
         )
         metadata.update(
@@ -227,6 +228,9 @@ def main():
                 "holdout_co_mole_fraction": args.co_mole_fraction,
                 "n_training_observations": len(train_data.observations),
                 "n_heldout_observations": len(heldout_data.observations),
+                "training_observations_sha256": model_data_observation_sha256(train_data),
+                "heldout_observations_sha256": model_data_observation_sha256(heldout_data),
+                "validation_source_sha256": sha256_file(paths.root / "src/mkm/workflows/agpd_validation.py"),
                 "composition_extrapolation": composition_extrapolation,
             }
         )
@@ -246,6 +250,11 @@ def main():
             "holdout_material": args.holdout_material,
             "holdout_koh_M": args.koh_M,
             "holdout_co_mole_fraction": args.co_mole_fraction,
+            "n_training_observations": len(train_data.observations),
+            "n_heldout_observations": len(heldout_data.observations),
+            "training_observations_sha256": model_data_observation_sha256(train_data),
+            "heldout_observations_sha256": model_data_observation_sha256(heldout_data),
+            "validation_source_sha256": sha256_file(paths.root / "src/mkm/workflows/agpd_validation.py"),
         }
         mismatches = {
             key: (metadata.get(key), value)

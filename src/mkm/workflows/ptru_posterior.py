@@ -13,26 +13,14 @@ from mkm.provenance import (
     read_run_metadata,
     sha256_file,
     sha256_mapping,
+    PT100_MODEL_SOURCE_FILES as _PT100_MODEL_SOURCE_FILES,
+    source_file_hashes, validate_fit_input_identity,
 )
 from mkm.workflows.posterior_lifecycle import RUN_STATUS_COMPLETE
 from mkm.workflows.pt100_fit import build_pt100_fit
 
 
-PT100_SOURCE_FILES = (
-    "src/mkm/mechanisms/pt100.py",
-    "src/mkm/mechanisms/co_ssa.py",
-    "src/mkm/mechanisms/electrochem.py",
-    "src/mkm/models/pt100.py",
-    "src/mkm/models/ptru_registry.py",
-    "src/mkm/workflows/pt100_fit.py",
-    "src/mkm/workflows/configuration.py",
-    "src/mkm/workflows/likelihood_configuration.py",
-    "src/mkm/model_data.py",
-    "src/mkm/model_inputs.py",
-    "src/mkm/inference/model.py",
-    "src/mkm/inference/likelihoods.py",
-    "src/mkm/inference/priors.py",
-)
+PT100_SOURCE_FILES = _PT100_MODEL_SOURCE_FILES
 
 
 @dataclass(frozen=True)
@@ -55,10 +43,7 @@ def pt100_model_specification(paths, fit):
         "model_name": fit.specification.model_name,
         "assumptions": fit.config["mechanism_assumptions"],
         "registry": ptru_model_metadata(fit.specification.model_name),
-        "source_sha256": {
-            filename: sha256_file(paths.root / filename)
-            for filename in PT100_SOURCE_FILES
-        },
+        "source_sha256": source_file_hashes(paths.root, PT100_SOURCE_FILES),
     }
 
 
@@ -109,26 +94,10 @@ def validate_pt100_run_metadata(
         if metadata.get(key) != value
     ]
 
-    input_metadata = metadata.get("inputs", {})
-    config_paths = (fit.model_config_path, fit.prior_config_path)
-    expected_inputs = {
-        "data_path": str(fit.data_path.relative_to(paths.root)),
-        "data_sha256": sha256_file(fit.data_path),
-        "model_config_path": str(fit.model_config_path.relative_to(paths.root)),
-        "model_config_paths": [
-            str(path.relative_to(paths.root)) for path in config_paths
-        ],
-        "model_config_sha256": sha256_mapping({
-            str(path.relative_to(paths.root)): sha256_file(path)
-            for path in config_paths
-        }),
-    }
-
-    mismatches.extend(
-        f"inputs.{key}"
-        for key, value in expected_inputs.items()
-        if input_metadata.get(key) != value
-    )
+    mismatches.extend(validate_fit_input_identity(
+        metadata, paths.root, fit.data_path, fit.model_config_path,
+        (fit.model_config_path, fit.prior_config_path),
+    ))
 
     if metadata.get("status") not in allowed_statuses:
         mismatches.append("status")
@@ -208,17 +177,8 @@ def load_pt100_posterior_run(
             "Resume the fit before postprocessing."
         )
 
-    # ArviZ divergence overlays and observation diagnostics require matched MCMC draws.
-    for group_name in ("sample_stats", "log_likelihood"):
-        group = getattr(inference_data, group_name, None)
-        if group is None:
-            continue
-        for dim in ("chain", "draw"):
-            if group.sizes.get(dim) != inference_data.posterior.sizes.get(dim):
-                raise ValueError(
-                    f"Posterior and {group_name} have different {dim} dimensions; "
-                    "cannot safely compute diagnostics or plot divergences."
-                )
+    from mkm.inference.posterior import validate_inference_data_alignment
+    validate_inference_data_alignment(inference_data)
 
     return Pt100PosteriorRun(
         specification=fit.specification,

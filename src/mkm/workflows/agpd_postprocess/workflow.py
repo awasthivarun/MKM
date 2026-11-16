@@ -20,6 +20,7 @@ from mkm.workflows.postprocessing_common import (
     overall_postprocessing_status,
     status_row,
     write_postprocessing_status,
+    clear_postprocessing_tables, write_postprocessing_manifest,
 )
 def postprocess_agpd_run(
     run,
@@ -40,6 +41,13 @@ def postprocess_agpd_run(
     figures_dir = paths.fit_figures_dir(run.output_dir)
     tables_dir.mkdir(parents=True, exist_ok=True)
     status_rows = []
+    clear_postprocessing_tables(tables_dir)
+    options = {
+        "random_seed": random_seed, "skip_loo": skip_loo,
+        "skip_observables": skip_observables, "second_order_step_v": second_order_step_v,
+        "plot_level": plot_level,
+    }
+    write_postprocessing_manifest(run.output_dir, run, options=options)
 
     try:
         observation_diagnostics = build_observation_diagnostics(
@@ -64,6 +72,7 @@ def postprocess_agpd_run(
         status_rows.append(status_row("core", "error", f"{type(error).__name__}: {error}"))
         status_rows.append(status_row("overall", "error", "Core postprocessing failed."))
         write_postprocessing_status(tables_dir, status_rows)
+        write_postprocessing_manifest(run.output_dir, run, options=options, status="error")
         raise
 
     status_rows.append(status_row("core", "complete"))
@@ -119,4 +128,5 @@ def postprocess_agpd_run(
     overall = overall_postprocessing_status(status_rows)
     status_rows.append(status_row("overall", overall))
     write_postprocessing_status(tables_dir, status_rows)
+    write_postprocessing_manifest(run.output_dir, run, options=options, status=overall)
     return overall

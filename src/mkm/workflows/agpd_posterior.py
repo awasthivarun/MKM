@@ -1,14 +1,16 @@
 """Load, validate, and reconstruct AgPd posterior runs."""
 
 from dataclasses import dataclass
-import warnings
 
 from mkm.inference.likelihoods import RATE_NORMAL
 from mkm.inference.posterior import (
     compute_posterior_deterministics,
     load_inference_data,
 )
-from mkm.provenance import read_run_metadata, sha256_file, sha256_mapping
+from mkm.provenance import (
+    AGPD_MODEL_SOURCE_FILES, read_run_metadata, sha256_mapping,
+    source_file_hashes, validate_fit_input_identity,
+)
 from mkm.workflows.agpd_basic import build_agpd_model_data
 from mkm.workflows.agpd_fit import (
     all_parameter_specs,
@@ -35,8 +37,14 @@ class AgPdPosteriorRun:
     free_parameter_names: tuple[str, ...]
 
 
-def expected_agpd_run_metadata(specification, materials, config):
-    model_specification = resolved_model_metadata(specification)
+def agpd_model_specification(paths, specification):
+    return {**resolved_model_metadata(specification),
+            "source_sha256": source_file_hashes(paths.root, AGPD_MODEL_SOURCE_FILES)}
+
+
+def expected_agpd_run_metadata(specification, materials, config, paths=None):
+    model_specification = (agpd_model_specification(paths, specification) if paths is not None
+                           else resolved_model_metadata(specification))
     parameterization_specification = resolved_parameterization_metadata(specification, config)
     prior_specification = resolved_prior_metadata(specification, config)
     resolved_fit = {
@@ -70,55 +78,16 @@ def validate_agpd_run_metadata(
     *,
     allowed_statuses=(RUN_STATUS_COMPLETE,),
 ):
-    expected = expected_agpd_run_metadata(specification, materials, config)
-    legacy_optional = {"model_specification", "prior_specification", "resolved_fit_sha256"}
-    mismatches = {
-        key: (metadata.get(key), value)
-        for key, value in expected.items()
-        if (key not in legacy_optional or key in metadata) and metadata.get(key) != value
-    }
-    missing_resolved = sorted(key for key in legacy_optional if key not in metadata)
-    if missing_resolved:
-        warnings.warn(
-            "Posterior metadata predate resolved model/prior identity fields "
-            f"{missing_resolved}. Legacy identity checks will be used for this run.",
-            RuntimeWarning,
-            stacklevel=2,
-        )
-
-    input_metadata = metadata.get("inputs", {})
-
-    current_data_hash = sha256_file(paths.agpd_selected_path)
-    if input_metadata.get("data_sha256") != current_data_hash:
-        mismatches["inputs.data_sha256"] = (
-            input_metadata.get("data_sha256"),
-            current_data_hash,
-        )
-
-    current_config_hash = sha256_mapping({
-        str(path.relative_to(paths.root)): sha256_file(path) for path in paths.agpd_model_config_paths
-    })
-    stored_config_hash = input_metadata.get("model_config_sha256")
-    if stored_config_hash != current_config_hash:
-        warnings.warn(
-            "Model configuration bundle hash differs from the hash stored for this posterior. "
-            "The requested run identity and resolved parameterization specification "
-            "still match, so loading will continue. Do not interpret this as proof "
-            "that other run-defining config entries, such as base priors, are unchanged.",
-            RuntimeWarning,
-            stacklevel=2,
-        )
-
-    status = metadata.get("status")
-    if status not in allowed_statuses:
-        mismatches["status"] = (status, tuple(allowed_statuses))
-
+    expected = expected_agpd_run_metadata(specification, materials, config, paths=paths)
+    mismatches = [key for key, value in expected.items() if metadata.get(key) != value]
+    mismatches.extend(validate_fit_input_identity(
+        metadata, paths.root, paths.agpd_selected_path,
+        paths.agpd_model_config_path, paths.agpd_model_config_paths,
+    ))
+    if metadata.get("status") not in allowed_statuses:
+        mismatches.append("status")
     if mismatches:
-        details = "; ".join(
-            f"{key}: stored={stored!r}, expected={expected_value!r}"
-            for key, (stored, expected_value) in mismatches.items()
-        )
-        raise ValueError(f"Posterior run metadata do not match the requested run: {details}")
+        raise ValueError("Posterior run metadata do not match the requested run: " + ", ".join(mismatches))
 
 
 def load_agpd_posterior_run(
@@ -180,6 +149,8 @@ def load_agpd_posterior_run(
         inference_data = inference_data.copy()
         inference_data.posterior = posterior
 
+    from mkm.inference.posterior import validate_inference_data_alignment
+    validate_inference_data_alignment(inference_data)
     if not hasattr(inference_data, "log_likelihood"):
         raise ValueError(
             "Posterior does not contain pointwise log likelihood. "

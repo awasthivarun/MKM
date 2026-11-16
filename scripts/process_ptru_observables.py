@@ -22,6 +22,7 @@ from mkm.preprocessing.ptru_plotting import (
 from argparse import ArgumentParser
 
 from mkm.project_paths import ProjectPaths
+from mkm.provenance import write_preprocessing_manifest
 from mkm.workflows.configuration import load_yaml
 
 
@@ -40,6 +41,7 @@ def process_source(
     analysis = pd.read_parquet(analysis_path)
     prefix = analysis_path.name.removesuffix("_full.parquet")
     is_todd = source_label is None
+    outputs = {}
 
     selected = analysis
     if is_todd:
@@ -47,15 +49,16 @@ def process_source(
 
     print(f"\n{prefix}")
 
+    def write_table(frame, suffix):
+        path = analysis_path.with_name(f"{prefix}_{suffix}.parquet")
+        frame.to_parquet(path, index=False)
+        outputs[suffix] = (path, len(frame))
+
     # Transfer coefficients: differentiate full curves before selection
     alpha_replicates, alpha_summary = calculate_alpha_products(analysis, config["temperature_K"])
 
-    alpha_replicates.to_parquet(
-        analysis_path.with_name(f"{prefix}_alpha_replicates.parquet"), index=False,
-    )
-    alpha_summary.to_parquet(
-        analysis_path.with_name(f"{prefix}_alpha_summary.parquet"), index=False,
-    )
+    write_table(alpha_replicates, "alpha_replicates")
+    write_table(alpha_summary, "alpha_summary")
 
     alpha_replicates_selected = alpha_replicates
     alpha_summary_selected = alpha_summary
@@ -67,28 +70,20 @@ def process_source(
         alpha_replicates_selected = alpha_replicates.merge(selected_grid, on=keys, how="inner")
         alpha_summary_selected = alpha_summary.merge(selected_grid, on=keys, how="inner")
 
-        alpha_replicates_selected.to_parquet(
-            analysis_path.with_name(f"{prefix}_alpha_replicates_selected.parquet"), index=False,
-        )
-        alpha_summary_selected.to_parquet(
-            analysis_path.with_name(f"{prefix}_alpha_summary_selected.parquet"), index=False,
-        )
+        write_table(alpha_replicates_selected, "alpha_replicates_selected")
+        write_table(alpha_summary_selected, "alpha_summary_selected")
 
     print(f"  Full alpha observations: {len(alpha_replicates):,}")
     print(f"  Selected alpha observations: {len(alpha_replicates_selected):,}")
 
     # CO reaction orders: calculate from full and selected rates
     co_orders_full = calculate_co_orders(analysis)
-    co_orders_full.to_parquet(
-        analysis_path.with_name(f"{prefix}_delta_CO.parquet"), index=False,
-    )
+    write_table(co_orders_full, "delta_CO")
 
     co_orders_selected = co_orders_full
     if is_todd:
         co_orders_selected = calculate_co_orders(selected)
-        co_orders_selected.to_parquet(
-            analysis_path.with_name(f"{prefix}_delta_CO_selected.parquet"), index=False,
-        )
+        write_table(co_orders_selected, "delta_CO_selected")
 
     print(f"  Full CO orders: {len(co_orders_full):,}")
     print(f"  Selected CO orders: {len(co_orders_selected):,}")
@@ -101,19 +96,30 @@ def process_source(
         concentrations = config["electrolyte_concentrations_M"]
 
         ion_orders_full = calculate_ion_orders(analysis, concentrations)
-        ion_orders_full.to_parquet(
-            analysis_path.with_name(f"{prefix}_{ion_name}.parquet"), index=False,
-        )
+        write_table(ion_orders_full, ion_name)
 
         ion_orders_selected = calculate_ion_orders(selected, concentrations)
-        ion_orders_selected.to_parquet(
-            analysis_path.with_name(f"{prefix}_{ion_name}_selected.parquet"), index=False,
-        )
+        write_table(ion_orders_selected, f"{ion_name}_selected")
 
         print(f"  Full {ion_name} orders: {len(ion_orders_full):,}")
         print(f"  Selected {ion_name} orders: {len(ion_orders_selected):,}")
 
     
+    root = ProjectPaths.discover(__file__).root
+    input_paths = [analysis_path] + ([
+        analysis_path.with_name(f"{prefix}_selected.parquet")
+    ] if is_todd else [])
+    write_preprocessing_manifest(
+        analysis_path.with_name(f"{prefix}_observables_manifest.yaml"), root=root,
+        raw_paths=input_paths,
+        config_paths=[root / "config/preprocessing/ptru_todd.yaml"],
+        source_files=[
+            "scripts/process_ptru_observables.py", "src/mkm/preprocessing/ptru_observables.py",
+            "src/mkm/preprocessing/ptru_plotting.py", "src/mkm/preprocessing/observables.py",
+        ],
+        products={f"{prefix}_{suffix}": (path, rows) for suffix, (path, rows) in outputs.items()},
+    )
+
     if generate_figures:
         plot_source(
             analysis_path=analysis_path,

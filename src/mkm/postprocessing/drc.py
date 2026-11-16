@@ -20,6 +20,7 @@ from mkm.models.agpd_basic import (
     get_agpd_prior_profile,
     is_agpd_independent_parameterization,
 )
+from mkm.models.ptru_registry import get_ptru_model_definition
 from mkm.postprocessing.diagnostics import summarize_samples
 
 
@@ -306,38 +307,19 @@ def _build_transition_state_checks(draws, step_eV):
     )
 
 
-def compute_transition_state_drc(
-    inference_data,
-    model_name,
-    point_inputs,
-    model_points,
-    config,
-    step_eV=1e-4,
+def _compute_scalar_transition_state_drc(
+    inference_data, model_name, point_inputs, model_points, temperature_K,
+    parameter_names, function, controls, step_eV, fixed_parameters=None,
 ):
-    """Compute posterior transition-state DRCs by central finite differences in barrier energy.
-
-    For transition state j,
-
-        X_TS,j = -k_B T * d ln(r) / d G_TS,j
-
-    where the corresponding fitted activation-energy parameter is shifted by +/- step_eV
-    while all equilibrium free energies and other transition-state energies are held fixed.
-    """
+    """Shared scalar-parameter finite-difference TS DRC engine (AgPd and Pt100)."""
     step_eV = float(step_eV)
     if not np.isfinite(step_eV) or step_eV <= 0:
         raise ValueError("DRC perturbation step must be finite and positive.")
-
-    controls = transition_state_controls(model_name)
-    parameter_names, function = _compile_log_rate_evaluator(
-        model_name,
-        point_inputs,
-        config,
-    )
     posterior = _posterior_dataset(inference_data.posterior)
     posterior_draws = _posterior_scalar_parameter_draws(
         posterior,
         parameter_names,
-        fixed_parameters=get_agpd_fixed_parameters(model_name),
+        fixed_parameters=fixed_parameters,
     )
 
     missing_controls = [
@@ -359,7 +341,7 @@ def compute_transition_state_drc(
         (n_chains, n_draws, len(controls), n_points),
         dtype=float,
     )
-    kBT_eV = K_B_EV_K * float(config["temperature_K"])
+    kBT_eV = K_B_EV_K * float(temperature_K)
 
     for chain in range(n_chains):
         for draw in range(n_draws):
@@ -417,7 +399,7 @@ def compute_transition_state_drc(
         coords=coords,
         attrs={
             "model_name": model_name,
-            "temperature_K": float(config["temperature_K"]),
+            "temperature_K": float(temperature_K),
             "step_eV": step_eV,
             "definition": "X_TS = -k_B*T*d ln(rate)/d G_TS",
         },
@@ -431,10 +413,42 @@ def compute_transition_state_drc(
         dataset,
         step_eV=step_eV,
     )
-    return TransitionStateDRC(
-        draws=dataset,
-        summary=summary,
-        checks=checks,
+    return TransitionStateDRC(draws=dataset, summary=summary, checks=checks)
+
+
+
+def compute_transition_state_drc(
+    inference_data, model_name, point_inputs, model_points, config, step_eV=1e-4,
+):
+    """AgPd TS DRC; preserve all equilibrium parameters while perturbing barrier energies."""
+    parameter_names, function = _compile_log_rate_evaluator(model_name, point_inputs, config)
+    return _compute_scalar_transition_state_drc(
+        inference_data, model_name, point_inputs, model_points, config["temperature_K"],
+        parameter_names, function, transition_state_controls(model_name), step_eV,
+        fixed_parameters=get_agpd_fixed_parameters(model_name),
+    )
+
+
+def compute_pt100_transition_state_drc(
+    inference_data, model_name, medium, point_inputs, model_points, temperature_K, step_eV=1e-4,
+):
+    """Existing AgPd transition-state methodology applied to Pt100 in either medium."""
+    if medium not in ("acidic", "basic"):
+        raise ValueError(f"Unsupported Pt100 medium: {medium}")
+    definition = get_ptru_model_definition(model_name)
+    parameter_names = tuple(field.name for field in fields(definition.parameter_class))
+    symbols = {name: pt.dscalar(name) for name in parameter_names}
+    evaluated = definition.evaluator(
+        state=point_inputs, parameters=definition.parameter_class(**symbols),
+        temperature_K=temperature_K, medium=medium, model_name=model_name,
+    )
+    function = pytensor.function(
+        [symbols[name] for name in parameter_names], evaluated.ln_rate, on_unused_input="raise",
+    )
+    controls = transition_state_controls(model_name)
+    return _compute_scalar_transition_state_drc(
+        inference_data, model_name, point_inputs, model_points, temperature_K,
+        parameter_names, function, controls, step_eV,
     )
 
 

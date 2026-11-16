@@ -25,7 +25,8 @@ def _compute_drc(run, config, step_eV):
     }
     if run.specification.is_all_materials:
         return compute_composition_transition_state_drc(
-            **kwargs, parameterization=run.specification.parameterization
+            **kwargs, parameterization=run.specification.parameterization,
+            prior_material=run.specification.prior_material or "Ag10Pd90",
         )
     return compute_transition_state_drc(**kwargs)
 
@@ -35,6 +36,8 @@ def postprocess_agpd_drc(
 ):
     drc_dir = paths.fit_drc_dir(run.output_dir)
     drc_dir.mkdir(parents=True, exist_ok=True)
+    for optional in ("drc_transition_state_step_convergence.csv", "drc_transition_state_draws.nc"):
+        (drc_dir / optional).unlink(missing_ok=True)
     result = _compute_drc(run, config, step_eV)
     result.summary.to_parquet(drc_dir / "drc_transition_state.parquet", index=False)
     result.checks.to_csv(drc_dir / "drc_transition_state_checks.csv", index=False)

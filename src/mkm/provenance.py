@@ -8,6 +8,8 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 import platform
 import subprocess
+import os
+import tempfile
 
 import yaml
 
@@ -169,5 +171,98 @@ def write_run_metadata(metadata: dict, output_path: str | Path):
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(output_path, "w") as file:
-        yaml.safe_dump(metadata, file, sort_keys=False)
+    fd, temporary = tempfile.mkstemp(prefix=f".{output_path.name}.", suffix=".tmp", dir=output_path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as file:
+            yaml.safe_dump(metadata, file, sort_keys=False)
+            file.flush()
+            os.fsync(file.fileno())
+        os.replace(temporary, output_path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+# Explicitly bound model-construction dependencies. Postprocessing-only changes need not
+# invalidate a scientifically identical fitted posterior.
+MODEL_SOURCE_COMMON = (
+    "src/mkm/constants.py",
+    "src/mkm/mechanisms/base.py",
+    "src/mkm/mechanisms/co_ssa.py",
+    "src/mkm/mechanisms/electrochem.py",
+    "src/mkm/model_data.py",
+    "src/mkm/model_inputs.py",
+    "src/mkm/inference/model.py",
+    "src/mkm/inference/likelihoods.py",
+    "src/mkm/inference/priors.py",
+    "src/mkm/workflows/configuration.py",
+    "src/mkm/workflows/likelihood_configuration.py",
+)
+AGPD_MODEL_SOURCE_FILES = MODEL_SOURCE_COMMON + (
+    "src/mkm/models/agpd_basic.py", "src/mkm/models/agpd_registry.py",
+    "src/mkm/mechanisms/pd_basic.py",
+    "src/mkm/mechanisms/agpd_basic/__init__.py",
+    "src/mkm/mechanisms/agpd_basic/electrochem.py",
+    "src/mkm/mechanisms/agpd_basic/finite_co.py",
+    "src/mkm/mechanisms/agpd_basic/full_ssa.py",
+    "src/mkm/mechanisms/agpd_basic/legacy_qea.py",
+    "src/mkm/mechanisms/agpd_basic/state.py",
+    "src/mkm/mechanisms/agpd_basic/surface.py",
+    "src/mkm/workflows/agpd_basic.py",
+    "src/mkm/workflows/agpd_fit.py",
+)
+PT100_MODEL_SOURCE_FILES = MODEL_SOURCE_COMMON + (
+    "src/mkm/mechanisms/pt100.py",
+    "src/mkm/models/pt100.py",
+    "src/mkm/models/ptru_registry.py",
+    "src/mkm/workflows/pt100_fit.py",
+)
+
+
+def source_file_hashes(root, filenames):
+    root = Path(root)
+    return {name: sha256_file(root / name) for name in sorted(set(filenames))}
+
+
+def validate_fit_input_identity(metadata, root, data_path, model_config_path, model_config_paths):
+    root = Path(root)
+    config_paths = tuple(Path(path) for path in model_config_paths)
+    expected = {
+        "data_path": str(Path(data_path).relative_to(root)),
+        "data_sha256": sha256_file(data_path),
+        "model_config_path": str(Path(model_config_path).relative_to(root)),
+        "model_config_paths": [str(path.relative_to(root)) for path in config_paths],
+        "model_config_sha256": sha256_mapping({
+            str(path.relative_to(root)): sha256_file(path) for path in config_paths
+        }),
+    }
+    actual = metadata.get("inputs") or {}
+    return [f"inputs.{key}" for key, value in expected.items() if actual.get(key) != value]
+
+
+def write_preprocessing_manifest(output_path, *, root, raw_paths, config_paths, source_files, products):
+    """Write lineage only for files actually created; products maps dataset identifier to path/count."""
+    root = Path(root)
+    def file_info(path):
+        path = Path(path)
+        return {"path": str(path.relative_to(root)), "sha256": sha256_file(path)}
+    manifest = {
+        "created_utc": datetime.now(timezone.utc).isoformat(),
+        "raw_inputs": [file_info(path) for path in raw_paths],
+        "config_inputs": [file_info(path) for path in config_paths],
+        "source_sha256": source_file_hashes(root, source_files),
+        "outputs": {
+            name: {**file_info(path), "rows": int(rows)}
+            for name, (path, rows) in products.items()
+        },
+    }
+    write_run_metadata(manifest, output_path)
+    return manifest
+
+
+def model_data_observation_sha256(model_data):
+    observations = model_data.observations
+    return sha256_mapping({
+        "columns": list(observations.columns),
+        "rows": observations.to_dict(orient="records"),
+    })

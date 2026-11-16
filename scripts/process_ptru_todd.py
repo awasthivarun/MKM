@@ -2,8 +2,9 @@
 """Process Todd's Pt/PtRu data and apply the configured selection rules."""
 
 from mkm.preprocessing.ptru_selection import select_ptru_analysis
-from mkm.preprocessing.ptru_todd import build_todd_analysis_grid, load_todd_dataset
+from mkm.preprocessing.ptru_todd import TODD_FILES, build_todd_analysis_grid, load_todd_dataset
 from mkm.project_paths import ProjectPaths
+from mkm.provenance import write_preprocessing_manifest
 from mkm.workflows.configuration import load_yaml
 
 
@@ -28,6 +29,19 @@ def main():
         for path, frame in outputs.items():
             path.parent.mkdir(parents=True, exist_ok=True)
             frame.to_parquet(path, index=False)
+
+        write_preprocessing_manifest(
+            paths.ptru_analysis_dir(medium) / f"{dataset}_preprocessing_manifest.yaml",
+            root=paths.root,
+            raw_paths=[paths.ptru_raw_dir(medium) / name for name in TODD_FILES[medium]],
+            config_paths=[paths.ptru_preprocessing_config_path],
+            source_files=[
+                "scripts/process_ptru_todd.py", "src/mkm/preprocessing/ptru_todd.py",
+                "src/mkm/preprocessing/ptru_common.py", "src/mkm/preprocessing/ptru_selection.py",
+                "src/mkm/preprocessing/interpolation.py", "src/mkm/preprocessing/potential.py",
+            ],
+            products={path.stem: (path, len(frame)) for path, frame in outputs.items()},
+        )
 
         print(f"\n{dataset}")
         print(f"  Standardized observations: {len(standardized):,}")
