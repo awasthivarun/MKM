@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ast
+from copy import deepcopy
 from datetime import datetime, timezone
 from hashlib import sha256
 from importlib.metadata import PackageNotFoundError, version
@@ -119,6 +121,7 @@ def build_fit_metadata(
 
     return {
         "created_utc": datetime.now(timezone.utc).isoformat(),
+        "provenance_schema": 2,
         "git_commit": git_commit(root),
         "python": platform.python_version(),
         "platform": platform.platform(),
@@ -220,9 +223,84 @@ PTRU_MODEL_SOURCE_FILES = MODEL_SOURCE_COMMON + (
 PT100_MODEL_SOURCE_FILES = PTRU_MODEL_SOURCE_FILES
 
 
-def source_file_hashes(root, filenames):
+def _scoped_python_sha256(path, roots, selected_entries=None):
+    """Hash the transitive top-level AST dependencies of a selected mechanism.
+
+    New, unreferenced model functions or registry entries do not alter the digest.
+    Changes to reachable code (including shared helpers) do alter it. This is a
+    conservative static dependency signature, not semantic equivalence proof.
+    """
+    tree = ast.parse(Path(path).read_text(encoding="utf-8"), filename=str(path))
+    declarations = {}
+    selected_entries = selected_entries or {}
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            declarations[node.name] = node
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            names = [target.id for target in targets if isinstance(target, ast.Name)]
+            for name in names:
+                if name in selected_entries:
+                    if not isinstance(node.value, ast.Dict):
+                        raise ValueError(f"Selected registry '{name}' is not a literal dictionary in {path}.")
+                    wanted = selected_entries[name]
+                    registry_aliases = {
+                        target.id: assignment.value.value
+                        for assignment in tree.body if isinstance(assignment, ast.Assign)
+                        for target in assignment.targets if isinstance(target, ast.Name)
+                        if isinstance(assignment.value, ast.Constant)
+                    }
+                    pairs = [(key, val) for key, val in zip(node.value.keys, node.value.values)
+                             if (key.value if isinstance(key, ast.Constant)
+                                 else registry_aliases.get(key.id) if isinstance(key, ast.Name) else None) == wanted]
+                    if len(pairs) != 1:
+                        raise ValueError(f"Registry '{name}' does not contain exactly one '{wanted}' entry.")
+                    node = deepcopy(node)
+                    node.value = ast.Dict(keys=[pairs[0][0]], values=[pairs[0][1]])
+                declarations[name] = node
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                name = alias.asname or alias.name.split(".")[0]
+                declarations[name] = node
+
+    queue = list(roots)
+    missing = sorted(set(queue) - set(declarations))
+    if missing:
+        raise ValueError(f"Missing mechanism source symbol(s) in {path}: {missing}")
+    captured = {}
+    while queue:
+        name = queue.pop()
+        if name in captured or name not in declarations:
+            continue
+        node = declarations[name]
+        # Imports are projected to the selected binding, so extending an unrelated
+        # import list cannot change a fitted mechanism's provenance.
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            node = deepcopy(node)
+            node.names = [alias for alias in node.names if (alias.asname or alias.name.split(".")[0]) == name]
+        captured[name] = ast.dump(node, include_attributes=False)
+        queue.extend(child.id for child in ast.walk(node)
+                     if isinstance(child, ast.Name) and isinstance(child.ctx, ast.Load))
+        if isinstance(node, ast.ClassDef):
+            queue.extend(base.id for base in node.bases if isinstance(base, ast.Name))
+    return sha256_mapping(captured)
+
+
+def source_file_hashes(root, filenames, *, scoped_symbols=None, scoped_registry_entries=None, skip_files=()):
+    """Hash a fit's actual declared dependencies; retain whole-file hashes elsewhere."""
     root = Path(root)
-    return {name: sha256_file(root / name) for name in sorted(set(filenames))}
+    scoped_symbols = scoped_symbols or {}
+    scoped_registry_entries = scoped_registry_entries or {}
+    skipped = set(skip_files)
+    result = {}
+    for name in sorted(set(filenames) - skipped):
+        if name in scoped_symbols:
+            result[name] = _scoped_python_sha256(
+                root / name, scoped_symbols[name], scoped_registry_entries.get(name),
+            )
+        else:
+            result[name] = sha256_file(root / name)
+    return result
 
 
 def validate_fit_input_identity(metadata, root, data_path, model_config_path, model_config_paths):
@@ -238,6 +316,11 @@ def validate_fit_input_identity(metadata, root, data_path, model_config_path, mo
         }),
     }
     actual = metadata.get("inputs") or {}
+    # Schema 2 validates the resolved mechanism, prior, likelihood and active
+    # composition settings separately. Whole-YAML hashes remain as audit data,
+    # but appending unrelated model definitions does not reject the posterior.
+    if metadata.get("provenance_schema") == 2:
+        expected.pop("model_config_sha256")
     return [f"inputs.{key}" for key, value in expected.items() if actual.get(key) != value]
 
 

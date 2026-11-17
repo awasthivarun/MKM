@@ -171,8 +171,14 @@ def test_tracked_source_and_configuration_mutations_change_run_identity(tmp_path
     source.write_text("rate = 2")
     assert source_file_hashes(tmp_path, ("mechanism.py",)) != before
     config_path.write_text("parameter: 2")
+    # Schema 2 retains the complete YAML digest for audit but validates resolved
+    # kinetic and prior specifications at the model level instead of all YAML.
+    assert not validate_fit_input_identity(metadata, tmp_path, data_path, config_path, (config_path,))
+    # Older schema 1 checkpoints still require the exact configuration source.
+    legacy_metadata = dict(metadata)
+    legacy_metadata.pop("provenance_schema")
     assert "inputs.model_config_sha256" in validate_fit_input_identity(
-        metadata, tmp_path, data_path, config_path, (config_path,),
+        legacy_metadata, tmp_path, data_path, config_path, (config_path,),
     )
     data_path.write_text("different observations")
     assert "inputs.data_sha256" in validate_fit_input_identity(

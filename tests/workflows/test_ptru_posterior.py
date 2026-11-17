@@ -32,6 +32,9 @@ def fake_fit(paths, pooled=False):
             "surface_composition": {material: {"Ru_fraction": 0 if material == "Pt100" else 1 / 3}
                                     for material in materials},
             "parameterizations": {"shared": {}},
+            "temperature_K": 293.15,
+            "gas": {"standard_state_pressure_bar": 1.0, "total_pressure_bar": 1.0},
+            "electrolyte": {"activity_model": "ideal_molarity", "standard_state_concentration_M": 1.0},
         },
         parameter_specs={"Gact1_0": {"distribution": "normal", "mu": 0.5, "sigma": 0.1}},
         data_path=data_path, model_config_path=model_path, prior_config_path=prior_path,
@@ -65,14 +68,24 @@ def test_checkpoint_validates_and_detects_modifications(tmp_path, monkeypatch, p
         ptru_posterior.validate_ptru_run_metadata(metadata, paths, fit)
 
 
-def test_checkpoint_detects_changed_configuration(tmp_path, monkeypatch):
+def test_checkpoint_ignores_unrelated_configuration_file_edits(tmp_path, monkeypatch):
     paths = ProjectPaths(root=tmp_path)
     fit = fake_fit(paths)
     monkeypatch.setattr(ptru_posterior, "PTRU_MODEL_SOURCE_FILES", ())
     metadata = ptru_posterior.build_ptru_run_metadata(paths, fit, sampler={})
     metadata["status"] = RUN_STATUS_COMPLETE
-    fit.prior_config_path.write_text("priors: changed\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="inputs.model_config_sha256"):
+    fit.prior_config_path.write_text("priors: unrelated_new_model\n", encoding="utf-8")
+    ptru_posterior.validate_ptru_run_metadata(metadata, paths, fit)
+
+
+def test_checkpoint_detects_changed_resolved_kinetic_config(tmp_path, monkeypatch):
+    paths = ProjectPaths(root=tmp_path)
+    fit = fake_fit(paths)
+    monkeypatch.setattr(ptru_posterior, "PTRU_MODEL_SOURCE_FILES", ())
+    metadata = ptru_posterior.build_ptru_run_metadata(paths, fit, sampler={})
+    metadata["status"] = RUN_STATUS_COMPLETE
+    fit.config["temperature_K"] = 310.0
+    with pytest.raises(ValueError, match="model_specification"):
         ptru_posterior.validate_ptru_run_metadata(metadata, paths, fit)
 
 

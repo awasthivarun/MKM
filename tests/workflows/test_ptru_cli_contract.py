@@ -37,7 +37,7 @@ def test_unified_fit_cli_options(monkeypatch, medium, model):
     assert args.all_materials and args.parameterization == "linear_xRu"
     assert args.overwrite and not args.resume
     assert args.draws == 1000 and args.tune == 1000 and args.chains == 4 and args.cores == 4
-    assert args.target_accept == 0.95 and args.nuts_sampler == "nutpie" and args.backend == "numba"
+    assert args.target_accept == 0.90 and args.nuts_sampler == "nutpie" and args.backend == "numba"
 
 
 @pytest.mark.parametrize("medium", ["acidic", "basic"])

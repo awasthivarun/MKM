@@ -1,8 +1,10 @@
 """Load, validate, and reconstruct AgPd posterior runs."""
 
+from copy import deepcopy
 from dataclasses import dataclass
 
 from mkm.inference.likelihoods import RATE_NORMAL
+from mkm.models.agpd_registry import get_agpd_model_definition
 from mkm.inference.posterior import (
     compute_posterior_deterministics,
     load_inference_data,
@@ -37,13 +39,47 @@ class AgPdPosteriorRun:
     free_parameter_names: tuple[str, ...]
 
 
-def agpd_model_specification(paths, specification):
-    return {**resolved_model_metadata(specification),
-            "source_sha256": source_file_hashes(paths.root, AGPD_MODEL_SOURCE_FILES)}
+def agpd_model_specification(paths, specification, config):
+    definition = get_agpd_model_definition(specification.model_name)
+    registry = "src/mkm/models/agpd_registry.py"
+    mechanism_file = "src/" + definition.evaluator.__module__.replace(".", "/") + ".py"
+    dependencies = {registry: (
+        "AGPD_MODEL_REGISTRY", "get_agpd_model_definition", "agpd_model_metadata",
+        "available_agpd_models", "available_agpd_all_material_models",
+    ), mechanism_file: (definition.evaluator.__name__, definition.parameter_class.__name__)}
+    excluded = {"src/mkm/mechanisms/agpd_basic/__init__.py",
+                "src/mkm/mechanisms/agpd_basic/legacy_qea.py"}
+    for name in ("src/mkm/mechanisms/agpd_basic/finite_co.py",
+                 "src/mkm/mechanisms/agpd_basic/full_ssa.py"):
+        if name != mechanism_file:
+            excluded.add(name)
+    model_config = {
+        "temperature_K": config["temperature_K"], "gas": deepcopy(config["gas"]),
+        "electrolyte": deepcopy(config["electrolyte"]),
+        "surface_composition": {material: deepcopy(config["surface_composition"][material])
+                                for material in (specification.material,) if material is not None}
+                               if not specification.is_all_materials else
+                               {material: deepcopy(config["surface_composition"][material])
+                                for material in fit_materials(specification, config)},
+        "surface_assumptions": deepcopy(config.get("surface_assumptions", {})),
+    }
+    if definition.coverage_cap_mode == "config":
+        model_config["co_coverage_cap"] = {material: config["co_coverage_cap"][material]
+                                            for material in model_config["surface_composition"]}
+    if definition.config_model_name == "CO_BF_ER_LH_3_OH":
+        model_config["full_ssa"] = deepcopy(config["full_ssa"])
+    return {
+        **resolved_model_metadata(specification), "kinetic_config": model_config,
+        "source_sha256": source_file_hashes(
+            paths.root, (*AGPD_MODEL_SOURCE_FILES, mechanism_file), scoped_symbols=dependencies,
+            scoped_registry_entries={registry: {"AGPD_MODEL_REGISTRY": specification.model_name}},
+            skip_files=excluded,
+        ),
+    }
 
 
 def expected_agpd_run_metadata(specification, materials, config, paths=None):
-    model_specification = (agpd_model_specification(paths, specification) if paths is not None
+    model_specification = (agpd_model_specification(paths, specification, config) if paths is not None
                            else resolved_model_metadata(specification))
     parameterization_specification = resolved_parameterization_metadata(specification, config)
     prior_specification = resolved_prior_metadata(specification, config)

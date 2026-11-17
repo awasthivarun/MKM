@@ -64,6 +64,7 @@ def test_agpd_registry_keeps_individual_co_pathway_subsets_and_all_material_mode
     )
 
     assert available_agpd_all_material_models() == (
+        "CO_LH", "CO_ER", "CO_BF", "CO_ER_LH", "CO_BF_LH", "CO_BF_ER",
         "CO_BF_ER_LH",
         "CO_BF_ER_LH_3_OH",
         "CO_BF_ER_LH_q1",
@@ -243,6 +244,33 @@ def test_q1_parameterization_reuses_parent_slopes_except_fixed_parameters():
     _, q1_slopes = get_agpd_parameterization(config, "CO_BF_ER_LH_Ag10_no_BF_q1", "linear_xAg")
 
     assert set(q1_slopes) == set(parent_slopes) - {"q", "beta_2_BF"}
+
+
+@pytest.mark.parametrize("model_name", ("CO_LH", "CO_ER", "CO_BF", "CO_ER_LH", "CO_BF_LH", "CO_BF_ER"))
+def test_reduced_pooled_models_only_use_slopes_for_active_parameters(model_name):
+    config = _config()
+    canonical_slopes = config["composition_parameterizations"]["linear_xAg"]["models"]["CO_BF_ER_LH"]["slopes"]
+    active_parameters = {field.name for field in fields(get_agpd_model_definition(model_name).parameter_class)}
+
+    _, slope_specs = get_agpd_parameterization(config, model_name, "linear_xAg")
+    assert set(slope_specs) == set(canonical_slopes) & active_parameters
+
+    parameter_specs = get_agpd_all_material_parameter_specs(
+        config, prior_material="Ag10Pd90", model_name=model_name, parameterization="linear_xAg"
+    )
+    assert {name for name in parameter_specs if name.endswith("_xAg_slope")} == {
+        f"{name}_xAg_slope" for name in slope_specs
+    }
+
+
+def test_reduced_pooled_model_still_rejects_unknown_canonical_slope():
+    config = deepcopy(_config())
+    config["composition_parameterizations"]["linear_xAg"]["models"]["CO_BF_ER_LH"]["slopes"][
+        "not_a_mechanism_parameter"
+    ] = {"distribution": "normal", "mu": 0, "sigma": 1}
+
+    with pytest.raises(ValueError, match="unknown mechanism parameters"):
+        get_agpd_parameterization(config, "CO_LH", "linear_xAg")
 
 
 def test_individual_co_priors_use_one_canonical_parent_per_material_family():

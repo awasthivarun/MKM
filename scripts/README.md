@@ -155,6 +155,10 @@ python scripts/plot_agpd_basic.py
 
 ## Prior predictive checks
 
+Individual AgPd and PtRu fits now default to `--error-structure shared`. Pooled fits
+also default to shared, including `independent` physical parameterizations. Explicitly use
+`--error-structure material` only for pooled fits that support it.
+
 Individual fit identity:
 
 ```powershell
@@ -464,13 +468,19 @@ python scripts/postprocess_ptru_drc.py CO_ER_LH --medium acidic --material Pt100
 python scripts/compare_ptru_models.py --medium acidic --material Pt100 --comparison-name pathways --run LH,CO_LH --run ER,CO_ER --run ER_LH,CO_ER_LH
 python scripts/inspect_ptru_checkpoint.py CO_ER_LH --medium acidic --material Pt100
 python scripts/validate_ptru_posterior.py CO_ER_LH --medium acidic --material Pt100 --electrolyte-M 0.1 --co-mole-fraction 0.01
+python scripts/validate_ptru_lomo.py CO_ER_LH --medium acidic --holdout-material Pt50Ru50 --parameterization linear_xRu
+python scripts/plot_ptru_composition_parameters.py CO_ER_LH --medium basic --parameterization linear_xRu
+python scripts/compare_ptru_models.py --medium basic --all-materials --comparison-name pooled --run shared,CO_ER_LH,shared,shared --run trend,CO_ER_LH,linear_xRu,material
 ```
 
 Pass the same `--all-materials`, `--parameterization`, `--error-structure`, and
 `--exclude-materials` arguments for diagnostic scripts operating on a pooled posterior.
-LOCO validation currently supports one selected PtRu material at a time, not pooled refits.
-Strict source/configuration/data hashes apply; checkpoints created with the deleted dedicated
-Pt100/alloy modules must be regenerated under the unified source hashes. Pointwise PSIS-LOO
+LOCO validation supports one selected PtRu material; pooled PtRu LOMO is now available with
+`shared` or `linear_xRu` physical parameterization and shared likelihood errors. The BF-only
+mechanism is not valid for PtRu LOMO: a three-material dataset cannot leave one alloy out
+while retaining two BF-capable training materials. New checkpoints use model-scoped source
+and resolved-configuration provenance (schema 2). Legacy checkpoints retain their original
+strict validation requirements and are not silently migrated. Pointwise PSIS-LOO
 leaves out measured rates, not entire correlated curves or conditions.
 
 ### Regression tests
@@ -480,3 +490,22 @@ pytest tests/test_pt100_mechanisms.py tests/test_ptru_alloy_mechanisms.py tests/
 pytest tests/workflows/test_ptru_fit.py tests/workflows/test_ptru_alloy_fit.py tests/workflows/test_ptru_posterior.py -q
 pytest tests -q
 ```
+
+## Model registration, provenance and validation (November 2026)
+
+The seven standard AgPd pathway combinations are selectable for all-material fits.
+`CO_BF` requires `--exclude-materials Pd100`. AgPd model comparison and prior-predictive
+commands also accept `--exclude-materials` for pooled fits. PtRu model comparison can use
+`--run LABEL,MODEL,PARAMETERIZATION,ERROR_STRUCTURE` to compare different parameterizations
+and likelihood error structures for an **identical ordered observation set**. LOCO and LOMO
+hold out whole experimental groups; PSIS-LOO still holds out individual observations.
+
+New posterior metadata use provenance schema 2. The source signature hashes the registered
+mechanism entry and its statically reachable implementation rather than unrelated model
+entries. It still hashes shared kinetic and likelihood dependencies, and compares resolved
+kinetic conditions, priors, material set, fit parameterization, and data identity. Whole
+configuration-file hashes remain in metadata for auditing, but do not invalidate schema-2
+posteriors when unrelated model entries are added. This is a *static dependency signature*;
+complex dynamic imports or monkeypatching require manual review. Version-1 checkpoints
+are deliberately **not** accepted on the basis of approximate hashes; keep their original
+Git revision/configuration available for provenance verification.

@@ -23,7 +23,7 @@ def parse_args():
     parser.add_argument("--material", default="Ag10Pd90")
     parser.add_argument("--all-materials", action="store_true")
     parser.add_argument("--parameterization", default="shared")
-    parser.add_argument("--error-structure", choices=("shared", "material"), default="material")
+    parser.add_argument("--error-structure", choices=("shared", "material"), default="shared")
     parser.add_argument("--prior-material", default="Ag10Pd90")
     parser.add_argument(
         "--exclude-materials",

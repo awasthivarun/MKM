@@ -376,7 +376,7 @@ def _individual_job(material, model):
         "model": model,
         "display_name": model,
         "parameterization": "",
-        "error_structure": "material",
+        "error_structure": "shared",
         "prior_material": material,
     }
 

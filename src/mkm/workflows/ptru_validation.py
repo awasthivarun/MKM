@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from mkm.provenance import model_data_observation_sha256, sha256_file
+from mkm.provenance import model_data_observation_sha256, source_file_hashes
 from mkm.workflows.ptru_fit import build_ptru_fit, load_ptru_config, resolve_ptru_fit_specification
 from mkm.workflows.ptru_posterior import build_ptru_run_metadata, validate_ptru_run_metadata
 
@@ -55,7 +55,13 @@ def _ptru_loco_identity(paths, fit, electrolyte_M, co_mole_fraction, heldout_dat
         "n_heldout_observations": len(heldout_data.observations),
         "training_observations_sha256": _model_data_observation_sha256(fit.model_data),
         "heldout_observations_sha256": _model_data_observation_sha256(heldout_data),
-        "validation_source_sha256": sha256_file(paths.root / "src/mkm/workflows/ptru_validation.py"),
+        "validation_source_sha256": source_file_hashes(
+            paths.root, ("src/mkm/workflows/ptru_validation.py",),
+            scoped_symbols={"src/mkm/workflows/ptru_validation.py": (
+                "split_ptru_loco", "ptru_validation_output_dir", "build_ptru_loco_fit",
+                "_ptru_loco_identity", "ptru_loco_metadata", "validate_ptru_loco_metadata",
+            )},
+        )["src/mkm/workflows/ptru_validation.py"],
     }
 
 
@@ -73,3 +79,50 @@ def validate_ptru_loco_metadata(
     mismatches = [key for key, value in expected.items() if metadata.get(key) != value]
     if mismatches:
         raise ValueError("PtRu LOCO checkpoint split/provenance mismatch: " + ", ".join(mismatches))
+
+
+def split_ptru_lomo(selected, holdout_material):
+    """Hold out every potential, condition, and replicate of one PtRu material."""
+    materials = tuple(selected["material"].unique())
+    if holdout_material not in materials:
+        raise ValueError(f"LOMO material '{holdout_material}' is absent from the selected dataset.")
+    train = selected.loc[selected["material"] != holdout_material].copy()
+    heldout = selected.loc[selected["material"] == holdout_material].copy()
+    if train["material"].nunique() < 2 or heldout.empty:
+        raise ValueError("PtRu LOMO requires at least two training materials and one held-out material.")
+    return train, heldout
+
+
+def ptru_lomo_output_dir(paths, medium, model_name, holdout_material, parameterization, error_structure):
+    """Keep holdout fits separate from full-data posterior checkpoints."""
+    return (paths.ptru_results_root(medium) / "validation" / "lomo" / holdout_material
+            / model_name / parameterization / error_structure)
+
+
+def ptru_lomo_metadata(paths, fit, sampler, heldout_material, heldout_data):
+    metadata = build_ptru_run_metadata(paths, fit, sampler)
+    metadata.update({
+        "validation_scheme": "lomo", "holdout_material": heldout_material,
+        "n_training_observations": len(fit.model_data.observations),
+        "n_heldout_observations": len(heldout_data.observations),
+        "training_observations_sha256": _model_data_observation_sha256(fit.model_data),
+        "heldout_observations_sha256": _model_data_observation_sha256(heldout_data),
+        "validation_source_sha256": source_file_hashes(
+            paths.root, ("src/mkm/workflows/ptru_validation.py",),
+            scoped_symbols={"src/mkm/workflows/ptru_validation.py": (
+                "split_ptru_lomo", "ptru_lomo_output_dir", "ptru_lomo_metadata", "validate_ptru_lomo_metadata",
+            )},
+        )["src/mkm/workflows/ptru_validation.py"],
+    })
+    return metadata
+
+
+def validate_ptru_lomo_metadata(metadata, paths, fit, sampler, heldout_material, heldout_data,
+                                *, allowed_statuses):
+    validate_ptru_run_metadata(metadata, paths, fit, allowed_statuses=allowed_statuses)
+    expected = ptru_lomo_metadata(paths, fit, sampler, heldout_material, heldout_data)
+    keys = ("validation_scheme", "holdout_material", "n_training_observations", "n_heldout_observations",
+            "training_observations_sha256", "heldout_observations_sha256", "validation_source_sha256")
+    mismatches = [key for key in keys if metadata.get(key) != expected[key]]
+    if mismatches:
+        raise ValueError("PtRu LOMO checkpoint split/provenance mismatch: " + ", ".join(mismatches))

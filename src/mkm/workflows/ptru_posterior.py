@@ -36,7 +36,14 @@ def ptru_model_specification(paths, fit):
         "materials": list(spec.materials), "assumptions": deepcopy(fit.config["mechanism_assumptions"]),
         "surface_composition": {material: deepcopy(fit.config["surface_composition"][material])
                                 for material in spec.materials},
-        "source_sha256": source_file_hashes(paths.root, PTRU_MODEL_SOURCE_FILES),
+        "temperature_K": fit.config["temperature_K"],
+        "gas": deepcopy(fit.config["gas"]),
+        "electrolyte": deepcopy(fit.config["electrolyte"]),
+        "source_sha256": source_file_hashes(
+            paths.root, PTRU_MODEL_SOURCE_FILES,
+            scoped_symbols={"src/mkm/mechanisms/ptru.py": ("evaluate_ptru_co", "PTRU_PARAMETER_CLASSES")},
+            scoped_registry_entries={"src/mkm/mechanisms/ptru.py": {"PTRU_PARAMETER_CLASSES": spec.model_name}},
+        ),
     }
 
 

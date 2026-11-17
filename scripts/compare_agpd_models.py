@@ -17,6 +17,8 @@ def parse_args():
     parser.add_argument("--all-materials", action="store_true")
     parser.add_argument("--material", default="Ag10Pd90")
     parser.add_argument("--prior-material", default="Ag10Pd90")
+    parser.add_argument("--exclude-materials", nargs="*", default=(),
+                        help="All-material only: exclusions shared by all candidates.")
     parser.add_argument(
         "--run",
         action="append",
@@ -43,7 +45,7 @@ def _parse_run(specification, all_materials):
     else:
         label, model = fields
         parameterization = "shared"
-        error_structure = "material"
+        error_structure = "shared"
     return label, model, parameterization, error_structure
 
 
@@ -70,6 +72,7 @@ def main():
             parameterization=parameterization,
             error_structure=error_structure,
             prior_material=args.prior_material,
+            excluded_materials=args.exclude_materials,
         )
         run = load_agpd_posterior_run(
             paths,
@@ -113,6 +116,7 @@ def main():
                 "model": model,
                 "parameterization": parameterization if args.all_materials else None,
                 "error_structure": error_structure,
+                "excluded_materials": ",".join(args.exclude_materials),
             }
             for label, model, parameterization, error_structure in parsed
         ]

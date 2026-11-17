@@ -37,7 +37,7 @@ def parse_args():
     parser.add_argument(
         "--error-structure",
         choices=("shared", "material"),
-        default="material",
+        default="shared",
     )
     parser.add_argument("--prior-material", default=DEFAULT_PRIOR_MATERIAL)
     parser.add_argument(
@@ -129,7 +129,7 @@ def main():
                 config,
             ),
             prior_material=specification.prior_material,
-            model_specification=agpd_model_specification(paths, specification),
+            model_specification=agpd_model_specification(paths, specification, config),
             prior_specification=resolved_prior_metadata(specification, config),
         )
 

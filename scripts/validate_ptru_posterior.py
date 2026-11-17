@@ -42,7 +42,7 @@ def parse_args():
     parser.add_argument("--tune", type=int, default=1000)
     parser.add_argument("--chains", type=int, default=4)
     parser.add_argument("--cores", type=int, default=4)
-    parser.add_argument("--target-accept", type=float, default=0.95)
+    parser.add_argument("--target-accept", type=float, default=0.90)
     parser.add_argument("--random-seed", type=int, default=1)
     parser.add_argument("--nuts-sampler", default="nutpie")
     parser.add_argument("--backend", default="numba")

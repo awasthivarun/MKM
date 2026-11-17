@@ -45,6 +45,10 @@ def calculate_ag_qea_coverages(log_K_OH_Ag, state: AgPdPointState):
     zeros = pt.zeros_like(term_OH_Ag)
     log_theta_empty_Ag = -pt.logsumexp(pt.stack([zeros, term_OH_Ag]), axis=0)
     log_theta_OH_Ag = term_OH_Ag + log_theta_empty_Ag
+    # On Pd100, Ag-site coverages are reporting conventions, not physical site fractions.
+    has_ag = pt.as_tensor_variable(np.asarray(state.Ag_fraction) > 0.0)
+    log_theta_OH_Ag = pt.where(has_ag, log_theta_OH_Ag, -np.inf)
+    log_theta_empty_Ag = pt.where(has_ag, log_theta_empty_Ag, 0.0)
     return AgQEACoverages(log_theta_empty_Ag=log_theta_empty_Ag, log_theta_OH_Ag=log_theta_OH_Ag)
 
 

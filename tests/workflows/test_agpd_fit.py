@@ -18,87 +18,63 @@ def _config():
     return load_agpd_model_config(ProjectPaths.discover(__file__))
 
 
-def test_individual_fit_uses_one_material_labelled_error_pair():
+def test_individual_fit_uses_shared_error_pair():
     specification = resolve_agpd_fit_specification(
-        _config(),
-        model_name="CO_BF_ER_LH",
-        material="Ag10Pd90",
-        error_structure="material",
+        _config(), model_name="CO_BF_ER_LH", material="Ag10Pd90",
     )
-
     assert specification.fit_scope == "individual"
     assert specification.material == "Ag10Pd90"
     assert specification.parameterization is None
-    assert specification.error_structure == "material"
+    assert specification.error_structure == "shared"
 
 
-def test_individual_fit_rejects_shared_error_option():
-    with pytest.raises(ValueError, match="material-indexed"):
+def test_individual_fit_rejects_material_error_option():
+    with pytest.raises(ValueError, match="error_structure='shared'"):
         resolve_agpd_fit_specification(
-            _config(),
-            model_name="CO_BF_ER_LH",
-            material="Ag10Pd90",
-            error_structure="shared",
+            _config(), model_name="CO_BF_ER_LH", material="Ag10Pd90", error_structure="material",
         )
 
 
 def test_pd100_individual_fit_allows_only_non_bf_finite_rate_co_models():
     config = _config()
-
     for model_name in ("CO_LH", "CO_ER", "CO_ER_LH"):
-        specification = resolve_agpd_fit_specification(
-            config,
-            model_name=model_name,
-            material="Pd100",
-            error_structure="material",
-        )
-        assert specification.material == "Pd100"
-        assert specification.model_name == model_name
-
-    for model_name in (
-        "CO_BF",
-        "CO_BF_LH",
-        "CO_BF_ER",
-        "CO_BF_ER_LH",
-        "CO_BF_ER_LH_capped",
-    ):
+        specification = resolve_agpd_fit_specification(config, model_name=model_name, material="Pd100")
+        assert specification.material == "Pd100" and specification.model_name == model_name
+    for model_name in ("CO_BF", "CO_BF_LH", "CO_BF_ER", "CO_BF_ER_LH", "CO_BF_ER_LH_capped"):
         with pytest.raises(ValueError, match="non-BF finite-rate CO models"):
-            resolve_agpd_fit_specification(
-                config,
-                model_name=model_name,
-                material="Pd100",
-                error_structure="material",
-            )
+            resolve_agpd_fit_specification(config, model_name=model_name, material="Pd100")
 
 
-@pytest.mark.parametrize(
-    "model_name",
-    ("CO_LH", "CO_ER", "CO_BF", "CO_ER_LH", "CO_BF_LH", "CO_BF_ER", "CO_BF_ER_LH"),
-)
+@pytest.mark.parametrize("model_name", ("CO_LH", "CO_ER", "CO_BF", "CO_ER_LH",
+                                        "CO_BF_LH", "CO_BF_ER", "CO_BF_ER_LH"))
 def test_alloys_allow_full_individual_finite_rate_co_model_grid(model_name):
-    specification = resolve_agpd_fit_specification(
-        _config(),
-        model_name=model_name,
-        material="Ag50Pd50",
-        error_structure="material",
-    )
+    specification = resolve_agpd_fit_specification(_config(), model_name=model_name, material="Ag50Pd50")
     assert specification.fit_scope == "individual"
-    assert specification.model_name == model_name
-    assert specification.material == "Ag50Pd50"
+    assert specification.model_name == model_name and specification.material == "Ag50Pd50"
 
 
-def test_individual_co_subset_models_remain_unavailable_for_all_material_fit():
+@pytest.mark.parametrize("model_name", ("CO_LH", "CO_ER", "CO_ER_LH", "CO_BF_LH",
+                                        "CO_BF_ER", "CO_BF_ER_LH"))
+def test_standard_agpd_mechanisms_allow_pooled_fit(model_name):
+    spec = resolve_agpd_fit_specification(_config(), model_name=model_name, all_materials=True)
+    assert spec.is_all_materials and spec.error_structure == "shared"
+
+
+def test_bf_only_pooled_fit_requires_exclusion_of_pd100():
     config = _config()
+    with pytest.raises(ValueError, match="exclude-materials Pd100"):
+        resolve_agpd_fit_specification(config, model_name="CO_BF", all_materials=True)
+    spec = resolve_agpd_fit_specification(
+        config, model_name="CO_BF", all_materials=True, excluded_materials=("Pd100",),
+    )
+    assert spec.excluded_materials == ("Pd100",)
 
-    for model_name in ("CO_LH", "CO_ER", "CO_BF", "CO_ER_LH", "CO_BF_LH", "CO_BF_ER"):
-        with pytest.raises(ValueError, match="not available for all-material fitting"):
-            resolve_agpd_fit_specification(
-                config,
-                model_name=model_name,
-                all_materials=True,
-                parameterization="shared",
-                error_structure="shared",
-            )
+
+def test_independent_pooled_fit_defaults_to_shared_errors():
+    spec = resolve_agpd_fit_specification(
+        _config(), model_name="CO_ER_LH", all_materials=True, parameterization="independent",
+    )
+    assert spec.error_structure == "shared"
 
 
 @pytest.mark.parametrize(
@@ -355,7 +331,7 @@ def test_material_exclusions_are_rejected_for_individual_fits():
             _config(),
             model_name="CO_ER_LH",
             material="Ag25Pd75",
-            error_structure="material",
+            error_structure="shared",
             excluded_materials=("Ag10Pd90",),
         )
 

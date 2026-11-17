@@ -60,7 +60,7 @@ def resolve_agpd_fit_specification(
     all_materials=False,
     material="Ag10Pd90",
     parameterization="shared",
-    error_structure="material",
+    error_structure="shared",
     prior_material="Ag10Pd90",
     excluded_materials=(),
 ):
@@ -87,6 +87,8 @@ def resolve_agpd_fit_specification(
         active_materials = tuple(material for material in configured_materials if material not in resolved_exclusions)
         if len(active_materials) < 2:
             raise ValueError("All-material fits require at least two included materials after exclusions.")
+        if model_name == "CO_BF" and PURE_PD_MATERIAL in active_materials:
+            raise ValueError("BF-only pooled fits require --exclude-materials Pd100.")
         if model_name not in available_agpd_all_material_models():
             raise ValueError(
                 f"Model '{model_name}' is not available for all-material fitting. "
@@ -134,11 +136,8 @@ def resolve_agpd_fit_specification(
             f"Unknown AgPd model '{model_name}'. Available models: {available_agpd_models()}."
         )
     validate_agpd_material(config, material)
-    if error_structure != "material":
-        raise ValueError(
-            "Individual-material fits use one material-indexed pair of error parameters. "
-            "Use error_structure='material'."
-        )
+    if error_structure != "shared":
+        raise ValueError("Individual-material AgPd fits use error_structure='shared'.")
 
     if material == PURE_PD_MATERIAL and model_name not in PURE_PD_INDIVIDUAL_MODELS:
         raise ValueError(
@@ -154,7 +153,7 @@ def resolve_agpd_fit_specification(
         model_name=model_name,
         material=material,
         parameterization=None,
-        error_structure="material",
+        error_structure="shared",
         prior_material=material,
         excluded_materials=(),
     )

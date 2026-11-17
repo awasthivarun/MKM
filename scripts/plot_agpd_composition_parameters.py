@@ -20,7 +20,7 @@ def parse_args():
     parser.add_argument(
         "--error-structure",
         choices=("shared", "material"),
-        default="material",
+        default="shared",
     )
     parser.add_argument("--prior-material", default="Ag10Pd90")
     parser.add_argument("--exclude-materials", nargs="*", default=())

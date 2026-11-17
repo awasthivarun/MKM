@@ -217,7 +217,7 @@ def main():
                 config,
             ),
             prior_material=specification.prior_material,
-            model_specification=agpd_model_specification(paths, specification),
+            model_specification=agpd_model_specification(paths, specification, config),
             prior_specification=resolved_prior_metadata(specification, config),
         )
         metadata.update(

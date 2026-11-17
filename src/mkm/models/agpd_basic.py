@@ -148,14 +148,19 @@ def get_agpd_parameterization(config, model_name, parameterization="shared"):
     if not 0.0 <= x_reference <= 1.0:
         raise ValueError(f"Parameterization '{parameterization}' x_reference must lie in [0, 1].")
     slope_specs = dict(model_specification.get("slopes", {}))
-    mechanism_parameters = {field.name for field in fields(definition.parameter_class)}
-    unknown = set(slope_specs) - mechanism_parameters
+    canonical_definition = get_agpd_model_definition(definition.config_model_name)
+    canonical_parameters = {field.name for field in fields(canonical_definition.parameter_class)}
+    unknown = set(slope_specs) - canonical_parameters
     if unknown:
         raise ValueError(
             f"Parameterization '{parameterization}' contains unknown mechanism parameters: {sorted(unknown)}."
         )
+    mechanism_parameters = {field.name for field in fields(definition.parameter_class)}
     fixed_parameters = get_agpd_fixed_parameters(model_name)
-    return x_reference, {name: spec for name, spec in slope_specs.items() if name not in fixed_parameters}
+    return x_reference, {
+        name: spec for name, spec in slope_specs.items()
+        if name in mechanism_parameters and name not in fixed_parameters
+    }
 
 
 def _parameterization_model_specification(config, model_name, parameterization):

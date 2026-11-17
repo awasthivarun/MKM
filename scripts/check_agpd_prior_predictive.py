@@ -32,9 +32,11 @@ def parse_args():
     parser.add_argument(
         "--error-structure",
         choices=("shared", "material"),
-        default="material",
+        default="shared",
     )
     parser.add_argument("--prior-material", default="Ag10Pd90")
+    parser.add_argument("--exclude-materials", nargs="*", default=(),
+                        help="All-material only: omit these material datasets.")
     parser.add_argument("--draws", type=int, default=1000)
     parser.add_argument("--random-seed", type=int, default=1)
     parser.add_argument("--save-draws", action="store_true")
@@ -53,6 +55,7 @@ def main():
         parameterization=args.parameterization,
         error_structure=args.error_structure,
         prior_material=args.prior_material,
+        excluded_materials=args.exclude_materials,
     )
 
     model_data = build_agpd_model_data(paths, fit_materials(specification, config))
@@ -75,6 +78,7 @@ def main():
         material=specification.material,
         parameterization=specification.parameterization,
         error_structure=specification.error_structure,
+        excluded_materials=specification.excluded_materials,
     )
     output_dir.mkdir(parents=True, exist_ok=True)
     summary.parameter_summary.to_csv(
@@ -108,7 +112,7 @@ def main():
         parameterization=specification.parameterization,
         parameterization_specification=resolved_parameterization_metadata(specification, config),
         prior_material=specification.prior_material,
-        model_specification=agpd_model_specification(paths, specification),
+        model_specification=agpd_model_specification(paths, specification, config),
         prior_specification=resolved_prior_metadata(specification, config),
     )
     metadata["analysis"] = "prior_predictive"
