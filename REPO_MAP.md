@@ -118,6 +118,8 @@ scripts/fit_ptru_posterior.py --> posterior.nc
              +--> scripts/postprocess_ptru_drc.py (standalone DRC)
              +--> scripts/compare_ptru_models.py (compatible fitted models)
              +--> scripts/validate_ptru_posterior.py (individual LOCO)
+             +--> scripts/validate_ptru_lomo.py (pooled LOMO, shared errors)
+             +--> scripts/plot_ptru_composition_parameters.py (pooled parameter trends)
 ```
 
 ### Configuration
@@ -387,9 +389,12 @@ Owns AgPd LOCO/LOMO split logic and held-out prediction:
 The same PtRu fit builder supports individual material and pooled within-medium inference,
 while LOCO uses an individual-material training subset and the same fitted model. Both
 acidic and basic datasets use their own input identity and result directories.
-`ptru_posterior.py` strictly validates checkpoint provenance, including the source,
-configuration, and resolved model. Historical checkpoints created under dedicated Pt100
-or alloy modules require fresh fitting; they are not automatically migrated.
+`ptru_posterior.py` validates source signatures scoped to the selected mechanism,
+resolved model/prior settings, and data identity. The whole-YAML hashes are recorded for
+auditing but are not enforced for unrelated schema-2 configuration edits. Historical
+checkpoints created under dedicated Pt100 or alloy modules are not automatically migrated.
+`ptru_validation.py` also supports pooled LOMO with `shared` or `linear_xRu` physical
+parameterization and shared errors; pooled LOCO remains unavailable.
 
 ### `src/mkm/workflows/ptru_postprocess.py`
 
@@ -446,9 +451,9 @@ Multi-model ELPD comparison and pointwise differences.
 
 Shared transition-state DRC and finite-step convergence checks for AgPd and PtRu individual/all-material models in their supported media.
 
-### `composition_parameters.py`
+### `composition_parameters.py` / `ptru_composition.py`
 
-Effective physical-parameter trends versus composition and the composition-overview figure.
+Effective physical-parameter trends versus Ag or Ru composition and the corresponding composition-overview figures. The PtRu implementation handles `shared`, `independent`, and `linear_xRu` pooled fits.
 
 ### `materials.py`
 
@@ -686,8 +691,9 @@ PtRu organizational refactor.
 PtRu selected datasets are implemented; only Todd acidic Pt100 currently has exclusions.
 Selected Todd observations support individual fits of Pt100, Pt66Ru33, and
 Pt50Ru50, plus all-material inference within either acidic or basic media.
-Em fitting and pooled PtRu LOCO/LOMO are not implemented. Model interpretation
-requires scientific evaluation beyond successful software execution.
+Em fitting and pooled PtRu LOCO are not implemented. Pooled PtRu LOMO supports
+`shared` or `linear_xRu` physical parameters with shared errors; BF-only LOMO is
+unsupported. Model interpretation requires scientific evaluation beyond execution.
 
 ## PtRu data selection and selected-observable products
 

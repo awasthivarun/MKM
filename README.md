@@ -48,9 +48,9 @@ r_i^{\mathrm{obs}} \sim
 +\sigma_{\mathrm{rate,rel}}r_i^{\mathrm{model}}.
 $$
 
-All-material fits support `shared` and `material` error structures. Individual-material fits use one material-indexed error pair.
+All-material fits support `shared` and `material` error structures, except `independent` physical-parameter fits, which require shared errors. Individual-material fits use a single `shared` error pair.
 
-All-material composition fits support parameterizations configured in `config/models/agpd_basic.yaml`, including `shared` and `linear_xAg`.
+All-material fits support `shared`, `independent` (separate physical parameters by material), and `linear_xAg` parameterizations where configured in `config/models/agpd_basic.yaml`. BF-only pooled fits must exclude Pd100.
 
 Implemented analysis includes:
 
@@ -76,7 +76,7 @@ The primary experimental datasets are Todd's Pt/PtRu measurements in HClO4 and K
 
 Additional Pt/C measurements from Em are processed separately. Pt/ATO is not yet included in the active preprocessing workflow.
 
-**Current status:** Experimental preprocessing and kinetic-observable calculations cover Pt100, Pt66Ru33, and Pt50Ru50. Bayesian fitting supports each Todd material individually and all three materials together **within one electrolyte medium**, using the shared linear-rate Normal likelihood. Pt100 supports `CO_LH`, `CO_ER`, and `CO_ER_LH`; the PtRu alloys additionally support BF-containing pathway combinations. All-material physical parameterizations are `shared`, `independent`, and `linear_xRu`. Posterior diagnostics, PSIS-LOO/LOO-PIT, comparisons, transition-state DRC, and individual-material LOCO validation are implemented. Acidic/basic data are never pooled, and the separately processed Em preparations are not fitted. Pooled PtRu LOCO/LOMO refitting is not implemented.
+**Current status:** Experimental preprocessing and kinetic-observable calculations cover Pt100, Pt66Ru33, and Pt50Ru50. Bayesian fitting supports each Todd material individually and all three materials together **within one electrolyte medium**, using the shared linear-rate Normal likelihood. Pt100 supports `CO_LH`, `CO_ER`, and `CO_ER_LH`; the PtRu alloys additionally support BF-containing pathway combinations. All-material physical parameterizations are `shared`, `independent`, and `linear_xRu`. Posterior diagnostics, PSIS-LOO/LOO-PIT, comparisons, transition-state DRC, and individual-material LOCO validation are implemented. Acidic/basic data are never pooled, and the separately processed Em preparations are not fitted. PtRu LOMO refitting is available with pooled `shared` or `linear_xRu` physical parameters and shared likelihood errors; pooled LOCO is not implemented. BF-only models are excluded from LOMO.
 
 #### Experimental conditions
 
@@ -164,6 +164,8 @@ Experimental observables are diagnostic quantities derived from measured rates, 
 - Ideal electrolyte activities are used rather than literature activity-coefficient corrections.
 - Replicate availability differs substantially between datasets.
 - PtRu alloy models are implemented, but successful fitting does not establish their mechanistic validity. In particular, the BF-neighbor availability factor uses the nominal Ru fraction as a model assumption.
+
+Posterior checkpoint provenance uses model-scoped source signatures and resolved fit settings. The full YAML-file hashes are retained for auditing, but an unrelated new model entry does not by itself invalidate a schema-2 checkpoint. Input-data identity and selected model-defining settings remain validated.
 
 ## Environment
 

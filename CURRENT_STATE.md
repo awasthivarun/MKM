@@ -44,7 +44,7 @@ AgPd model identity is now declarative. `src/mkm/models/agpd_registry.py` owns p
 
 The AgPd mechanism implementation includes `state.py`, `surface.py`, `finite_co.py`, and `legacy_qea.py` under `src/mkm/mechanisms/agpd_basic/`. Generic electrochemical free-energy and rate-constant primitives now live in `src/mkm/mechanisms/electrochem.py` and are imported by both AgPd and unified PtRu mechanisms. `agpd_basic/electrochem.py` remains as an import-compatibility re-export; the public `mkm.mechanisms.agpd_basic` path is preserved. The finite-rate BF/ER/LH family uses one common evaluator; pathway masks and optional CO caps are modifiers rather than duplicated kinetic implementations.
 
-Run metadata stores the resolved model specification, resolved prior specification, and a resolved-fit hash in addition to the full configuration-bundle hash. This separates fit-defining provenance from unrelated edits elsewhere in configuration files.
+Run metadata stores the resolved model specification, resolved prior specification, a resolved-fit hash, and the full configuration-bundle hash. Schema-2 checkpoint validation compares the resolved model-defining settings and scoped source signatures; the complete configuration-bundle hash is retained for auditing rather than enforced against unrelated YAML edits.
 
 ## PtRu unified inference update (November 16, 2026)
 
@@ -83,7 +83,9 @@ Pt/ATO measurements are deferred.
 
 **Implemented for Pt/PtRu inference:** Bayesian fits for individual Pt100, Pt66Ru33, and Pt50Ru50 materials, and within-medium all-material fits with `shared`, `independent`, or `linear_xRu` physical parameters. Pure Pt supports `CO_LH`, `CO_ER`, and `CO_ER_LH`; PtRu alloys also support BF-containing pathways. Posterior diagnostics, PSIS-LOO/LOO-PIT, model comparison, transition-state DRC, and individual-material LOCO with held-out diagnostic plots are implemented. Fitting uses selected Todd data and never pools acidic with basic measurements.
 
-**Not implemented:** Inference on the separately processed Em preparations, pooled PtRu LOCO/LOMO refitting, or cross-medium fits.
+**Implemented for PtRu validation:** Pooled leave-one-material-out (LOMO) refitting with `shared` or `linear_xRu` physical parameters and `shared` likelihood errors. BF-only LOMO is unsupported because two BF-capable training materials cannot remain after an alloy is held out.
+
+**Not implemented:** Inference on the separately processed Em preparations, pooled PtRu LOCO refitting, or cross-medium fits.
 
 ### Experimental replicates
 
@@ -311,7 +313,7 @@ Supported error structures:
 - `material`: one `sigma_rate_abs` and `sigma_rate_rel` pair per material.
 - `shared`: one pair shared by all materials.
 
-Individual fits require `material`. All-material fits may use either. LOMO requires `shared`, because an omitted material has no fitted material-specific noise parameters.
+Individual AgPd fits require `shared`. All-material fits may use `shared` or `material`, except `independent` physical parameterizations, which require `shared`. LOMO requires `shared`, because an omitted material has no fitted material-specific noise parameters.
 
 No log-rate IID, setup-intercept, MVN, or GP likelihood is part of the current active model path.
 
@@ -464,7 +466,7 @@ The current YAML explicitly marks coverage-cap approaches as exploratory / not p
 
 ## Posterior lifecycle and provenance
 
-AgPd and unified PtRu posterior runs write `posterior.nc`, parameter summaries, `run_metadata.yaml`, and sampler-health information into deterministic run directories. Both families strictly validate model-defining source-file hashes, raw model-input dataset identity, configuration-file hashes, and resolved fit specification. Source/configuration changes can invalidate older checkpoints even when the mathematical equations are unchanged.
+AgPd and unified PtRu posterior runs write `posterior.nc`, parameter summaries, `run_metadata.yaml`, and sampler-health information into deterministic run directories. Schema-2 validation checks data-file identity, resolved priors/model settings, composition and error structures, and source-code signatures scoped to the selected mechanism plus tracked shared dependencies. Whole configuration-file hashes remain in metadata for audit purposes but are not an additional checkpoint rejection condition. Changes to the tracked active model code or fit-defining configuration can still invalidate a checkpoint; the static signature is not a proof of semantic equivalence.
 
 Before sampling, the lifecycle records a `sampling` state; after an atomic posterior write it records `sampled_free_variables`, then `complete` after finalization. `--resume` resumes finalization from a compatible checkpoint (including an interrupted finalization where recovery is supported). `--overwrite` removes an existing run directory and resamples. They should not be used interchangeably.
 
@@ -879,6 +881,10 @@ Parameterization availability is configuration-driven. All-material models resol
 ### `shared`
 
 No composition slopes. One global physical parameter value is used at every composition.
+
+### `independent`
+
+Fitted physical parameters are separate for each included material, with no composition interpolation. Structurally inactive BF-specific parameters are omitted for Pd100. This parameterization requires `error_structure=shared` and is not a means of predicting an omitted material in LOMO.
 
 ### `linear_xAg`
 

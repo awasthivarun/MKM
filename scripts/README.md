@@ -187,7 +187,7 @@ Common sampler override:
 python scripts/fit_agpd_posterior.py CO_BF_ER --material Ag50Pd50 --target-accept 0.95 --overwrite
 ```
 
-Individual fits always use the material error structure.
+Individual AgPd fits use `--error-structure shared` (one error-parameter pair).
 
 ### All materials, shared physical parameters
 
@@ -217,7 +217,7 @@ This fit samples 10 mechanism parameters independently for each alloy and the si
 for Pd100. The four Ag/BF-only Pd100 parameters (`deltaG5_0`, `beta_2_BF`, `q`, `Gact2_BF_0`) are not sampled.
 The mechanism therefore has 56 free physical parameters plus the shared `sigma_rate_abs` and `sigma_rate_rel` pair.
 
-LOMO cannot extrapolate independent material-specific error parameters to a material omitted from training.
+LOMO requires shared likelihood errors. An `independent` physical parameterization also has no fitted mechanism-parameter vector for an omitted material, so it cannot extrapolate that material.
 
 ### Resume versus overwrite
 
@@ -502,7 +502,8 @@ hold out whole experimental groups; PSIS-LOO still holds out individual observat
 
 New posterior metadata use provenance schema 2. The source signature hashes the registered
 mechanism entry and its statically reachable implementation rather than unrelated model
-entries. It still hashes shared kinetic and likelihood dependencies, and compares resolved
+entries. Selected source signatures are not a guarantee of semantic equivalence. The
+validator also hashes tracked shared kinetic and likelihood dependencies and compares resolved
 kinetic conditions, priors, material set, fit parameterization, and data identity. Whole
 configuration-file hashes remain in metadata for auditing, but do not invalidate schema-2
 posteriors when unrelated model entries are added. This is a *static dependency signature*;
