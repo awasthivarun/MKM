@@ -4,7 +4,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 
 from mkm.inference.likelihoods import RATE_NORMAL
-from mkm.models.agpd_registry import get_agpd_model_definition
+from mkm.models.agpd_registry import AGPD_MODEL_REGISTRY, get_agpd_model_definition
 from mkm.inference.posterior import (
     compute_posterior_deterministics,
     load_inference_data,
@@ -42,13 +42,22 @@ class AgPdPosteriorRun:
 def agpd_model_specification(paths, specification, config):
     definition = get_agpd_model_definition(specification.model_name)
     registry = "src/mkm/models/agpd_registry.py"
-    mechanism_file = "src/" + definition.evaluator.__module__.replace(".", "/") + ".py"
-    dependencies = {registry: (
-        "AGPD_MODEL_REGISTRY", "get_agpd_model_definition", "agpd_model_metadata",
-        "available_agpd_models", "available_agpd_all_material_models",
-    ), mechanism_file: (definition.evaluator.__name__, definition.parameter_class.__name__)}
-    excluded = {"src/mkm/mechanisms/agpd_basic/__init__.py",
-                "src/mkm/mechanisms/agpd_basic/legacy_qea.py"}
+    evaluator = getattr(definition.evaluator, "func", definition.evaluator)
+    mechanism_file = "src/" + evaluator.__module__.replace(".", "/") + ".py"
+    dynamic = specification.model_name not in AGPD_MODEL_REGISTRY
+    if dynamic:
+        # Dynamic definitions have no literal registry entry or source dataclass declaration.
+        # Hash the complete defining files until symbol-scoped dynamic hashes are supported.
+        dependencies = {}
+    else:
+        dependencies = {
+            registry: ("AGPD_MODEL_REGISTRY", "get_agpd_model_definition", "agpd_model_metadata",
+                       "available_agpd_models", "available_agpd_all_material_models"),
+            mechanism_file: (evaluator.__name__, definition.parameter_class.__name__),
+        }
+    excluded = {"src/mkm/mechanisms/agpd_basic/__init__.py"}
+    if not dynamic:
+        excluded.add("src/mkm/mechanisms/agpd_basic/legacy_qea.py")
     for name in ("src/mkm/mechanisms/agpd_basic/finite_co.py",
                  "src/mkm/mechanisms/agpd_basic/full_ssa.py"):
         if name != mechanism_file:
@@ -68,11 +77,17 @@ def agpd_model_specification(paths, specification, config):
                                             for material in model_config["surface_composition"]}
     if definition.config_model_name == "CO_BF_ER_LH_3_OH":
         model_config["full_ssa"] = deepcopy(config["full_ssa"])
+    if evaluator.__name__ == "evaluate_agpd_mixed_adsorption":
+        model_config["mixed_adsorption"] = deepcopy(config.get("mixed_adsorption", {}))
+    elif evaluator.__name__ == "evaluate_agpd_reversible_subset":
+        model_config["reversible_ssa"] = deepcopy(config.get("reversible_ssa", {}))
     return {
         **resolved_model_metadata(specification), "kinetic_config": model_config,
         "source_sha256": source_file_hashes(
-            paths.root, (*AGPD_MODEL_SOURCE_FILES, mechanism_file), scoped_symbols=dependencies,
-            scoped_registry_entries={registry: {"AGPD_MODEL_REGISTRY": specification.model_name}},
+            paths.root, (*AGPD_MODEL_SOURCE_FILES, mechanism_file,
+                         *(("src/mkm/models/agpd_physics.py",) if dynamic else ())),
+            scoped_symbols=dependencies,
+            scoped_registry_entries={} if dynamic else {registry: {"AGPD_MODEL_REGISTRY": specification.model_name}},
             skip_files=excluded,
         ),
     }

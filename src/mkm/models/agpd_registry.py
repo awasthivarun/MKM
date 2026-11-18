@@ -1,6 +1,8 @@
 """Declarative registry for AgPd kinetic model variants."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, make_dataclass
+from functools import lru_cache, partial
+from itertools import combinations
 from typing import Callable
 
 from mkm.mechanisms.agpd_basic import (
@@ -24,7 +26,12 @@ from mkm.mechanisms.agpd_basic import (
     evaluate_agpd_co_er,
     evaluate_agpd_co_er_lh,
     evaluate_agpd_co_lh,
+    evaluate_agpd_qea_subset,
 )
+from mkm.models.agpd_physics import parse_agpd_physics
+from mkm.mechanisms.agpd_basic.finite_co import _evaluate_agpd_co_subset
+from mkm.mechanisms.agpd_basic.mixed_adsorption import evaluate_agpd_mixed_adsorption
+from mkm.mechanisms.agpd_basic.reversible_subsets import evaluate_agpd_reversible_subset
 
 
 @dataclass(frozen=True)
@@ -196,24 +203,83 @@ AGPD_MODEL_REGISTRY = {
 }
 
 
+DYNAMIC_QEA_MODELS = tuple(
+    "_".join(pathways)
+    for count in (1, 2, 3)
+    for pathways in combinations(("BF", "ER", "LH"), count)
+)
+
+
 def available_agpd_models():
-    return tuple(AGPD_MODEL_REGISTRY)
+    return (*AGPD_MODEL_REGISTRY, *DYNAMIC_QEA_MODELS)
 
 
 def available_agpd_all_material_models():
-    return tuple(name for name, definition in AGPD_MODEL_REGISTRY.items() if definition.supports_all_materials)
+    legacy = tuple(name for name, definition in AGPD_MODEL_REGISTRY.items() if definition.supports_all_materials)
+    return (*legacy, *DYNAMIC_QEA_MODELS)
+
+
+@lru_cache(maxsize=None)
+def _dynamic_physics_definition(model_name):
+    physics = parse_agpd_physics(model_name)
+    if physics.interactions or physics.modifier is not None:
+        raise ValueError(
+            f"AgPd model '{model_name}' has valid physical labels, but "
+            "lateral interactions and dynamic modifiers are not yet implemented."
+        )
+
+    # A rate constant is included only if its elementary coupling pathway is enabled.
+    names = ["deltaG1_0", "deltaG4_0"]
+    if "BF" in physics.pathways:
+        names.extend(("deltaG5_0", "beta_2_BF", "q", "Gact2_BF_0"))
+    elif "sOH" in physics.finite_steps:
+        names.extend(("deltaG5_0", "q"))
+    if "ER" in physics.pathways:
+        names.extend(("beta_2_ER", "Gact2_ER_0"))
+    if "LH" in physics.pathways:
+        names.append("Gact2_LH_0")
+    if "CO" in physics.finite_steps:
+        names.append("Gact1_0")
+    if "3" in physics.finite_steps:
+        names.extend(("deltaG3_0", "Gact3_0", "beta_3"))
+    if "pOH" in physics.finite_steps:
+        names.extend(("Gact4_0", "beta_4"))
+    if "sOH" in physics.finite_steps:
+        names.extend(("Gact5_0", "beta_5"))
+    if "3" in physics.finite_steps:
+        evaluator = partial(
+            evaluate_agpd_reversible_subset, pathways=physics.pathways, finite_steps=physics.finite_steps
+        )
+    elif not physics.finite_steps:
+        evaluator = partial(evaluate_agpd_qea_subset, pathways=physics.pathways)
+    elif "pOH" not in physics.finite_steps and "sOH" not in physics.finite_steps:
+        evaluator = partial(_evaluate_agpd_co_subset, pathways=physics.pathways)
+    else:
+        evaluator = partial(
+            evaluate_agpd_mixed_adsorption, pathways=physics.pathways, finite_steps=physics.finite_steps
+        )
+    parameters = make_dataclass(
+        "AgPd" + "".join(physics.pathways) + "PhysicsParameters", [(name, object) for name in names], frozen=True
+    )
+    return AgPdModelDefinition(
+        parameter_class=parameters,
+        evaluator=evaluator,
+        pathways=physics.pathways,
+        fit_scopes=FULL_SCOPES,
+        pure_pd_inactive_parameters=("deltaG5_0", "beta_2_BF", "q", "Gact2_BF_0")
+        if "BF" in physics.pathways else (),
+    )
 
 
 def get_agpd_model_definition(model_name):
-    try:
+    if model_name in AGPD_MODEL_REGISTRY:
         return AGPD_MODEL_REGISTRY[model_name]
-    except KeyError as error:
-        raise ValueError(f"Unknown AgPd model '{model_name}'. Available models: {available_agpd_models()}.") from error
+    return _dynamic_physics_definition(model_name)
 
 
 def agpd_model_metadata(model_name):
     definition = get_agpd_model_definition(model_name)
-    return {
+    metadata = {
         "name": model_name,
         "config_model_name": definition.config_model_name,
         "pathways": list(definition.pathways),
@@ -225,3 +291,11 @@ def agpd_model_metadata(model_name):
         "er_disabled_materials": list(definition.er_disabled_materials),
         "pure_pd_inactive_parameters": list(definition.pure_pd_inactive_parameters),
     }
+    if model_name not in AGPD_MODEL_REGISTRY:
+        physics = parse_agpd_physics(model_name)
+        metadata.update({
+            "finite_rate_steps": list(physics.finite_steps),
+            "lateral_interactions": list(physics.interactions),
+            "model_modifier": physics.modifier,
+        })
+    return metadata

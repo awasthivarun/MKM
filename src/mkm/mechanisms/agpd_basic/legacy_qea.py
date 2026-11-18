@@ -198,3 +198,61 @@ def evaluate_agpd_bf_er_lh(state: AgPdPointState, parameters: AgPdBFERRLHParamet
         log_k2_ER=log_k2_ER,
         log_k2_LH=log_k2_LH,
     )
+
+
+@dataclass(frozen=True)
+class AgPdQEASubsetResult:
+    mechanism_result: MechanismResult
+    log_rate_total: object
+
+
+def evaluate_agpd_qea_subset(state, parameters, temperature_K, *, pathways):
+    """Analytical CO/OH QEA limit for any subset of fast-COOH-forming pathways."""
+    pathways = tuple(pathways)
+    if not pathways or any(pathway not in {"BF", "ER", "LH"} for pathway in pathways):
+        raise ValueError(f"Unsupported QEA pathway set: {pathways}.")
+
+    E = pt.as_tensor_variable(state.E_V_SHE)
+    deltaG4 = electrochemical_free_energy(parameters.deltaG4_0, 1.0, E)
+    log_K1 = log_equilibrium_constant(parameters.deltaG1_0, temperature_K)
+    log_K4 = log_equilibrium_constant(deltaG4, temperature_K)
+    pd_coverages = calculate_pd_qea_coverages(log_K1, log_K4, state)
+    pointwise = {
+        "theta_CO": pt.exp(pd_coverages.log_theta_CO),
+        "theta_OH_Pd": pt.exp(pd_coverages.log_theta_OH_Pd),
+        "theta_empty_Pd": pt.exp(pd_coverages.log_theta_empty_Pd),
+    }
+    log_rates = {}
+    if "BF" in pathways:
+        deltaG5 = electrochemical_free_energy(parameters.deltaG5_0, parameters.q, E)
+        log_K5 = log_equilibrium_constant(deltaG5, temperature_K)
+        ag_coverages = calculate_ag_qea_coverages(log_K5, state)
+        barrier = electrochemical_activation_energy(
+            parameters.Gact2_BF_0, parameters.beta_2_BF, 1.0 - parameters.q, E
+        )
+        log_k = log_tst_rate_constant(barrier, temperature_K)
+        log_rates["BF"] = calculate_log_rate_bf(
+            log_k, pd_coverages.log_theta_CO, ag_coverages.log_theta_OH_Ag, state
+        )
+        pointwise.update({
+            "theta_OH_Ag": pt.exp(ag_coverages.log_theta_OH_Ag),
+            "theta_empty_Ag": pt.exp(ag_coverages.log_theta_empty_Ag),
+        })
+    if "ER" in pathways:
+        barrier = electrochemical_activation_energy(parameters.Gact2_ER_0, parameters.beta_2_ER, 1.0, E)
+        log_k = log_tst_rate_constant(barrier, temperature_K)
+        log_rates["ER"] = calculate_log_rate_er(log_k, pd_coverages.log_theta_CO, state)
+    if "LH" in pathways:
+        log_k = log_tst_rate_constant(parameters.Gact2_LH_0, temperature_K)
+        log_rates["LH"] = calculate_log_rate_lh(
+            log_k, pd_coverages.log_theta_CO, pd_coverages.log_theta_OH_Pd, state
+        )
+
+    log_rate_total = logsumexp_pathways(*(log_rates[pathway] for pathway in pathways))
+    for pathway, ln_rate in log_rates.items():
+        pointwise[f"ln_rate_{pathway}"] = ln_rate
+        pointwise[f"rate_fraction_{pathway}"] = pt.exp(ln_rate - log_rate_total)
+    return AgPdQEASubsetResult(
+        mechanism_result=MechanismResult(ln_rate=log_rate_total, pointwise=pointwise),
+        log_rate_total=log_rate_total,
+    )

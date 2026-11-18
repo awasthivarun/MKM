@@ -42,6 +42,18 @@ full_ssa:
   # This corresponds to an overall standard CO + 2OH- -> CO2 + H2O + 2e- free energy near -1.86 eV.
   overall_reaction_deltaG_0_eV: -1.86
 
+reversible_ssa:
+  # Finite COOH oxidation with reversible BF/ER/LH coupling and mixed QEA/SSA adsorption.
+  affinity_iterations: 48
+  affinity_damping: 1.0
+  relative_residual_tolerance: 1.0e-8
+
+mixed_adsorption:
+  # Differentiable Newton solve for mixed QEA/finite-rate CO and OH adsorption (fast step 3).
+  newton_iterations: 32
+  newton_max_step: 0.25
+  relative_residual_tolerance: 1.0e-7
+
 composition_parameterizations:
   shared:
     x_reference: 0.50

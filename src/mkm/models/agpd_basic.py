@@ -81,6 +81,22 @@ def get_agpd_prior_profile(config, material, model_name):
                 f"No prior profile is defined for material '{material}' and model '{model_name}'."
             ) from error
     profile = _apply_prior_variant(config, definition, profile)
+    missing = {field.name for field in fields(definition.parameter_class)} - set(profile["parameters"])
+    supplemental_names = {"Gact4_0", "beta_4", "Gact5_0", "beta_5",
+                          "deltaG3_0", "Gact3_0", "beta_3"}
+    missing_supplemental = missing & supplemental_names
+    if missing_supplemental and definition.config_model_name == "CO_BF_ER_LH":
+        # Supplement only the newly introduced finite-rate steps; do not touch legacy profiles.
+        try:
+            extended = config["prior_profiles"][material]["CO_BF_ER_LH_3_OH"]["parameters"]
+        except KeyError as error:
+            raise ValueError(f"Missing full-SSA prior source for '{material}'.") from error
+        unavailable = missing_supplemental - set(extended)
+        if unavailable:
+            raise ValueError(f"No configured priors for model parameters: {sorted(unavailable)}.")
+        profile = {**profile, "parameters": {**profile["parameters"],
+                   **{name: extended[name] for name in missing_supplemental}},
+                   "provenance": profile.get("provenance", "unspecified") + "+full_ssa_step_priors"}
 
     # Full-model aliases reuse the canonical profile verbatim. Reduced pathway models
     # project that canonical profile onto their smaller parameter dataclass. Validation
@@ -271,7 +287,17 @@ def build_agpd_mechanism(model_name, material, config):
         prior_values = build_named_priors(parameter_specs)
         parameters = definition.parameter_class(**prior_values)
         state = build_agpd_point_state(inputs=point_inputs, config=config)
-        evaluated = definition.evaluator(state=state, parameters=parameters, temperature_K=config["temperature_K"])
+        evaluator = getattr(definition.evaluator, "func", definition.evaluator)
+        kwargs = {}
+        if evaluator.__name__ == "evaluate_agpd_mixed_adsorption":
+            kwargs["mixed_config"] = config.get("mixed_adsorption", {})
+        elif evaluator.__name__ == "evaluate_agpd_reversible_subset":
+            kwargs["reversible_config"] = config.get("reversible_ssa", {})
+        elif definition.config_model_name == "CO_BF_ER_LH_3_OH":
+            kwargs["full_ssa_config"] = config.get("full_ssa", {})
+        evaluated = definition.evaluator(
+            state=state, parameters=parameters, temperature_K=config["temperature_K"], **kwargs
+        )
         return evaluated.mechanism_result
 
     return mechanism
@@ -326,6 +352,11 @@ def _evaluate_all_material_state(
     evaluator_kwargs = {}
     if definition.config_model_name == "CO_BF_ER_LH_3_OH":
         evaluator_kwargs["full_ssa_config"] = config.get("full_ssa", {})
+    evaluator = getattr(definition.evaluator, "func", definition.evaluator)
+    if evaluator.__name__ == "evaluate_agpd_mixed_adsorption":
+        evaluator_kwargs["mixed_config"] = config.get("mixed_adsorption", {})
+    elif evaluator.__name__ == "evaluate_agpd_reversible_subset":
+        evaluator_kwargs["reversible_config"] = config.get("reversible_ssa", {})
     return definition.evaluator(
         state=state,
         parameters=parameters,

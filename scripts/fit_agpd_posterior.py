@@ -30,7 +30,7 @@ DEFAULT_PRIOR_MATERIAL = "Ag10Pd90"
 
 def parse_args():
     parser = ArgumentParser()
-    parser.add_argument("model", choices=available_agpd_models())
+    parser.add_argument("model", help="AgPd physics name or legacy registered model")
     parser.add_argument("--material", default=DEFAULT_MATERIAL)
     parser.add_argument("--all-materials", action="store_true")
     parser.add_argument("--parameterization", default="shared")

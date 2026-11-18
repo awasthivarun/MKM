@@ -134,13 +134,23 @@ _TRANSITION_STATE_CONTROLS["CO_BF_ER_LH_Ag10_no_BF_neg"] = _TRANSITION_STATE_CON
 _TRANSITION_STATE_CONTROLS["CO_BF_ER_LH_Ag10_no_ER"] = _TRANSITION_STATE_CONTROLS["CO_BF_ER_LH"]
 
 def transition_state_controls(model_name):
-    try:
+    if model_name in _TRANSITION_STATE_CONTROLS:
         return _TRANSITION_STATE_CONTROLS[model_name]
-    except KeyError as error:
-        available = tuple(_TRANSITION_STATE_CONTROLS)
-        raise ValueError(
-            f"No transition-state DRC definition for '{model_name}'. Available: {available}."
-        ) from error
+    definition = get_agpd_model_definition(model_name)
+    active = {field.name for field in fields(definition.parameter_class)}
+    candidates = (
+        ("CO_adsorption", "Gact1_0", "CO ads"),
+        ("BF", "Gact2_BF_0", "BF"),
+        ("ER", "Gact2_ER_0", "ER"),
+        ("LH", "Gact2_LH_0", "LH"),
+        ("CO2", "Gact3_0", "CO2"),
+        ("pOH", "Gact4_0", "primary OH ads"),
+        ("sOH", "Gact5_0", "secondary OH ads"),
+    )
+    return tuple(
+        TransitionStateControl(name=name, parameter=parameter, label=label)
+        for name, parameter, label in candidates if parameter in active
+    )
 
 
 def _compile_log_rate_evaluator(model_name, point_inputs, config):
@@ -152,6 +162,11 @@ def _compile_log_rate_evaluator(model_name, point_inputs, config):
     evaluator_kwargs = {}
     if definition.config_model_name == "CO_BF_ER_LH_3_OH":
         evaluator_kwargs["full_ssa_config"] = config.get("full_ssa", {})
+    evaluator = getattr(definition.evaluator, "func", definition.evaluator)
+    if evaluator.__name__ == "evaluate_agpd_mixed_adsorption":
+        evaluator_kwargs["mixed_config"] = config.get("mixed_adsorption", {})
+    elif evaluator.__name__ == "evaluate_agpd_reversible_subset":
+        evaluator_kwargs["reversible_config"] = config.get("reversible_ssa", {})
     evaluated = definition.evaluator(
         state=state,
         parameters=parameters,
@@ -162,7 +177,8 @@ def _compile_log_rate_evaluator(model_name, point_inputs, config):
     function = pytensor.function(
         [parameter_symbols[name] for name in parameter_names],
         evaluated.mechanism_result.ln_rate,
-        on_unused_input="raise",
+        # Explicitly allowed redundant finite OH steps can be structurally inactive.
+        on_unused_input="ignore" if model_name not in _TRANSITION_STATE_CONTROLS else "raise",
     )
     return parameter_names, function
 
@@ -185,6 +201,11 @@ def _compile_pointwise_log_rate_evaluator(model_name, point_inputs, config):
     evaluator_kwargs = {}
     if definition.config_model_name == "CO_BF_ER_LH_3_OH":
         evaluator_kwargs["full_ssa_config"] = config.get("full_ssa", {})
+    evaluator = getattr(definition.evaluator, "func", definition.evaluator)
+    if evaluator.__name__ == "evaluate_agpd_mixed_adsorption":
+        evaluator_kwargs["mixed_config"] = config.get("mixed_adsorption", {})
+    elif evaluator.__name__ == "evaluate_agpd_reversible_subset":
+        evaluator_kwargs["reversible_config"] = config.get("reversible_ssa", {})
     evaluated = definition.evaluator(
         state=state,
         parameters=parameters,
@@ -195,7 +216,8 @@ def _compile_pointwise_log_rate_evaluator(model_name, point_inputs, config):
     function = pytensor.function(
         [parameter_symbols[name] for name in parameter_names],
         evaluated.mechanism_result.ln_rate,
-        on_unused_input="raise",
+        # Explicitly allowed redundant finite OH steps can be structurally inactive.
+        on_unused_input="ignore" if model_name not in _TRANSITION_STATE_CONTROLS else "raise",
     )
     return parameter_names, function, state
 

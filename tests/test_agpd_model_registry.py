@@ -61,6 +61,7 @@ def test_agpd_registry_keeps_individual_co_pathway_subsets_and_all_material_mode
         "CO_BF_ER_LH_capped",
         "CO_BF_ER_LH_capped_Ag10_no_BF",
         "CO_BF_ER_LH_fitted_caps_Ag10_no_BF",
+        "BF", "ER", "LH", "BF_ER", "BF_LH", "ER_LH", "BF_ER_LH",
     )
 
     assert available_agpd_all_material_models() == (
@@ -76,6 +77,7 @@ def test_agpd_registry_keeps_individual_co_pathway_subsets_and_all_material_mode
         "CO_BF_ER_LH_capped",
         "CO_BF_ER_LH_capped_Ag10_no_BF",
         "CO_BF_ER_LH_fitted_caps_Ag10_no_BF",
+        "BF", "ER", "LH", "BF_ER", "BF_LH", "ER_LH", "BF_ER_LH",
     )
 
     for name in available_agpd_models():
@@ -542,14 +544,11 @@ def test_individual_mechanism_rejects_different_material_set():
 def test_unknown_model_or_parameterization_is_rejected():
     config = _config()
 
-    for retired_model in ("BF", "BF_LH"):
-        with pytest.raises(ValueError, match="Unknown AgPd model"):
-            get_agpd_model_definition(retired_model)
+    # These CO-QEA models were added in Phase 1 and are no longer retired.
+    assert get_agpd_model_definition("BF").pathways == ("BF",)
+    assert get_agpd_model_definition("BF_LH").pathways == ("BF", "LH")
 
-    with pytest.raises(
-        ValueError,
-        match="Unknown AgPd model",
-    ):
+    with pytest.raises(ValueError):
         get_agpd_model_definition("unknown")
 
     with pytest.raises(

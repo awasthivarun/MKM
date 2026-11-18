@@ -15,7 +15,7 @@ from mkm.workflows.agpd_posterior import load_agpd_posterior_run
 
 def parse_args():
     parser = ArgumentParser()
-    parser.add_argument("model", choices=available_agpd_all_material_models())
+    parser.add_argument("model", help="AgPd physics name or legacy registered model")
     parser.add_argument("--parameterization", default="linear_xAg")
     parser.add_argument(
         "--error-structure",

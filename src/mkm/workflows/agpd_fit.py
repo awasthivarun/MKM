@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from mkm.inference.likelihoods import RATE_NORMAL, available_error_structures
 from mkm.inference.model import build_pymc_model
+from mkm.models.agpd_registry import AGPD_MODEL_REGISTRY
 from mkm.models.agpd_basic import (
     available_agpd_all_material_models,
     available_agpd_models,
@@ -14,6 +15,7 @@ from mkm.models.agpd_basic import (
     get_agpd_all_material_parameter_specs,
     get_agpd_parameterization_metadata,
     get_agpd_prior_profile,
+    get_agpd_model_definition,
     is_agpd_independent_parameterization,
 )
 from mkm.workflows.agpd_basic import (
@@ -89,7 +91,7 @@ def resolve_agpd_fit_specification(
             raise ValueError("All-material fits require at least two included materials after exclusions.")
         if model_name == "CO_BF" and PURE_PD_MATERIAL in active_materials:
             raise ValueError("BF-only pooled fits require --exclude-materials Pd100.")
-        if model_name not in available_agpd_all_material_models():
+        if not get_agpd_model_definition(model_name).supports_all_materials:
             raise ValueError(
                 f"Model '{model_name}' is not available for all-material fitting. "
                 f"Available models: {available_agpd_all_material_models()}."
@@ -131,7 +133,7 @@ def resolve_agpd_fit_specification(
 
     if resolved_exclusions:
         raise ValueError("Material exclusions are only supported for --all-materials fits.")
-    if model_name not in available_agpd_models():
+    if not get_agpd_model_definition(model_name).supports_individual:
         raise ValueError(
             f"Unknown AgPd model '{model_name}'. Available models: {available_agpd_models()}."
         )
@@ -139,7 +141,8 @@ def resolve_agpd_fit_specification(
     if error_structure != "shared":
         raise ValueError("Individual-material AgPd fits use error_structure='shared'.")
 
-    if material == PURE_PD_MATERIAL and model_name not in PURE_PD_INDIVIDUAL_MODELS:
+    if (material == PURE_PD_MATERIAL and model_name in AGPD_MODEL_REGISTRY
+            and model_name not in PURE_PD_INDIVIDUAL_MODELS):
         raise ValueError(
             "Individual Pd100 fits support only the non-BF finite-rate CO models "
             f"{PURE_PD_INDIVIDUAL_MODELS}. BF-bearing models contain structurally inactive "

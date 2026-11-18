@@ -53,6 +53,7 @@ from .legacy_qea import (
     calculate_log_rate_lh,
     evaluate_agpd_bf_er_lh,
     evaluate_agpd_er,
+    evaluate_agpd_qea_subset,
 )
 from .state import AgPdPointState, build_agpd_point_state
 from .surface import (

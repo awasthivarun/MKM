@@ -51,7 +51,7 @@ from mkm.workflows.posterior_lifecycle import (
 
 def parse_args():
     parser = ArgumentParser()
-    parser.add_argument("model", choices=available_agpd_all_material_models())
+    parser.add_argument("model", help="AgPd physics name or legacy registered model")
     parser.add_argument("scheme", choices=("loco", "lomo"))
     parser.add_argument("--holdout-material", required=True)
     parser.add_argument("--koh-M", type=float)
