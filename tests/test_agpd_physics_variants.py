@@ -56,10 +56,11 @@ def test_invalid_or_noncanonical_names_are_rejected(name):
         parse_agpd_physics(name)
 
 
-def test_unimplemented_interactions_and_modifiers_are_still_rejected():
-    for name in ("c_ER", "ER_capped"):
-        with pytest.raises(ValueError, match="not yet implemented"):
-            get_agpd_model_definition(name)
+def test_lateral_interactions_are_available_but_modifiers_still_rejected():
+    definition = get_agpd_model_definition("c_ER")
+    assert {field.name for field in fields(definition.parameter_class)} & {"z_CO_CO_eV"}
+    with pytest.raises(ValueError, match="not yet implemented"):
+        get_agpd_model_definition("ER_capped")
     assert get_agpd_model_definition("BF_ER_LH_3").supports_individual
 
 

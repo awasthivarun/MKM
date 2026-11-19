@@ -81,6 +81,8 @@ def agpd_model_specification(paths, specification, config):
         model_config["mixed_adsorption"] = deepcopy(config.get("mixed_adsorption", {}))
     elif evaluator.__name__ == "evaluate_agpd_reversible_subset":
         model_config["reversible_ssa"] = deepcopy(config.get("reversible_ssa", {}))
+    elif evaluator.__name__ == "evaluate_agpd_lateral_interactions":
+        model_config["lateral_interactions"] = deepcopy(config.get("lateral_interactions", {}))
     return {
         **resolved_model_metadata(specification), "kinetic_config": model_config,
         "source_sha256": source_file_hashes(

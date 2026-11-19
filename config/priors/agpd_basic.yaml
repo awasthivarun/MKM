@@ -11,6 +11,23 @@ prior_variants:
         lower: -1
         upper: 1
 
+lateral_interaction_priors:
+  # Effective Frumkin energies (eV). CO-CO is repulsive or ideal by prior assumption.
+  # Cross and OH-OH energies retain both signs; this is a prior choice, not a thermodynamic necessity.
+  z_CO_CO_eV:
+    distribution: truncated_normal
+    mu: 0.0
+    sigma: 0.05
+    lower: 0.0
+    upper: 0.20
+  z_CO_OH_eV: &signed_interaction_prior
+    distribution: truncated_normal
+    mu: 0.0
+    sigma: 0.05
+    lower: -0.20
+    upper: 0.20
+  z_OH_OH_eV: *signed_interaction_prior
+
 prior_profiles:
   Ag10Pd90: &shared_prior_profile
     CO_BF_ER_LH:

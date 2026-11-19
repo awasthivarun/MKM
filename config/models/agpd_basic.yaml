@@ -48,6 +48,17 @@ reversible_ssa:
   affinity_damping: 1.0
   relative_residual_tolerance: 1.0e-8
 
+lateral_interactions:
+  # Three reciprocal interactions derived from one excess surface free energy.
+  # E in eV and coverage per total exposed surface site; partial-discharge q weights secondary OH.
+  bep_coefficient: 0.65
+  # Up to 384 iterations, but stop early once both branches meet the actual balance tolerance.
+  fixed_point_iterations: 384
+  adaptive_convergence: true
+  fixed_point_damping: 0.5
+  relative_residual_tolerance: 1.0e-7
+  branch_tolerance: 1.0e-5
+
 mixed_adsorption:
   # Differentiable Newton solve for mixed QEA/finite-rate CO and OH adsorption (fast step 3).
   newton_iterations: 32

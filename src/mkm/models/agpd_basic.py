@@ -98,6 +98,17 @@ def get_agpd_prior_profile(config, material, model_name):
                    **{name: extended[name] for name in missing_supplemental}},
                    "provenance": profile.get("provenance", "unspecified") + "+full_ssa_step_priors"}
 
+    missing_interactions = {field.name for field in fields(definition.parameter_class)} - set(profile["parameters"])
+    missing_interactions &= {"z_CO_CO_eV", "z_CO_OH_eV", "z_OH_OH_eV"}
+    if missing_interactions:
+        available = config.get("lateral_interaction_priors", {})
+        unspecified = missing_interactions - set(available)
+        if unspecified:
+            raise ValueError(f"Missing lateral interaction priors: {sorted(unspecified)}.")
+        profile = {**profile, "parameters": {**profile["parameters"],
+                   **{name: available[name] for name in missing_interactions}},
+                   "provenance": profile.get("provenance", "unspecified") + "+lateral_interactions"}
+
     # Full-model aliases reuse the canonical profile verbatim. Reduced pathway models
     # project that canonical profile onto their smaller parameter dataclass. Validation
     # of a full profile belongs where it is consumed to build a fit, not at lookup time.
@@ -293,12 +304,14 @@ def build_agpd_mechanism(model_name, material, config):
             kwargs["mixed_config"] = config.get("mixed_adsorption", {})
         elif evaluator.__name__ == "evaluate_agpd_reversible_subset":
             kwargs["reversible_config"] = config.get("reversible_ssa", {})
+        elif evaluator.__name__ == "evaluate_agpd_lateral_interactions":
+            kwargs["lateral_config"] = config.get("lateral_interactions", {})
         elif definition.config_model_name == "CO_BF_ER_LH_3_OH":
             kwargs["full_ssa_config"] = config.get("full_ssa", {})
         evaluated = definition.evaluator(
             state=state, parameters=parameters, temperature_K=config["temperature_K"], **kwargs
         )
-        return evaluated.mechanism_result
+        return getattr(evaluated, "mechanism_result", evaluated)
 
     return mechanism
 
@@ -357,6 +370,8 @@ def _evaluate_all_material_state(
         evaluator_kwargs["mixed_config"] = config.get("mixed_adsorption", {})
     elif evaluator.__name__ == "evaluate_agpd_reversible_subset":
         evaluator_kwargs["reversible_config"] = config.get("reversible_ssa", {})
+    elif evaluator.__name__ == "evaluate_agpd_lateral_interactions":
+        evaluator_kwargs["lateral_config"] = config.get("lateral_interactions", {})
     return definition.evaluator(
         state=state,
         parameters=parameters,
@@ -502,7 +517,7 @@ def build_agpd_all_material_mechanism(
             prediction_only=prediction_only,
             theta_CO_max_override=theta_CO_max_override,
         )
-        return evaluated.mechanism_result
+        return getattr(evaluated, "mechanism_result", evaluated)
 
     return mechanism
 

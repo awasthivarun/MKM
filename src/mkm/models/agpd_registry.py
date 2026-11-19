@@ -32,6 +32,10 @@ from mkm.models.agpd_physics import parse_agpd_physics
 from mkm.mechanisms.agpd_basic.finite_co import _evaluate_agpd_co_subset
 from mkm.mechanisms.agpd_basic.mixed_adsorption import evaluate_agpd_mixed_adsorption
 from mkm.mechanisms.agpd_basic.reversible_subsets import evaluate_agpd_reversible_subset
+from mkm.mechanisms.agpd_basic.lateral_interactions import (
+    INTERACTION_PARAMETERS, evaluate_agpd_lateral_interactions,
+)
+
 
 
 @dataclass(frozen=True)
@@ -222,17 +226,17 @@ def available_agpd_all_material_models():
 @lru_cache(maxsize=None)
 def _dynamic_physics_definition(model_name):
     physics = parse_agpd_physics(model_name)
-    if physics.interactions or physics.modifier is not None:
+    if physics.modifier is not None:
         raise ValueError(
             f"AgPd model '{model_name}' has valid physical labels, but "
-            "lateral interactions and dynamic modifiers are not yet implemented."
+            "dynamic coverage modifiers are not yet implemented."
         )
 
     # A rate constant is included only if its elementary coupling pathway is enabled.
     names = ["deltaG1_0", "deltaG4_0"]
     if "BF" in physics.pathways:
         names.extend(("deltaG5_0", "beta_2_BF", "q", "Gact2_BF_0"))
-    elif "sOH" in physics.finite_steps:
+    elif "sOH" in physics.finite_steps or set(physics.interactions) & {"x", "o"}:
         names.extend(("deltaG5_0", "q"))
     if "ER" in physics.pathways:
         names.extend(("beta_2_ER", "Gact2_ER_0"))
@@ -246,7 +250,13 @@ def _dynamic_physics_definition(model_name):
         names.extend(("Gact4_0", "beta_4"))
     if "sOH" in physics.finite_steps:
         names.extend(("Gact5_0", "beta_5"))
-    if "3" in physics.finite_steps:
+    names.extend(INTERACTION_PARAMETERS[letter] for letter in physics.interactions)
+    if physics.interactions:
+        evaluator = partial(
+            evaluate_agpd_lateral_interactions, pathways=physics.pathways,
+            finite_steps=physics.finite_steps, interactions=physics.interactions
+        )
+    elif "3" in physics.finite_steps:
         evaluator = partial(
             evaluate_agpd_reversible_subset, pathways=physics.pathways, finite_steps=physics.finite_steps
         )

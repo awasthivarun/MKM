@@ -167,6 +167,8 @@ def _compile_log_rate_evaluator(model_name, point_inputs, config):
         evaluator_kwargs["mixed_config"] = config.get("mixed_adsorption", {})
     elif evaluator.__name__ == "evaluate_agpd_reversible_subset":
         evaluator_kwargs["reversible_config"] = config.get("reversible_ssa", {})
+    elif evaluator.__name__ == "evaluate_agpd_lateral_interactions":
+        evaluator_kwargs["lateral_config"] = config.get("lateral_interactions", {})
     evaluated = definition.evaluator(
         state=state,
         parameters=parameters,
@@ -176,7 +178,7 @@ def _compile_log_rate_evaluator(model_name, point_inputs, config):
 
     function = pytensor.function(
         [parameter_symbols[name] for name in parameter_names],
-        evaluated.mechanism_result.ln_rate,
+        getattr(evaluated, "mechanism_result", evaluated).ln_rate,
         # Explicitly allowed redundant finite OH steps can be structurally inactive.
         on_unused_input="ignore" if model_name not in _TRANSITION_STATE_CONTROLS else "raise",
     )
@@ -206,6 +208,8 @@ def _compile_pointwise_log_rate_evaluator(model_name, point_inputs, config):
         evaluator_kwargs["mixed_config"] = config.get("mixed_adsorption", {})
     elif evaluator.__name__ == "evaluate_agpd_reversible_subset":
         evaluator_kwargs["reversible_config"] = config.get("reversible_ssa", {})
+    elif evaluator.__name__ == "evaluate_agpd_lateral_interactions":
+        evaluator_kwargs["lateral_config"] = config.get("lateral_interactions", {})
     evaluated = definition.evaluator(
         state=state,
         parameters=parameters,
@@ -215,7 +219,7 @@ def _compile_pointwise_log_rate_evaluator(model_name, point_inputs, config):
 
     function = pytensor.function(
         [parameter_symbols[name] for name in parameter_names],
-        evaluated.mechanism_result.ln_rate,
+        getattr(evaluated, "mechanism_result", evaluated).ln_rate,
         # Explicitly allowed redundant finite OH steps can be structurally inactive.
         on_unused_input="ignore" if model_name not in _TRANSITION_STATE_CONTROLS else "raise",
     )
