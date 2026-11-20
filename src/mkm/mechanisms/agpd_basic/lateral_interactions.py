@@ -36,6 +36,14 @@ def _excess_chemical_potentials(c, p, s, fp, fs, q, zc, zx, zo):
     return mu_co, mu_p, mu_s
 
 
+
+def _branch_acceptance(branch_residuals, branch_difference, residual_tolerance, branch_tolerance):
+    """Require both branches to satisfy the balances, not just to have similar coverages."""
+    residual = pt.max(branch_residuals, axis=0)
+    finite = pt.all((~pt.isnan(branch_residuals)) & (~pt.isinf(branch_residuals)), axis=0)
+    valid = finite & (residual <= residual_tolerance) & (branch_difference <= branch_tolerance)
+    return residual, valid
+
 def evaluate_agpd_lateral_interactions(state, parameters, temperature_K, *, pathways, finite_steps,
                                        interactions, lateral_config=None):
     """Solve Frumkin-coupled adsorption/oxidation with differentiable fixed-point iterations.
@@ -280,15 +288,14 @@ def evaluate_agpd_lateral_interactions(state, parameters, temperature_K, *, path
     rbf, rer, rlh = bf_f-bf_b, er_f-er_b, lh_f-lh_b
     total = rbf+rer+rlh
     rate = pt.exp(logk3a)*h if "3" in finite_steps else total
-    residual = _relative_balance(both, scan_constants)[0]
+    branch_residuals = _relative_balance(both, scan_constants)
     diff = branch_difference
+    residual, valid = _branch_acceptance(branch_residuals, diff, tolerance, branch_tolerance)
     # BF-only chemistry has no productive coupling route when secondary sites are absent.
     inactive = fs <= 0.0 if pathways == ("BF",) else pt.zeros_like(fs, dtype="bool")
     residual = pt.where(inactive, 0.0, residual)
     diff = pt.where(inactive, 0.0, diff)
     h = pt.where(inactive, 0.0, h)
-    finite_residual = pt.and_(~pt.isnan(residual), ~pt.isinf(residual))
-    valid = pt.and_(pt.and_(finite_residual, residual <= tolerance), diff <= branch_tolerance)
     rate = pt.where(inactive, 0.0, rate)
     log_rate = pt.where(valid, pt.where(rate > 0.0, pt.log(pt.maximum(rate, 1e-300)), -np.inf), np.nan)
     pointwise = {
@@ -306,8 +313,8 @@ def evaluate_agpd_lateral_interactions(state, parameters, temperature_K, *, path
         # Small update errors support stationarity, but do not establish dynamical stability.
         updated = _trial(both, *scan_unique)
         update_errors = pt.max(pt.abs(updated - both), axis=1)
-        pointwise["branch0_balance_residual"] = residual
-        pointwise["branch1_balance_residual"] = _relative_balance(both, scan_constants)[1]
+        pointwise["branch0_balance_residual"] = branch_residuals[0]
+        pointwise["branch1_balance_residual"] = branch_residuals[1]
         for index in (0, 1):
             branch = both[index]
             pointwise[f"branch{index}_update_error"] = update_errors[index]

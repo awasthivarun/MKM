@@ -6,6 +6,7 @@ import numpy as np
 import pytensor.tensor as pt
 
 from mkm.inference.priors import build_named_priors
+from mkm.models.composition_bounds import bounded_linear_slope_scale
 from mkm.mechanisms.ptru import PURE_PT_MODELS, PTRU_PARAMETER_CLASSES, evaluate_ptru_co
 
 
@@ -105,9 +106,11 @@ def build_ptru_mechanism(spec, config, priors):
                     slope = sampled[f"{name}_xRu_slope"]
                     if name == "beta_2_ER":
                         limits = prior_specs[name]
-                        margin = pt.minimum(params[name] - limits["lower"], limits["upper"] - params[name])
-                        # The fractional slope is scaled to preserve beta in [0, 1] over all compositions.
-                        slope = slope * margin / max(abs(x_reference), abs(0.5 - x_reference))
+                        # Keep beta within its prior domain over the PtRu composition interval [0, 0.5].
+                        slope = slope * bounded_linear_slope_scale(
+                            params[name], limits["lower"], limits["upper"], x_reference,
+                            0.0, 0.5, minimum=pt.minimum,
+                        )
                     params[name] = params[name] + slope * x_shift
         parameters = PTRU_PARAMETER_CLASSES[model_name](**params)
         return evaluate_ptru_co(

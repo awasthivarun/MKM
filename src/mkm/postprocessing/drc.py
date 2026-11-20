@@ -20,6 +20,8 @@ from mkm.models.agpd_basic import (
     get_agpd_prior_profile,
     is_agpd_independent_parameterization,
 )
+from mkm.models.agpd_evaluator_settings import agpd_evaluator_settings
+from mkm.models.composition_bounds import bounded_linear_slope_scale
 from mkm.mechanisms.ptru import PTRU_PARAMETER_CLASSES, evaluate_ptru_co
 from mkm.models.ptru import ptru_parameter_names
 from mkm.postprocessing.diagnostics import summarize_samples
@@ -159,16 +161,7 @@ def _compile_log_rate_evaluator(model_name, point_inputs, config):
     parameter_symbols = {name: pt.dscalar(name) for name in parameter_names}
     parameters = definition.parameter_class(**parameter_symbols)
     state = build_agpd_point_state(inputs=point_inputs, config=config)
-    evaluator_kwargs = {}
-    if definition.config_model_name == "CO_BF_ER_LH_3_OH":
-        evaluator_kwargs["full_ssa_config"] = config.get("full_ssa", {})
-    evaluator = getattr(definition.evaluator, "func", definition.evaluator)
-    if evaluator.__name__ == "evaluate_agpd_mixed_adsorption":
-        evaluator_kwargs["mixed_config"] = config.get("mixed_adsorption", {})
-    elif evaluator.__name__ == "evaluate_agpd_reversible_subset":
-        evaluator_kwargs["reversible_config"] = config.get("reversible_ssa", {})
-    elif evaluator.__name__ == "evaluate_agpd_lateral_interactions":
-        evaluator_kwargs["lateral_config"] = config.get("lateral_interactions", {})
+    evaluator_kwargs, _ = agpd_evaluator_settings(definition, config)
     evaluated = definition.evaluator(
         state=state,
         parameters=parameters,
@@ -200,16 +193,7 @@ def _compile_pointwise_log_rate_evaluator(model_name, point_inputs, config):
     parameter_symbols = {name: pt.dvector(name) for name in parameter_names}
     parameters = definition.parameter_class(**parameter_symbols)
     state = build_agpd_point_state(inputs=point_inputs, config=config)
-    evaluator_kwargs = {}
-    if definition.config_model_name == "CO_BF_ER_LH_3_OH":
-        evaluator_kwargs["full_ssa_config"] = config.get("full_ssa", {})
-    evaluator = getattr(definition.evaluator, "func", definition.evaluator)
-    if evaluator.__name__ == "evaluate_agpd_mixed_adsorption":
-        evaluator_kwargs["mixed_config"] = config.get("mixed_adsorption", {})
-    elif evaluator.__name__ == "evaluate_agpd_reversible_subset":
-        evaluator_kwargs["reversible_config"] = config.get("reversible_ssa", {})
-    elif evaluator.__name__ == "evaluate_agpd_lateral_interactions":
-        evaluator_kwargs["lateral_config"] = config.get("lateral_interactions", {})
+    evaluator_kwargs, _ = agpd_evaluator_settings(definition, config)
     evaluated = definition.evaluator(
         state=state,
         parameters=parameters,
@@ -522,8 +506,10 @@ def compute_ptru_transition_state_drc(
                     value = float(samples[name][chain, draw])
                     slope = float(samples[f"{name}_xRu_slope"][chain, draw])
                     if name == "beta_2_ER":
-                        margin = min(value - beta_spec["lower"], beta_spec["upper"] - value)
-                        slope *= margin / max(abs(x_reference), abs(0.5 - x_reference))
+                        slope *= bounded_linear_slope_scale(
+                            value, beta_spec["lower"], beta_spec["upper"], x_reference,
+                            0.0, 0.5, minimum=min,
+                        )
                     effective[name] = value + slope * x_shift
 
             for control_index, control in enumerate(controls):

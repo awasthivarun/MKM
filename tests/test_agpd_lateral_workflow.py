@@ -3,6 +3,7 @@
 from dataclasses import fields
 
 import numpy as np
+import pytest
 
 from mkm.mechanisms.base import MechanismResult, validate_mechanism_result
 from mkm.model_inputs import ModelPointInputs
@@ -45,6 +46,7 @@ def test_lateral_prior_projection_and_model_metadata():
                 assert prior["lower"] < 0 < prior["upper"]
 
 
+@pytest.mark.integration
 def test_lateral_and_reversible_models_flow_through_individual_assembly(monkeypatch):
     config = load_agpd_model_config(ProjectPaths.discover(__file__))
     config["lateral_interactions"]["fixed_point_iterations"] = 64

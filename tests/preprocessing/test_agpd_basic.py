@@ -24,6 +24,46 @@ def config():
         return yaml.safe_load(file)
 
 
+@pytest.fixture(scope="module")
+def _agpd_prepared():
+    # Build each immutable reference dataset once; tests receive independent DataFrame copies.
+    with open("config/preprocessing/agpd_basic.yaml", "r") as file:
+        config = yaml.safe_load(file)
+    raw = load_agpd_workbook("data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx", config)
+    analysis = build_agpd_analysis_grid(raw, config)
+    rates = add_agpd_rates(analysis, config)
+    selected, _ = truncate_agpd_analysis(rates, config)
+    return {
+        "raw": raw, "analysis": analysis, "rates": rates, "selected": selected,
+        "selected_summary": summarize_agpd_replicates(add_agpd_transfer_coefficients(selected, config), config),
+    }
+
+
+@pytest.fixture
+def agpd_workbook(_agpd_prepared):
+    return _agpd_prepared["raw"].copy(deep=True)
+
+
+@pytest.fixture
+def agpd_analysis(_agpd_prepared):
+    return _agpd_prepared["analysis"].copy(deep=True)
+
+
+@pytest.fixture
+def agpd_rates(_agpd_prepared):
+    return _agpd_prepared["rates"].copy(deep=True)
+
+
+@pytest.fixture
+def agpd_selected_replicates(_agpd_prepared):
+    return _agpd_prepared["selected"].copy(deep=True)
+
+
+@pytest.fixture
+def agpd_selected_summary(_agpd_prepared):
+    return _agpd_prepared["selected_summary"].copy(deep=True)
+
+
 def test_parse_co_mole_fraction(config):
     expected = config["CO_mole_fractions"]
 
@@ -50,10 +90,8 @@ def test_load_agpd_workbook(config):
     assert set(df["replicate"]) == {"A", "B", "C"}
 
 
-def test_workbook_has_expected_number_of_curves(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    df = load_agpd_workbook(path, config)
+def test_workbook_has_expected_number_of_curves(config, agpd_workbook):
+    df = agpd_workbook
 
     curve_columns = ["material", "C_KOH_M", "CO_mole_fraction", "replicate"]
     curves = df.groupby(curve_columns)
@@ -67,29 +105,23 @@ def test_workbook_has_expected_number_of_curves(config):
     assert np.all(curve_sizes.to_numpy() == config["potential"]["expected_points"])
 
 
-def test_current_reconstruction(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    df = load_agpd_workbook(path, config)
+def test_current_reconstruction(config, agpd_workbook):
+    df = agpd_workbook
     reconstructed = np.exp(df["ln_j_uA_cm2"].to_numpy())
 
     np.testing.assert_allclose(df["j_uA_cm2"].to_numpy(), reconstructed)
 
 
-def test_standardized_rows_are_unique(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    df = load_agpd_workbook(path, config)
+def test_standardized_rows_are_unique(config, agpd_workbook):
+    df = agpd_workbook
 
     key_columns = ["material", "C_KOH_M", "CO_mole_fraction", "replicate", "point_index"]
 
     assert not df.duplicated(key_columns).any()
 
 
-def test_build_agpd_analysis_grid(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    standardized = load_agpd_workbook(path, config)
+def test_build_agpd_analysis_grid(config, agpd_workbook):
+    standardized = agpd_workbook
     analysis = build_agpd_analysis_grid(standardized, config)
 
     assert not analysis.empty
@@ -99,11 +131,8 @@ def test_build_agpd_analysis_grid(config):
     assert set(analysis["replicate"]) == {"A", "B", "C"}
 
 
-def test_analysis_grid_spacing(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    standardized = load_agpd_workbook(path, config)
-    analysis = build_agpd_analysis_grid(standardized, config)
+def test_analysis_grid_spacing(config, agpd_analysis):
+    analysis = agpd_analysis
 
     spacing = config["analysis_grid"]["spacing_V"]
     condition_columns = ["material", "C_KOH_M", "CO_mole_fraction", "replicate"]
@@ -113,11 +142,8 @@ def test_analysis_grid_spacing(config):
         np.testing.assert_allclose(np.diff(potential), spacing, rtol=0, atol=1e-12)
 
 
-def test_analysis_grid_is_shared_across_replicates(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    standardized = load_agpd_workbook(path, config)
-    analysis = build_agpd_analysis_grid(standardized, config)
+def test_analysis_grid_is_shared_across_replicates(config, agpd_analysis):
+    analysis = agpd_analysis
 
     condition_columns = ["material", "C_KOH_M", "CO_mole_fraction"]
 
@@ -132,11 +158,9 @@ def test_analysis_grid_is_shared_across_replicates(config):
             np.testing.assert_array_equal(grid, replicate_grids[0])
 
 
-def test_analysis_grid_stays_inside_raw_replicate_domains(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    standardized = load_agpd_workbook(path, config)
-    analysis = build_agpd_analysis_grid(standardized, config)
+def test_analysis_grid_stays_inside_raw_replicate_domains(config, agpd_workbook, agpd_analysis):
+    standardized = agpd_workbook
+    analysis = agpd_analysis
 
     condition_columns = ["material", "C_KOH_M", "CO_mole_fraction", "replicate"]
 
@@ -156,11 +180,8 @@ def test_analysis_grid_stays_inside_raw_replicate_domains(config):
         assert analysis_max <= raw_max + 1e-12
 
 
-def test_analysis_grid_matches_global_lattice(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    standardized = load_agpd_workbook(path, config)
-    analysis = build_agpd_analysis_grid(standardized, config)
+def test_analysis_grid_matches_global_lattice(config, agpd_analysis):
+    analysis = agpd_analysis
 
     spacing = config["analysis_grid"]["spacing_V"]
     origin = config["analysis_grid"]["origin_V"]
@@ -170,11 +191,8 @@ def test_analysis_grid_matches_global_lattice(config):
     np.testing.assert_allclose(analysis["E_V_SHE"].to_numpy(), expected_potential, rtol=0, atol=1e-12)
 
 
-def test_analysis_grid_current_reconstruction(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    standardized = load_agpd_workbook(path, config)
-    analysis = build_agpd_analysis_grid(standardized, config)
+def test_analysis_grid_current_reconstruction(config, agpd_analysis):
+    analysis = agpd_analysis
 
     reconstructed = np.exp(analysis["ln_j_uA_cm2"].to_numpy())
 
@@ -182,23 +200,16 @@ def test_analysis_grid_current_reconstruction(config):
     assert np.all(analysis["j_uA_cm2"].to_numpy() > 0)
 
 
-def test_analysis_grid_has_unique_rows(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    standardized = load_agpd_workbook(path, config)
-    analysis = build_agpd_analysis_grid(standardized, config)
+def test_analysis_grid_has_unique_rows(config, agpd_analysis):
+    analysis = agpd_analysis
 
     key_columns = ["material", "C_KOH_M", "CO_mole_fraction", "replicate", "analysis_grid_index"]
 
     assert not analysis.duplicated(key_columns).any()
 
 
-def test_agpd_rate_normalization(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    standardized = load_agpd_workbook(path, config)
-    analysis = build_agpd_analysis_grid(standardized, config)
-    rates = add_agpd_rates(analysis, config)
+def test_agpd_rate_normalization(config, agpd_rates):
+    rates = agpd_rates
 
     denominator = (
         config["rate_normalization"]["electrons_per_CO_oxidation"]
@@ -210,12 +221,8 @@ def test_agpd_rate_normalization(config):
     np.testing.assert_allclose(rates["rate_s_inv"].to_numpy(), expected_rate)
 
 
-def test_agpd_log_rate_normalization(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    standardized = load_agpd_workbook(path, config)
-    analysis = build_agpd_analysis_grid(standardized, config)
-    rates = add_agpd_rates(analysis, config)
+def test_agpd_log_rate_normalization(config, agpd_rates):
+    rates = agpd_rates
 
     denominator = (
         config["rate_normalization"]["electrons_per_CO_oxidation"]
@@ -227,22 +234,14 @@ def test_agpd_log_rate_normalization(config):
     np.testing.assert_allclose(rates["ln_rate"].to_numpy(), expected_log_rate)
 
 
-def test_rate_and_log_rate_are_consistent(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    standardized = load_agpd_workbook(path, config)
-    analysis = build_agpd_analysis_grid(standardized, config)
-    rates = add_agpd_rates(analysis, config)
+def test_rate_and_log_rate_are_consistent(config, agpd_rates):
+    rates = agpd_rates
 
     np.testing.assert_allclose(np.log(rates["rate_s_inv"].to_numpy()), rates["ln_rate"].to_numpy())
 
 
-def test_agpd_rates_are_positive_and_finite(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    standardized = load_agpd_workbook(path, config)
-    analysis = build_agpd_analysis_grid(standardized, config)
-    rates = add_agpd_rates(analysis, config)
+def test_agpd_rates_are_positive_and_finite(config, agpd_rates):
+    rates = agpd_rates
 
     rate = rates["rate_s_inv"].to_numpy()
     log_rate = rates["ln_rate"].to_numpy()
@@ -252,12 +251,8 @@ def test_agpd_rates_are_positive_and_finite(config):
     assert np.all(np.isfinite(log_rate))
 
 
-def test_agpd_replicate_summary(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    standardized = load_agpd_workbook(path, config)
-    analysis = build_agpd_analysis_grid(standardized, config)
-    rates = add_agpd_rates(analysis, config)
+def test_agpd_replicate_summary(config, agpd_rates):
+    rates = agpd_rates
     summary = summarize_agpd_replicates(rates, config)
 
     assert not summary.empty
@@ -265,12 +260,8 @@ def test_agpd_replicate_summary(config):
     assert len(summary) == len(rates) // len(config["replicates"])
 
 
-def test_agpd_replicate_means(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    standardized = load_agpd_workbook(path, config)
-    analysis = build_agpd_analysis_grid(standardized, config)
-    rates = add_agpd_rates(analysis, config)
+def test_agpd_replicate_means(config, agpd_rates):
+    rates = agpd_rates
     summary = summarize_agpd_replicates(rates, config)
 
     group_columns = ["material", "C_KOH_M", "CO_mole_fraction", "analysis_grid_index", "E_V_SHE"]
@@ -285,12 +276,8 @@ def test_agpd_replicate_means(config):
     np.testing.assert_allclose(summary["ln_rate_mean"], expected["ln_rate_mean"])
 
 
-def test_agpd_replicate_standard_deviations(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    standardized = load_agpd_workbook(path, config)
-    analysis = build_agpd_analysis_grid(standardized, config)
-    rates = add_agpd_rates(analysis, config)
+def test_agpd_replicate_standard_deviations(config, agpd_rates):
+    rates = agpd_rates
     summary = summarize_agpd_replicates(rates, config)
 
     group_columns = ["material", "C_KOH_M", "CO_mole_fraction", "analysis_grid_index", "E_V_SHE"]
@@ -305,12 +292,8 @@ def test_agpd_replicate_standard_deviations(config):
     np.testing.assert_allclose(summary["ln_rate_sd"], expected["ln_rate_sd"])
 
 
-def test_rate_sd_scales_with_current_sd(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    standardized = load_agpd_workbook(path, config)
-    analysis = build_agpd_analysis_grid(standardized, config)
-    rates = add_agpd_rates(analysis, config)
+def test_rate_sd_scales_with_current_sd(config, agpd_rates):
+    rates = agpd_rates
     summary = summarize_agpd_replicates(rates, config)
 
     denominator = (
@@ -321,23 +304,15 @@ def test_rate_sd_scales_with_current_sd(config):
     np.testing.assert_allclose(summary["rate_sd_s_inv"], summary["j_sd_uA_cm2"] / denominator)
 
 
-def test_log_rate_sd_equals_log_current_sd(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    standardized = load_agpd_workbook(path, config)
-    analysis = build_agpd_analysis_grid(standardized, config)
-    rates = add_agpd_rates(analysis, config)
+def test_log_rate_sd_equals_log_current_sd(config, agpd_rates):
+    rates = agpd_rates
     summary = summarize_agpd_replicates(rates, config)
 
     np.testing.assert_allclose(summary["ln_rate_sd"], summary["ln_j_sd"])
 
 
-def test_agpd_summary_rows_are_unique(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    standardized = load_agpd_workbook(path, config)
-    analysis = build_agpd_analysis_grid(standardized, config)
-    rates = add_agpd_rates(analysis, config)
+def test_agpd_summary_rows_are_unique(config, agpd_rates):
+    rates = agpd_rates
     summary = summarize_agpd_replicates(rates, config)
 
     key_columns = ["material", "C_KOH_M", "CO_mole_fraction", "analysis_grid_index"]
@@ -345,12 +320,8 @@ def test_agpd_summary_rows_are_unique(config):
     assert not summary.duplicated(key_columns).any()
 
 
-def test_agpd_transfer_coefficients(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    standardized = load_agpd_workbook(path, config)
-    analysis = build_agpd_analysis_grid(standardized, config)
-    rates = add_agpd_rates(analysis, config)
+def test_agpd_transfer_coefficients(config, agpd_rates):
+    rates = agpd_rates
     rates_with_alpha = add_agpd_transfer_coefficients(rates, config)
 
     assert "alpha" in rates_with_alpha.columns
@@ -358,12 +329,8 @@ def test_agpd_transfer_coefficients(config):
     assert len(rates_with_alpha) == len(rates)
 
 
-def test_agpd_transfer_coefficients_do_not_change_rate_data(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    standardized = load_agpd_workbook(path, config)
-    analysis = build_agpd_analysis_grid(standardized, config)
-    rates = add_agpd_rates(analysis, config)
+def test_agpd_transfer_coefficients_do_not_change_rate_data(config, agpd_rates):
+    rates = agpd_rates
     rates_with_alpha = add_agpd_transfer_coefficients(rates, config)
 
     columns = ["j_uA_cm2", "ln_j_uA_cm2", "rate_s_inv", "ln_rate"]
@@ -372,12 +339,8 @@ def test_agpd_transfer_coefficients_do_not_change_rate_data(config):
         np.testing.assert_array_equal(rates_with_alpha[column].to_numpy(), rates[column].to_numpy())
 
 
-def test_agpd_summary_contains_alpha_statistics(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    standardized = load_agpd_workbook(path, config)
-    analysis = build_agpd_analysis_grid(standardized, config)
-    rates = add_agpd_rates(analysis, config)
+def test_agpd_summary_contains_alpha_statistics(config, agpd_rates):
+    rates = agpd_rates
     rates = add_agpd_transfer_coefficients(rates, config)
     summary = summarize_agpd_replicates(rates, config)
 
@@ -387,12 +350,8 @@ def test_agpd_summary_contains_alpha_statistics(config):
     assert np.all(np.isfinite(summary["alpha_sd"].to_numpy()))
 
 
-def test_agpd_alpha_summary_matches_replicate_data(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    standardized = load_agpd_workbook(path, config)
-    analysis = build_agpd_analysis_grid(standardized, config)
-    rates = add_agpd_rates(analysis, config)
+def test_agpd_alpha_summary_matches_replicate_data(config, agpd_rates):
+    rates = agpd_rates
     rates = add_agpd_transfer_coefficients(rates, config)
     summary = summarize_agpd_replicates(rates, config)
 
@@ -408,12 +367,8 @@ def test_agpd_alpha_summary_matches_replicate_data(config):
     np.testing.assert_allclose(summary["alpha_sd"].to_numpy(), expected["alpha_sd_expected"].to_numpy())
 
 
-def test_agpd_alpha_is_unchanged_by_tof_normalization(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    standardized = load_agpd_workbook(path, config)
-    analysis = build_agpd_analysis_grid(standardized, config)
-    rates = add_agpd_rates(analysis, config)
+def test_agpd_alpha_is_unchanged_by_tof_normalization(config, agpd_rates):
+    rates = agpd_rates
     rates_with_alpha = add_agpd_transfer_coefficients(rates, config)
 
     from mkm.preprocessing.observables import add_transfer_coefficients
@@ -549,12 +504,8 @@ def test_truncation_records_condition_provenance(config):
     assert cutoffs.loc[0, "n_points_retained"] == 4
 
 
-def test_real_agpd_truncation_satisfies_low_potential_rule(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    standardized = load_agpd_workbook(path, config)
-    analysis = build_agpd_analysis_grid(standardized, config)
-    rates = add_agpd_rates(analysis, config)
+def test_real_agpd_truncation_satisfies_low_potential_rule(config, agpd_rates):
+    rates = agpd_rates
     truncated, cutoffs = truncate_agpd_analysis(rates, config)
 
     threshold = config["truncation"]["low_potential"]["threshold_s_inv"]
@@ -575,29 +526,8 @@ def test_real_agpd_truncation_satisfies_low_potential_rule(config):
         assert np.all(minimum_rate.to_numpy() >= threshold)
 
 
-def _build_selected_agpd_summary(path, config):
-    standardized = load_agpd_workbook(path, config)
-    analysis = build_agpd_analysis_grid(standardized, config)
-    analysis = add_agpd_rates(analysis, config)
-    selected, _ = truncate_agpd_analysis(analysis, config)
-    selected = add_agpd_transfer_coefficients(selected, config)
-
-    return summarize_agpd_replicates(selected, config)
-
-
-def _build_selected_agpd_replicates(path, config):
-    standardized = load_agpd_workbook(path, config)
-    analysis = build_agpd_analysis_grid(standardized, config)
-    analysis = add_agpd_rates(analysis, config)
-    selected, _ = truncate_agpd_analysis(analysis, config)
-
-    return selected
-
-
-def test_agpd_oh_order_structure(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    summary = _build_selected_agpd_summary(path, config)
+def test_agpd_oh_order_structure(config, agpd_selected_summary):
+    summary = agpd_selected_summary
     delta_OH = calculate_agpd_oh_order(summary, config)
 
     assert not delta_OH.empty
@@ -607,10 +537,8 @@ def test_agpd_oh_order_structure(config):
     assert np.all(np.isfinite(delta_OH["delta_OH_sd"]))
 
 
-def test_agpd_oh_order_uses_common_selected_grid(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    summary = _build_selected_agpd_summary(path, config)
+def test_agpd_oh_order_uses_common_selected_grid(config, agpd_selected_summary):
+    summary = agpd_selected_summary
     delta_OH = calculate_agpd_oh_order(summary, config)
 
     for CO_fraction in config["CO_mole_fractions"]:
@@ -631,10 +559,8 @@ def test_agpd_oh_order_uses_common_selected_grid(config):
         assert observed_indices == expected_indices
 
 
-def test_agpd_co_order_structure(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    selected = _build_selected_agpd_replicates(path, config)
+def test_agpd_co_order_structure(config, agpd_selected_replicates):
+    selected = agpd_selected_replicates
     delta_CO = calculate_agpd_co_order(selected, config)
 
     assert not delta_CO.empty
@@ -647,10 +573,8 @@ def test_agpd_co_order_structure(config):
     assert np.all(np.isfinite(delta_CO["delta_CO_sd"]))
 
 
-def test_agpd_co_order_uses_pair_specific_selected_grid(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    selected = _build_selected_agpd_replicates(path, config)
+def test_agpd_co_order_uses_pair_specific_selected_grid(config, agpd_selected_replicates):
+    selected = agpd_selected_replicates
     delta_CO = calculate_agpd_co_order(selected, config)
 
     CO_values = config["CO_mole_fractions"]
@@ -682,10 +606,8 @@ def test_agpd_co_order_uses_pair_specific_selected_grid(config):
             assert observed_indices == expected_indices
 
 
-def test_agpd_co_order_replicates_preserve_pairing(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    selected = _build_selected_agpd_replicates(path, config)
+def test_agpd_co_order_replicates_preserve_pairing(config, agpd_selected_replicates):
+    selected = agpd_selected_replicates
     delta_CO_replicates = calculate_agpd_co_order_replicates(selected, config)
 
     assert set(delta_CO_replicates["replicate"]) == set(config["replicates"])
@@ -703,10 +625,8 @@ def test_agpd_co_order_replicates_preserve_pairing(config):
     assert np.all(counts.to_numpy() == len(config["replicates"]))
 
 
-def test_agpd_co_order_replicate_matches_direct_log_rate_difference(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    selected = _build_selected_agpd_replicates(path, config)
+def test_agpd_co_order_replicate_matches_direct_log_rate_difference(config, agpd_selected_replicates):
+    selected = agpd_selected_replicates
     delta_CO_replicates = calculate_agpd_co_order_replicates(selected, config)
 
     row = delta_CO_replicates.iloc[0]
@@ -734,10 +654,8 @@ def test_agpd_co_order_replicate_matches_direct_log_rate_difference(config):
     np.testing.assert_allclose(row["delta_CO"], expected, rtol=1e-12, atol=1e-12)
 
 
-def test_agpd_co_order_summary_matches_paired_replicates(config):
-    path = "data/raw/AgPd_COOx_basic/Ag10Pd90_current_densities.xlsx"
-
-    selected = _build_selected_agpd_replicates(path, config)
+def test_agpd_co_order_summary_matches_paired_replicates(config, agpd_selected_replicates):
+    selected = agpd_selected_replicates
     delta_CO_replicates = calculate_agpd_co_order_replicates(selected, config)
     delta_CO = calculate_agpd_co_order(selected, config)
 

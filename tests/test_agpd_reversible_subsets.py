@@ -3,6 +3,7 @@
 from dataclasses import fields
 
 import numpy as np
+import pytensor
 import pytensor.tensor as pt
 import pytest
 
@@ -50,6 +51,7 @@ def _evaluate(model_name, *, material="Ag50Pd50", fast_steps=()):
     return result
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("model_name", (
     "ER_3", "BF_3", "BF_ER_3", "CO_ER_3", "ER_LH_3_pOH",
     "BF_3_sOH", "CO_BF_ER_LH_3", "CO_BF_ER_LH_3_pOH",
@@ -59,7 +61,10 @@ def _evaluate(model_name, *, material="Ag50Pd50", fast_steps=()):
 def test_finite_step3_variants_have_physical_coverages_and_flux_balance(model_name):
     evaluated = _evaluate(model_name)
     pointwise = evaluated.pointwise
-    values = {key: np.asarray(value.eval(), dtype=float) for key, value in pointwise.items()}
+    # Evaluate all observables in one graph instead of compiling one function per coverage/flux.
+    names = tuple(pointwise)
+    outputs = pytensor.function([], [pointwise[name] for name in names] + [evaluated.ln_rate])()
+    values = {name: np.asarray(value, dtype=float) for name, value in zip(names, outputs[:-1])}
     for name in ("theta_CO", "theta_COOH", "theta_OH_Pd", "theta_empty_Pd", "theta_OH_Ag", "theta_empty_Ag"):
         assert np.all(np.isfinite(values[name])), name
         assert np.all((values[name] >= 0.0) & (values[name] <= 1.0)), name
@@ -69,7 +74,7 @@ def test_finite_step3_variants_have_physical_coverages_and_flux_balance(model_na
     )
     np.testing.assert_allclose(values["theta_OH_Ag"] + values["theta_empty_Ag"], 1.0, atol=1e-10)
     assert np.all(values["ssa_relative_residual_COOH"] < 1e-8)
-    log_rate = np.asarray(evaluated.ln_rate.eval(), dtype=float)
+    log_rate = np.asarray(outputs[-1], dtype=float)
     assert np.all(np.isfinite(log_rate))
     np.testing.assert_allclose(values["electron_flux"], 2.0 * np.exp(log_rate),
                                rtol=1e-8, atol=1e-10)

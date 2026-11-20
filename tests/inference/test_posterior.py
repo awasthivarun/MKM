@@ -25,6 +25,7 @@ def _make_model():
     return SimpleNamespace(model=model)
 
 
+@pytest.mark.sampling
 def test_posterior_sampling_stores_free_variables_only():
     built = _make_model()
     idata = sample_posterior(
@@ -42,6 +43,7 @@ def test_posterior_sampling_stores_free_variables_only():
     assert "twice_x" not in idata.posterior
 
 
+@pytest.mark.sampling
 def test_posterior_deterministics_can_be_reconstructed():
     built = _make_model()
     idata = sample_posterior(
@@ -66,6 +68,7 @@ def test_posterior_deterministics_can_be_reconstructed():
     np.testing.assert_allclose(posterior["twice_x"], 2 * posterior["x"])
 
 
+@pytest.mark.sampling
 def test_log_likelihood_can_be_added_after_sampling():
     built = _make_model()
     idata = sample_posterior(
@@ -94,6 +97,7 @@ def test_posterior_sampling_validates_configuration():
         sample_posterior(built, target_accept=1.0)
 
 
+@pytest.mark.sampling
 def test_sampler_health_reports_divergences():
     built = _make_model()
     idata = sample_posterior(

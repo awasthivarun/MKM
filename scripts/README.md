@@ -173,6 +173,29 @@ python scripts/check_agpd_prior_predictive.py CO_BF_ER_LH --all-materials --para
 
 Use `--save-draws` only when the raw prior-predictive InferenceData is needed.
 
+### Frumkin model numerical checks (AgPd)
+
+Dynamic AgPd model names may begin with `c`, `x`, and/or `o` for CO-CO,
+CO-OH, and OH-OH interactions. Finite-rate steps can also be selected in
+the name. For example, run the fully coupled model at Ag50Pd50:
+
+```powershell
+python scripts/check_agpd_prior_predictive.py cxo_CO_BF_ER_LH_3_pOH_sOH --material Ag50Pd50 --draws 50 --random-seed 42 --save-draws
+```
+
+If the summary identifies nonfinite predictions, replay the saved parameter
+draws with more iterations for diagnosis (this is not a model change):
+
+```powershell
+python scripts/diagnose_agpd_lateral_solver.py cxo_CO_BF_ER_LH_3_pOH_sOH --material Ag50Pd50 --iterations 384
+```
+
+The two-initial-state solver checks residuals and branch disagreement; it
+cannot rule out all additional steady states. For independent root/stability
+investigation use `scripts/diagnose_agpd_lateral_stability.py`. Solver
+thresholds and iteration settings are defined by the model YAML, not the
+CLI's numeric replay argument.
+
 ## Posterior fitting
 
 ### Individual material
@@ -490,6 +513,26 @@ pytest tests/test_pt100_mechanisms.py tests/test_ptru_alloy_mechanisms.py tests/
 pytest tests/workflows/test_ptru_fit.py tests/workflows/test_ptru_alloy_fit.py tests/workflows/test_ptru_posterior.py -q
 pytest tests -q
 ```
+
+## Development and full regression tests
+
+The complete regression command is:
+
+```powershell
+pytest tests -q --durations=30
+```
+
+For a smaller development run that excludes selected expensive and
+integration-oriented tests:
+
+```powershell
+pytest tests -q -m "not slow and not sampling and not plotting and not integration"
+```
+
+The full suite passed **790 tests** on 19 November 2026 in approximately
+**3 minutes**; the filtered subset took **2 minutes 30 seconds**. These
+markers currently cover selected expensive tests, not all substantial
+PyTensor compilations. Keep the full suite as the merge/commit validation.
 
 ## Model registration, provenance and validation (November 2026)
 

@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import pytest
 import pandas as pd
 
 from mkm.preprocessing.plotting import (
@@ -19,6 +20,8 @@ from mkm.preprocessing.plotting import (
     plot_agpd_second_order_overlay_pco,
     save_agpd_figure,
 )
+
+pytestmark = pytest.mark.plotting
 
 
 def _plot_data():

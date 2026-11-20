@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 import pandas as pd
 import xarray as xr
 
@@ -28,6 +29,8 @@ from mkm.postprocessing.plotting import (
     plot_sampling_correlations,
     plot_sampling_pairs,
 )
+
+pytestmark = pytest.mark.plotting
 
 
 def test_plot_observation_grid_saves_model_and_predictive_rate_figures(tmp_path):

@@ -4,6 +4,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 
 from mkm.inference.likelihoods import RATE_NORMAL
+from mkm.models.agpd_evaluator_settings import agpd_evaluator_settings
 from mkm.models.agpd_registry import AGPD_MODEL_REGISTRY, get_agpd_model_definition
 from mkm.inference.posterior import (
     compute_posterior_deterministics,
@@ -75,14 +76,9 @@ def agpd_model_specification(paths, specification, config):
     if definition.coverage_cap_mode == "config":
         model_config["co_coverage_cap"] = {material: config["co_coverage_cap"][material]
                                             for material in model_config["surface_composition"]}
-    if definition.config_model_name == "CO_BF_ER_LH_3_OH":
-        model_config["full_ssa"] = deepcopy(config["full_ssa"])
-    if evaluator.__name__ == "evaluate_agpd_mixed_adsorption":
-        model_config["mixed_adsorption"] = deepcopy(config.get("mixed_adsorption", {}))
-    elif evaluator.__name__ == "evaluate_agpd_reversible_subset":
-        model_config["reversible_ssa"] = deepcopy(config.get("reversible_ssa", {}))
-    elif evaluator.__name__ == "evaluate_agpd_lateral_interactions":
-        model_config["lateral_interactions"] = deepcopy(config.get("lateral_interactions", {}))
+    _, active_settings = agpd_evaluator_settings(definition, config)
+    for name in active_settings:
+        model_config[name] = deepcopy(config[name] if name == "full_ssa" else config.get(name, {}))
     return {
         **resolved_model_metadata(specification), "kinetic_config": model_config,
         "source_sha256": source_file_hashes(

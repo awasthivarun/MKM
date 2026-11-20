@@ -13,6 +13,9 @@ from mkm.project_paths import ProjectPaths
 from mkm.workflows.ptru_postprocess import postprocess_ptru_run
 
 
+pytestmark = pytest.mark.integration
+
+
 @pytest.mark.parametrize("medium", ["acidic", "basic"])
 def test_ptru_postprocessing_core_generates_aligned_products(tmp_path, medium):
     records = []

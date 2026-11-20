@@ -99,8 +99,6 @@ def test_zero_interaction_limit_matches_noninteracting_evaluator(base):
     if "3" in base:
         kwargs["reversible_config"] = dict(affinity_iterations=48, affinity_damping=1.0,
                                             relative_residual_tolerance=1e-8)
-    if base == "CO_ER":
-        pass
     reference = definition.evaluator(state, params, 293.15, **kwargs)
     reference = getattr(reference, "mechanism_result", reference)
     np.testing.assert_allclose(lateral, reference.ln_rate.eval(), rtol=2e-5, atol=2e-5)
@@ -121,6 +119,7 @@ def test_canonical_interaction_names_and_parameter_membership():
         assert parse_agpd_physics(name).name == name
 
 
+@pytest.mark.slow
 def test_symbolic_gradient_with_respect_to_cross_interaction():
     name = "x_CO_BF_ER_LH_3_pOH_sOH"
     params = vars(_parameters(name))

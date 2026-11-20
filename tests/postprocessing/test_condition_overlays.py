@@ -8,6 +8,8 @@ import pytest
 from mkm.postprocessing.plotting import observables as overlay
 from mkm.workflows import ptru_postprocess as ptru
 
+pytestmark = pytest.mark.plotting
+
 
 def _overlay_frames():
     alpha = []

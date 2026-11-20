@@ -1,6 +1,7 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pytest
 import pandas as pd
 
 from mkm.preprocessing import plotting as style
@@ -9,6 +10,8 @@ from mkm.preprocessing.ptru_plotting import (
     plot_alpha_grid,
     plot_rate_grid,
 )
+
+pytestmark = pytest.mark.plotting
 
 
 def test_ptru_condition_panel_layouts():

@@ -18,7 +18,7 @@ The primary repository documentation is:
 - [`REPO_MAP.md`](REPO_MAP.md): Architecture, code ownership, data contracts, and output structure.
 - [`scripts/README.md`](scripts/README.md): Command-line workflows.
 
-Mathematical specifications and conventions take precedence over implementation descriptions. Source code establishes actual implemented behavior. Documentation may lag behind ongoing development.
+Python and YAML in the active revision establish implemented behavior. Mathematical specifications describe intended behavior; any disagreement with code needs investigation. Documentation may lag behind development.
 
 ## Scientific systems
 
@@ -35,7 +35,20 @@ Materials:
 
 The implemented finite-rate CO models include reversible CO adsorption/desorption on Pd, Pd-OH and Ag-OH quasi-equilibria, and selectable bifunctional (BF), Eley-Rideal (ER), and Langmuir-Hinshelwood (LH) oxidation pathways.
 
-The CO steady state is solved analytically rather than with an iterative numerical solver. Positive rates and related quantities are evaluated in the log domain where practical.
+For the noninteracting CO-SSA models, the CO steady state is solved analytically. Other
+AgPd variants include finite OH/COOH kinetics and optional Frumkin lateral interactions;
+the interaction-coupled coverage equations use a differentiable numerical solver. Positive
+rates and related quantities are evaluated in the log domain where practical.
+
+Dynamic model names use the optional `c`, `x`, `o` prefix for CO-CO, CO-OH, and OH-OH
+interactions, respectively (for example, `c_ER` or `cxo_CO_BF_ER_LH_3_pOH_sOH`).
+The Frumkin solver uses two initial coverage guesses, checks both balance residuals and
+branch agreement, and stops early when converged, up to a configured iteration limit.
+Failure to find distinct roots from those two starts does not prove global uniqueness.
+The CO-CO interaction prior is constrained to 0-0.20 eV (repulsive/ideal); the
+cross- and OH-OH interaction priors allow either sign. These are prior assumptions,
+not thermodynamic requirements. See `config/models/agpd_basic.yaml` and
+`config/priors/agpd_basic.yaml` for current settings.
 
 The active likelihood is Normal in linear rate space:
 
@@ -179,6 +192,29 @@ pytest tests -q
 ```
 
 `--no-deps` is intentional when the Conda environment has already installed the scientific dependencies.
+
+### Regression tests
+
+The complete regression suite is `pytest tests -q`. The November 19, 2026 local
+baseline after the maintenance refactor is **790 passed**, approximately **3 minutes**
+(on the developer workstation). To inspect the expensive cases:
+
+```powershell
+pytest tests -q --durations=30
+```
+
+Tests marked `slow`, `sampling`, `plotting`, or `integration` can be excluded for a
+smaller development subset:
+
+```powershell
+pytest tests -q -m "not slow and not sampling and not plotting and not integration"
+```
+
+That subset still took about **2 minutes 30 seconds** in the same environment; it
+is not a lightweight unit-only check. It deliberately omits useful numerical,
+workflow, plotting, and sampling regressions and **does not replace** the full suite.
+Marker definitions live in `pyproject.toml`; test functions are retained, not
+removed, when excluded by a command-line expression.
 
 ## Common workflows
 
@@ -333,7 +369,15 @@ The PtRu pipeline uses:
 - `ptru_observables.py`: PtRu-specific observable calculations and grouping conventions.
 - `ptru_plotting.py`: Rate and observable figures using shared AgPd styling utilities.
 
-Experimental data calculations and plotting implementations reside in `src/mkm/preprocessing/`. Unified Pt/PtRu mechanism and inference implementations reside in `src/mkm/mechanisms/ptru.py`, `src/mkm/models/ptru.py`, and `src/mkm/workflows/ptru_fit.py`, with posterior and validation workflows under `src/mkm/workflows/`. Generic electrochemical functions are in `src/mkm/mechanisms/electrochem.py`. Scripts provide command-line orchestration.
+Experimental data calculations and plotting implementations reside in `src/mkm/preprocessing/`.
+Unified Pt/PtRu mechanism and inference implementations reside in `src/mkm/mechanisms/ptru.py`,
+`src/mkm/models/ptru.py`, and `src/mkm/workflows/ptru_fit.py`, with posterior and
+validation workflows under `src/mkm/workflows/`. PtRu postprocessing retains the public
+`ptru_postprocess.py` interface while delegating observable products, figures, and DRC
+to `_ptru_postprocess_products.py`, `_ptru_postprocess_plots.py`, and
+`_ptru_postprocess_drc.py`. Generic electrochemical functions are in
+`src/mkm/mechanisms/electrochem.py`. The shared bounded-composition-slope calculation
+is in `src/mkm/models/composition_bounds.py`. Scripts provide command-line orchestration.
 
 ## Interpretation boundary
 

@@ -203,6 +203,7 @@ MODEL_SOURCE_COMMON = (
 )
 AGPD_MODEL_SOURCE_FILES = MODEL_SOURCE_COMMON + (
     "src/mkm/models/agpd_basic.py", "src/mkm/models/agpd_registry.py",
+    "src/mkm/models/agpd_evaluator_settings.py", "src/mkm/models/composition_bounds.py",
     "src/mkm/mechanisms/pd_basic.py",
     "src/mkm/mechanisms/agpd_basic/__init__.py",
     "src/mkm/mechanisms/agpd_basic/electrochem.py",
@@ -215,6 +216,7 @@ AGPD_MODEL_SOURCE_FILES = MODEL_SOURCE_COMMON + (
     "src/mkm/workflows/agpd_fit.py",
 )
 PTRU_MODEL_SOURCE_FILES = MODEL_SOURCE_COMMON + (
+    "src/mkm/models/composition_bounds.py",
     "src/mkm/mechanisms/ptru.py",
     "src/mkm/models/ptru.py",
     "src/mkm/workflows/ptru_fit.py",

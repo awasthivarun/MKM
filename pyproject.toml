@@ -53,5 +53,5 @@ markers = [
     "integration: cross-module or command-line workflow tests",
     "plotting: figure-generation smoke tests",
     "sampling: tests that run posterior sampling",
-    "slow: tests excluded from fast development checks",
+    "slow: expensive tests retained in the complete regression suite",
 ]

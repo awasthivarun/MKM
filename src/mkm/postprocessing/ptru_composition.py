@@ -8,6 +8,7 @@ import pandas as pd
 import xarray as xr
 
 from mkm.models.ptru import ptru_parameter_names
+from mkm.models.composition_bounds import bounded_linear_slope_scale
 from mkm.postprocessing.diagnostics import summarize_samples
 
 
@@ -73,8 +74,10 @@ def build_ptru_composition_parameter_trends(inference_data, config, prior_config
             slope = _scalar_draws(posterior, f"{name}_xRu_slope")
             if name == "beta_2_ER":
                 limits = profile[name]
-                margin = np.minimum(base - float(limits["lower"]), float(limits["upper"]) - base)
-                slope *= margin / max(abs(x_reference), abs(0.5 - x_reference))
+                slope *= bounded_linear_slope_scale(
+                    base, float(limits["lower"]), float(limits["upper"]), x_reference,
+                    0.0, 0.5, minimum=np.minimum,
+                )
             draws = base[:, None] + slope[:, None] * (x_grid[None, :] - x_reference)
         else:
             draws = np.broadcast_to(base[:, None], (len(base), len(x_grid)))

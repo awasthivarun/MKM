@@ -4,6 +4,7 @@ from dataclasses import fields
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 import pytensor
 import pytensor.tensor as pt
 
@@ -49,6 +50,7 @@ def _values(result):
     return tuple(np.asarray(value, dtype=float) for value in evaluated)
 
 
+@pytest.mark.slow
 def test_adaptive_recovers_difficult_full_ssa_prior_draws():
     name = 'cxo_CO_BF_ER_LH_3_pOH_sOH'
     cases = [

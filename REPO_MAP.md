@@ -304,6 +304,18 @@ Owns the reduced pure-Pd ER+LH evaluator used for prediction-only pure-Pd states
 
 Declarative source of truth for AgPd model variants: active pathways, fit scopes, fixed parameters, named prior variants, coverage-cap mode, and material-specific pathway masks.
 
+### `src/mkm/models/agpd_evaluator_settings.py`
+
+Single resolver for mechanism-specific evaluation configuration passed by
+AgPd fitting, posterior provenance, and DRC calculations. The registry and
+physical mechanism implementations remain separate.
+
+### `src/mkm/models/composition_bounds.py`
+
+Shared mathematical helper for bounded relative slopes in AgPd `linear_xAg`
+and PtRu `linear_xRu` models. Each caller supplies its own composition domain,
+parameter bounds, and symbolic/array minimum operation.
+
 ### `src/mkm/models/agpd_basic.py`
 
 Owns fit-ready mechanism registration:
@@ -396,10 +408,18 @@ checkpoints created under dedicated Pt100 or alloy modules are not automatically
 `ptru_validation.py` also supports pooled LOMO with `shared` or `linear_xRu` physical
 parameterization and shared errors; pooled LOCO remains unavailable.
 
-### `src/mkm/workflows/ptru_postprocess.py`
+### `src/mkm/workflows/ptru_postprocess.py` and internal helpers
 
-Shared posterior diagnostics and plots work for individual and pooled PtRu runs,
-including per-material coverages, rates, rate fractions, kinetic observables, and DRC.
+`ptru_postprocess.py` remains the public orchestration/API module for individual
+and pooled PtRu postprocessing. Responsibilities are divided into:
+
+- `_ptru_postprocess_products.py`: experimental observable loading and posterior comparisons;
+- `_ptru_postprocess_plots.py`: figure orchestration using shared plotting functions;
+- `_ptru_postprocess_drc.py`: PtRu DRC output generation and status recording.
+
+The public wrapper preserves established entry points (including plotting
+callbacks used by existing regression tests). Per-material coverages, rates,
+rate fractions, kinetic observables, and DRC remain supported.
 
 ## Postprocessing
 
@@ -469,6 +489,34 @@ Shared plotting package for posterior, DRC, and validation products, including
 `observables.py` (electrolyte-configurable overlays) and `loo.py` (common LOO
 figures). The AgPd wrappers retain their existing output conventions; PtRu
 reuses the shared functions with HClO4/H+ or KOH/OH- labels.
+
+## Test ownership and execution
+
+- `tests/test_agpd_lateral_branch_validation.py` explicitly requires both
+  Frumkin branches to satisfy the terminal balance residual tolerance.
+- `tests/test_agpd_lateral_adaptive_solver.py` covers difficult draws, early
+  stopping, branch rejection, and symbolic gradients.
+- `tests/test_agpd_reversible_subsets.py` retains its physics assertions but
+  compiles related observables together to avoid repeated compilation.
+- `tests/preprocessing/test_agpd_basic.py` shares expensive read-only data
+  preparation while giving tests independent working copies.
+- `tests/workflows/test_agpd_grid_runner.py` uses mocked subprocesses to check
+  fit-grid retries and failures without running posterior inference.
+- `tests/workflows/test_ptru_postprocessing_smoke.py` exercises the reorganized
+  PtRu postprocessing across both electrolyte media.
+
+The full suite is `pytest tests -q`; it remains the regression baseline.
+`pyproject.toml` registers `slow`, `sampling`, `plotting`, and `integration`
+markers, used by selected tests. The filtered command below excludes these
+checks but is **not** comprehensive:
+
+```powershell
+pytest tests -q -m "not slow and not sampling and not plotting and not integration"
+```
+
+On 19 November 2026, the full suite passed 790 tests in about 3 minutes;
+the filtered subset required about 2 minutes 30 seconds. Use
+`pytest tests -q --durations=30` to investigate test execution cost.
 
 ## Canonical AgPd scripts
 

@@ -7,6 +7,8 @@ import pymc as pm
 import pytensor.tensor as pt
 
 from mkm.inference.priors import build_named_priors
+from mkm.models.agpd_evaluator_settings import agpd_evaluator_settings
+from mkm.models.composition_bounds import bounded_linear_slope_scale
 from mkm.mechanisms.agpd_basic import build_agpd_point_state, evaluate_agpd_co_bf_er_lh
 from mkm.mechanisms.pd_basic import PdCOERLHParameters, evaluate_pd_co_er_lh
 from mkm.models.agpd_registry import (
@@ -298,16 +300,7 @@ def build_agpd_mechanism(model_name, material, config):
         prior_values = build_named_priors(parameter_specs)
         parameters = definition.parameter_class(**prior_values)
         state = build_agpd_point_state(inputs=point_inputs, config=config)
-        evaluator = getattr(definition.evaluator, "func", definition.evaluator)
-        kwargs = {}
-        if evaluator.__name__ == "evaluate_agpd_mixed_adsorption":
-            kwargs["mixed_config"] = config.get("mixed_adsorption", {})
-        elif evaluator.__name__ == "evaluate_agpd_reversible_subset":
-            kwargs["reversible_config"] = config.get("reversible_ssa", {})
-        elif evaluator.__name__ == "evaluate_agpd_lateral_interactions":
-            kwargs["lateral_config"] = config.get("lateral_interactions", {})
-        elif definition.config_model_name == "CO_BF_ER_LH_3_OH":
-            kwargs["full_ssa_config"] = config.get("full_ssa", {})
+        kwargs, _ = agpd_evaluator_settings(definition, config)
         evaluated = definition.evaluator(
             state=state, parameters=parameters, temperature_K=config["temperature_K"], **kwargs
         )
@@ -362,16 +355,7 @@ def _evaluate_all_material_state(
             bf_activity=_material_activity(state, definition.bf_disabled_materials),
             er_activity=_material_activity(state, definition.er_disabled_materials),
         )
-    evaluator_kwargs = {}
-    if definition.config_model_name == "CO_BF_ER_LH_3_OH":
-        evaluator_kwargs["full_ssa_config"] = config.get("full_ssa", {})
-    evaluator = getattr(definition.evaluator, "func", definition.evaluator)
-    if evaluator.__name__ == "evaluate_agpd_mixed_adsorption":
-        evaluator_kwargs["mixed_config"] = config.get("mixed_adsorption", {})
-    elif evaluator.__name__ == "evaluate_agpd_reversible_subset":
-        evaluator_kwargs["reversible_config"] = config.get("reversible_ssa", {})
-    elif evaluator.__name__ == "evaluate_agpd_lateral_interactions":
-        evaluator_kwargs["lateral_config"] = config.get("lateral_interactions", {})
+    evaluator_kwargs, _ = agpd_evaluator_settings(definition, config)
     return definition.evaluator(
         state=state,
         parameters=parameters,
@@ -395,7 +379,7 @@ def _bounded_linear_max_abs_slope(parameter_name, base_value, parameter_specs, x
         raise ValueError(
             f"Bounded linear_xAg parameter '{parameter_name}' has invalid prior bounds [{lower}, {upper}]."
         )
-    return 2.0 * pt.minimum(base_value - lower, upper - base_value)
+    return bounded_linear_slope_scale(base_value, lower, upper, x_reference, 0.0, 1.0, minimum=pt.minimum)
 
 
 def build_agpd_all_material_mechanism(

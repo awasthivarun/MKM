@@ -46,6 +46,28 @@ The AgPd mechanism implementation includes `state.py`, `surface.py`, `finite_co.
 
 Run metadata stores the resolved model specification, resolved prior specification, a resolved-fit hash, and the full configuration-bundle hash. Schema-2 checkpoint validation compares the resolved model-defining settings and scoped source signatures; the complete configuration-bundle hash is retained for auditing rather than enforced against unrelated YAML edits.
 
+## Maintenance baseline (November 19, 2026)
+
+The latest reported complete local regression run passed **790 tests** in approximately
+**3 minutes**. A marker-filtered development subset took approximately
+**2 minutes 30 seconds**; it excludes selected `slow`, `sampling`, `plotting`, and `integration`
+checks and is not a replacement for the full suite. Use
+`pytest tests -q --durations=30` to track new bottlenecks. These times are workstation observations,
+not portable performance guarantees.
+
+The cleanup retains the PtRu postprocessing API in `workflows/ptru_postprocess.py`
+but delegates observable comparison, plot orchestration, and DRC to three internal
+`_ptru_postprocess_*` modules. AgPd model assembly, DRC, and provenance now share
+the evaluator-settings resolver in `models/agpd_evaluator_settings.py`. AgPd and PtRu
+share the bounded-composition-slope primitive in `models/composition_bounds.py`.
+Neither change is intended to modify the physical parameterization. The
+`tests/workflows/test_agpd_grid_runner.py` tests cover subprocess construction,
+retry behavior, and failures without invoking a real sampling run.
+
+Source-code provenance includes the new shared helpers. A source refactor can alter
+a saved checkpoint's scoped signature even if numerical predictions are unchanged;
+do not disable compatibility checks to reuse an older checkpoint.
+
 ## PtRu unified inference update (November 16, 2026)
 
 Pt100, Pt66Ru33, and Pt50Ru50 now share `models/ptru.yaml`, `priors/ptru.yaml`,
@@ -319,7 +341,7 @@ No log-rate IID, setup-intercept, MVN, or GP likelihood is part of the current a
 
 ## Current finite-rate CO mechanism family
 
-The current mechanism family uses:
+The original noninteracting CO-SSA mechanism family uses:
 
 - reversible finite-rate CO adsorption/desorption on Pd;
 - exact detailed balance for CO desorption, `ln(k_-1) = ln(k1) - ln(K1)`;
@@ -350,6 +372,43 @@ CO_ER_LH
 ```
 
 because BF-specific parameters are structurally inactive on `Pd100`.
+
+### Dynamic AgPd mechanism variants and lateral interactions
+
+`models/agpd_physics.py` parses canonical dynamic names: an optional ordered
+interaction prefix (`c` = CO-CO, `x` = CO-OH, `o` = OH-OH), optional finite CO
+adsorption (`CO`), active BF/ER/LH pathways, and optional finite step-3, primary
+OH (`pOH`), and secondary OH (`sOH`) kinetics. For example,
+`cxo_CO_BF_ER_LH_3_pOH_sOH` activates all three interaction types and all
+four finite-rate flags. No interaction prefix means no Frumkin solver.
+
+The Frumkin excess free energy per total surface site is
+
+$$
+W = \tfrac12 z_{\mathrm{CO-CO}} C^2 + z_{\mathrm{CO-OH}} CH
+    + \tfrac12 z_{\mathrm{OH-OH}} H^2,\quad
+C=f_p\theta_{\mathrm{CO}},\quad
+H=f_p\theta_{\mathrm{pOH}}+q f_s\theta_{\mathrm{sOH}}.
+$$
+
+`mechanisms/agpd_basic/lateral_interactions.py` solves both CO-rich and OH-rich
+initial guesses with a damped, differentiable fixed-point `Scan`. The configured
+`fixed_point_iterations: 384` is a **maximum**, because
+`adaptive_convergence: true` stops once both branches meet
+`relative_residual_tolerance: 1e-7`.
+Final acceptance requires **both** balance residuals to pass and branch coverage
+disagreement to stay within `branch_tolerance: 1e-5`. Otherwise the modeled log
+rate is invalidated. `coverage_solver_iterations`,
+`coverage_solver_relative_residual`, and `coverage_branch_disagreement` are
+exposed for diagnostics. This two-start check does not prove uniqueness of
+steady states throughout parameter space.
+
+Current `config/priors/agpd_basic.yaml` constrains `z_CO_CO_eV` to [0, 0.20]
+eV (repulsive or ideal by modeling choice); `z_CO_OH_eV` and `z_OH_OH_eV`
+can be positive or negative. The sign choice does not guarantee unique steady
+states. The production prior-predictive diagnostic at Ag50Pd50 produced
+24,600 finite log-rate values out of 24,600 evaluations across 50 draws;
+this is a finite-sample numerical check, not a proof of reliability everywhere.
 
 ### Fully finite-rate `CO_BF_ER_LH_3_OH` model
 
@@ -1044,9 +1103,9 @@ analysis.
 
 #### Validation status
 
-The repository's complete automated regression suite passed in the user's
-working environment (556 tests, as reported on 16 November 2026). This does not constitute a
-comparison of regenerated experimental Parquets, figure files, or fitted
-posteriors against pre-refactor reference products; those real-data
-comparisons remain unverified.
+The complete automated regression suite passed in the user's working
+environment (790 tests, reported on 19 November 2026; approximately 3 minutes).
+This does not establish byte-for-byte equivalence of regenerated experimental
+Parquets, figures, or fitted posteriors against pre-refactor products; those
+real-data comparisons remain unverified.
 
