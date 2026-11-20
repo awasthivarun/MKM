@@ -10,7 +10,13 @@ from mkm.mechanisms.electrochem import (
     log_tst_rate_constant,
 )
 from .state import AgPdPointState
-from .surface import calculate_ag_qea_coverages, calculate_pd_qea_coverages, log_surface_fraction, logsumexp_pathways
+from .surface import (
+    calculate_ag_qea_coverages,
+    calculate_pd_qea_coverages,
+    log_surface_fraction,
+    logsumexp_pathways,
+    rate_fraction_from_log_rates,
+)
 
 @dataclass(frozen=True)
 class AgPdERParameters:
@@ -166,9 +172,9 @@ def evaluate_agpd_bf_er_lh(state: AgPdPointState, parameters: AgPdBFERRLHParamet
     )
     log_rate_total = logsumexp_pathways(log_rate_BF, log_rate_ER, log_rate_LH)
 
-    rate_fraction_BF = pt.exp(log_rate_BF - log_rate_total)
-    rate_fraction_ER = pt.exp(log_rate_ER - log_rate_total)
-    rate_fraction_LH = pt.exp(log_rate_LH - log_rate_total)
+    rate_fraction_BF = rate_fraction_from_log_rates(log_rate_BF, log_rate_total)
+    rate_fraction_ER = rate_fraction_from_log_rates(log_rate_ER, log_rate_total)
+    rate_fraction_LH = rate_fraction_from_log_rates(log_rate_LH, log_rate_total)
     mechanism_result = MechanismResult(
         ln_rate=log_rate_total,
         pointwise={
@@ -251,7 +257,7 @@ def evaluate_agpd_qea_subset(state, parameters, temperature_K, *, pathways):
     log_rate_total = logsumexp_pathways(*(log_rates[pathway] for pathway in pathways))
     for pathway, ln_rate in log_rates.items():
         pointwise[f"ln_rate_{pathway}"] = ln_rate
-        pointwise[f"rate_fraction_{pathway}"] = pt.exp(ln_rate - log_rate_total)
+        pointwise[f"rate_fraction_{pathway}"] = rate_fraction_from_log_rates(ln_rate, log_rate_total)
     return AgPdQEASubsetResult(
         mechanism_result=MechanismResult(ln_rate=log_rate_total, pointwise=pointwise),
         log_rate_total=log_rate_total,

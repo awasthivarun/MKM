@@ -74,3 +74,11 @@ def logsumexp_pathways(*log_rates):
             raise ValueError("Pathway log rates must be one-dimensional.")
     return pt.logsumexp(pt.stack(tensors, axis=0), axis=0)
 
+
+def rate_fraction_from_log_rates(log_rate, log_rate_total):
+    """Fraction of a positive pathway rate; report zero when all pathways are inactive."""
+    log_rate = pt.as_tensor_variable(log_rate)
+    log_rate_total = pt.as_tensor_variable(log_rate_total)
+    # Replacing only -inf in the denominator avoids the undefined -inf - (-inf).
+    safe_total = pt.where(pt.isneginf(log_rate_total), 0.0, log_rate_total)
+    return pt.exp(log_rate - safe_total)

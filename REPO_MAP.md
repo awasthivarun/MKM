@@ -281,6 +281,13 @@ Owns the chemical mathematics:
 - Ag10 BF-activity masking;
 - mechanism parameter/result dataclasses.
 
+The `surface.py` helper `rate_fraction_from_log_rates` returns zero reported
+pathway share when the total rate is exactly zero (`ln_rate = -inf`);
+it does not change rate calculations. It is used by QEA and finite-CO
+evaluators. BF-only dynamic evaluation on Pd100 therefore has zero rate
+and a zero reported BF share, even though some BF/Pd100 fits remain
+restricted by `workflows/agpd_fit.py`.
+
 This package contains AgPd-specific chemistry, not PyMC prior choices or filesystem behavior.
 
 ### `src/mkm/mechanisms/electrochem.py`
@@ -492,6 +499,11 @@ reuses the shared functions with HClO4/H+ or KOH/OH- labels.
 
 ## Test ownership and execution
 
+- `tests/test_agpd_zero_rate_fractions.py` verifies zero total rate and
+  defined zero reporting fractions for BF-only Pd100 dynamic evaluators.
+- `tests/postprocessing/test_agpd_dynamic_drc.py` checks DRC sum rules,
+  half-step stability, and uniform transition-state barrier shifts
+  for selected reversible and interacting AgPd mechanisms (`slow`).
 - `tests/test_agpd_lateral_branch_validation.py` explicitly requires both
   Frumkin branches to satisfy the terminal balance residual tolerance.
 - `tests/test_agpd_lateral_adaptive_solver.py` covers difficult draws, early
@@ -514,7 +526,8 @@ checks but is **not** comprehensive:
 pytest tests -q -m "not slow and not sampling and not plotting and not integration"
 ```
 
-On 19 November 2026, the full suite passed 790 tests in about 3 minutes;
+On 19 November 2026, the full suite passed 790 tests in about 3 minutes
+before 13 additional zero-rate and DRC test cases were added;
 the filtered subset required about 2 minutes 30 seconds. Use
 `pytest tests -q --durations=30` to investigate test execution cost.
 

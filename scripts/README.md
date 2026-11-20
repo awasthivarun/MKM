@@ -532,13 +532,27 @@ pytest tests -q -m "not slow and not sampling and not plotting and not integrati
 The full suite passed **790 tests** on 19 November 2026 in approximately
 **3 minutes**; the filtered subset took **2 minutes 30 seconds**. These
 markers currently cover selected expensive tests, not all substantial
-PyTensor compilations. Keep the full suite as the merge/commit validation.
+PyTensor compilations. The 790-pass baseline predates 13 new test cases
+for zero-rate reporting and dynamic AgPd DRC consistency. To run those
+tests alone:
+
+```powershell
+pytest tests/test_agpd_zero_rate_fractions.py tests/postprocessing/test_agpd_dynamic_drc.py -q
+```
+
+The DRC tests are marked `slow` and are omitted from the filtered
+development subset. Keep the full suite as the merge/commit validation.
 
 ## Model registration, provenance and validation (November 2026)
 
 The seven standard AgPd pathway combinations are selectable for all-material fits.
-`CO_BF` requires `--exclude-materials Pd100`. AgPd model comparison and prior-predictive
-commands also accept `--exclude-materials` for pooled fits. PtRu model comparison can use
+For pooled `CO_BF` fitting, use `--exclude-materials Pd100`; the
+individual fitting workflow also retains its existing Pd100 BF-model
+restrictions. These are *fitting* restrictions: direct dynamic `BF` and
+`CO_BF` evaluation on Pd100 remains mathematically defined, giving
+`ln_rate = -inf` and a reported BF fraction of zero. AgPd model
+comparison and prior-predictive commands also accept `--exclude-materials`
+for pooled fits. PtRu model comparison can use
 `--run LABEL,MODEL,PARAMETERIZATION,ERROR_STRUCTURE` to compare different parameterizations
 and likelihood error structures for an **identical ordered observation set**. LOCO and LOMO
 hold out whole experimental groups; PSIS-LOO still holds out individual observations.

@@ -48,8 +48,10 @@ Run metadata stores the resolved model specification, resolved prior specificati
 
 ## Maintenance baseline (November 19, 2026)
 
-The latest reported complete local regression run passed **790 tests** in approximately
-**3 minutes**. A marker-filtered development subset took approximately
+The latest reported complete local regression run **before** the
+zero-rate/DRC patch passed **790 tests** in approximately **3 minutes**.
+The later patch adds 13 test cases; its complete local result has not yet
+been reported. A marker-filtered development subset took approximately
 **2 minutes 30 seconds**; it excludes selected `slow`, `sampling`, `plotting`, and `integration`
 checks and is not a replacement for the full suite. Use
 `pytest tests -q --durations=30` to track new bottlenecks. These times are workstation observations,
@@ -63,6 +65,16 @@ share the bounded-composition-slope primitive in `models/composition_bounds.py`.
 Neither change is intended to modify the physical parameterization. The
 `tests/workflows/test_agpd_grid_runner.py` tests cover subprocess construction,
 retry behavior, and failures without invoking a real sampling run.
+
+A shared reporting helper in `mechanisms/agpd_basic/surface.py` prevents
+`-inf - (-inf)` from producing NaN pathway fractions when all rates are
+zero. `tests/test_agpd_zero_rate_fractions.py` checks BF-only Pd100 and
+mixed BF/ER cases. `tests/postprocessing/test_agpd_dynamic_drc.py`
+checks reversible and interacting AgPd mechanisms using synthetic
+conditions and two parameter draws; it checks DRC sum rules, finite-
+difference half-step agreement, and uniform barrier-shift scaling.
+These checks do not establish mechanistic identifiability or global
+steady-state uniqueness.
 
 Source-code provenance includes the new shared helpers. A source refactor can alter
 a saved checkpoint's scoped signature even if numerical predictions are unchanged;
@@ -876,6 +888,11 @@ CO_ER_LH
 ```
 
 BF-containing individual models are rejected on pure Pd because BF-specific parameters are structurally inactive when `Ag_fraction = 0`.
+This is a **fit-workflow restriction**, not a prohibition on evaluating the
+kinetic equations. Dynamic BF-only evaluators (`BF`, `CO_BF`) return zero
+rate on Pd100, with `ln_rate = -inf`. In quasi-equilibrated and finite-CO
+evaluators, pathway fractions are reported as zero when total rate is
+zero, rather than the undefined `0/0`; the physical rate is unchanged.
 
 ### All-material models
 

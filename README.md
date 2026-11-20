@@ -50,6 +50,15 @@ cross- and OH-OH interaction priors allow either sign. These are prior assumptio
 not thermodynamic requirements. See `config/models/agpd_basic.yaml` and
 `config/priors/agpd_basic.yaml` for current settings.
 
+For quasi-equilibrated and finite-CO AgPd evaluators, an inactive BF pathway
+retains `ln_rate_BF = -inf`. When **all** pathways are inactive, the total
+`ln_rate` remains `-inf`, but each reported `rate_fraction_*` is set to
+zero by convention instead of evaluating the undefined ratio `0/0`.
+This reporting convention does not change the predicted reaction rate.
+BF-only dynamic mechanisms can be *evaluated* on Pd100 (zero BF rate);
+the existing fit-workflow restrictions for certain Pd100/model combinations
+remain separate and unchanged.
+
 The active likelihood is Normal in linear rate space:
 
 $$
@@ -197,7 +206,9 @@ pytest tests -q
 
 The complete regression suite is `pytest tests -q`. The November 19, 2026 local
 baseline after the maintenance refactor is **790 passed**, approximately **3 minutes**
-(on the developer workstation). To inspect the expensive cases:
+(on the developer workstation), **before** the later zero-rate/DRC test
+addition. Thirteen further cases were added but have not yet been reported as
+passing in a complete local run. To inspect the expensive cases:
 
 ```powershell
 pytest tests -q --durations=30
@@ -270,7 +281,11 @@ DRC computations use finite differences of **effective pointwise transition-stat
 not derivatives with respect to fitted composition slopes. Regression tests compare
 `independent`, `linear_xAg`, and `linear_xRu` pooled calculations with separate
 single-material calculations, check the transition-state DRC sum, and compare half-steps.
-These are mathematical/numerical consistency tests, not evidence that a mechanism is correct.
+Additional synthetic AgPd checks in `tests/postprocessing/test_agpd_dynamic_drc.py`
+cover finite COOH steps, finite OH adsorption, and Frumkin interactions.
+They test the transition-state DRC sum, agreement between two finite-difference
+step sizes, and uniform active-barrier shifts. These are mathematical/numerical
+consistency tests, not evidence that a mechanism is correct.
 
 ### PtRu preprocessing
 

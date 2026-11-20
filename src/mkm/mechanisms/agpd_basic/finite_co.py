@@ -11,7 +11,7 @@ from mkm.mechanisms.electrochem import (
     log_tst_rate_constant,
 )
 from .state import AgPdPointState
-from .surface import calculate_ag_qea_coverages, log_surface_fraction, logsumexp_pathways
+from .surface import calculate_ag_qea_coverages, log_surface_fraction, logsumexp_pathways, rate_fraction_from_log_rates
 
 from mkm.mechanisms.co_ssa import solve_co_ssa_qea_oh
 
@@ -303,7 +303,7 @@ def _evaluate_agpd_co(
 
     for pathway in pathways:
         pointwise[f"ln_rate_{pathway}"] = log_rates[pathway]
-        pointwise[f"rate_fraction_{pathway}"] = pt.exp(log_rates[pathway] - log_rate_total)
+        pointwise[f"rate_fraction_{pathway}"] = rate_fraction_from_log_rates(log_rates[pathway], log_rate_total)
 
     return {
         "mechanism_result": MechanismResult(ln_rate=log_rate_total, pointwise=pointwise),
